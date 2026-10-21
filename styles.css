@@ -1145,3 +1145,9 @@ svg.i{width:19px;height:19px;stroke-width:1.9}
   .col{scroll-snap-align:center}
   .teamwrap{padding:18px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px))}
 }
+
+/* sign-in: visible errors + busy state */
+.toast{z-index:200!important}
+.oberr{margin:0;width:100%;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--bad) 12%,var(--surface));color:var(--bad);font-size:14px;line-height:1.35;text-align:left}
+.fab.obgo.busy{opacity:.85}
+.spin{width:20px;height:20px;border-radius:50%;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .8s linear infinite}
