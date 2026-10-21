@@ -4,6 +4,6 @@
 // The publishable key is meant to be public, so it's safe in this file.
 // NEVER put the Secret key (service_role) here.
 window.CONCEPT_CONFIG = {
-  supabaseUrl: "YOUR_SUPABASE_URL",          // like https://abcdefgh.supabase.co
-  supabaseKey: "YOUR_SUPABASE_PUBLISHABLE_KEY"
+  supabaseUrl: "https://dwznlvmgyfhemjczrqim.supabase.co/rest/v1/",          // like https://abcdefgh.supabase.co
+  supabaseKey: "sb_publishable_dM28aV2BAh27lneQiw-vQw_tNXZKgBk"
 };
