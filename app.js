@@ -1173,6 +1173,8 @@ function openWallpaper(){
 
 // ---------- Supabase connection ----------
 const CFG = window.CONCEPT_CONFIG || {};
+(function fixUrl(){ const u=String(CFG.supabaseUrl||"").trim(); let m=u.match(/^(https:\/\/[a-z0-9-]+\.supabase\.co)/i); if (m) { CFG.supabaseUrl=m[1]; return; } m=u.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/i); if (m) CFG.supabaseUrl="https://"+m[1]+".supabase.co"; })();
+CFG.supabaseKey=String(CFG.supabaseKey||"").trim();
 let SB = null;
 const sbErr = e => ({code: (e && (e.code==="42501" || /row-level security|permission/i.test(e.message||""))) ? "denied" : "unavailable", message: e && e.message});
 function makeDocStore(sb){
@@ -1205,7 +1207,7 @@ const fmtPhone = p => { const d=String(p||"").replace(/[^\d]/g,""); return d? "+
 // ---------- sign in with phone (texted code) ----------
 function openLogin(){
   if (document.getElementById("onboard")) return;
-  let cc=ls.get("cc","+1"), num="", step="phone", phone="", busy=false, wait=0, timer=null;
+  let cc=ls.get("cc","+1"), num="", step="phone", phone="", busy=false, wait=0, timer=null, err="";
   const o=overlay("onboard","Sign in"); o.id="onboard";
   const draw=()=>{
     if (step==="phone") o.replaceChildren(h("div",{class:"ob"},
@@ -1213,28 +1215,44 @@ function openLogin(){
       h("h2",{},"Your phone number"),
       h("div",{class:"obrow"}, h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c))),
         h("input",{class:"obnum", id:"ob-num", type:"tel", inputmode:"tel", autocomplete:"tel-national", placeholder:"Phone number", value:num, oninput:e=>num=e.target.value, onkeydown:e=>{ if (e.key==="Enter") sendCode(); }})),
-      h("div",{class:"obacts end"}, h("button",{class:"fab obgo", "aria-label":"Send code", disabled:busy, onclick:sendCode}, svg(IC.arrow)))));
+      err? h("p",{class:"oberr", role:"alert"}, err) : "",
+      h("div",{class:"obacts end"}, h("button",{class:"fab obgo"+(busy?" busy":""), "aria-label":"Send code", disabled:busy, onclick:sendCode}, busy? h("span",{class:"spin"}) : svg(IC.arrow)))));
     else o.replaceChildren(h("div",{class:"ob"},
       h("div",{class:"oblogo"}, svg(ICF.lock)),
       h("h2",{},"Enter the code"), h("p",{class:"obsub"}, phone),
+      err? h("p",{class:"oberr", role:"alert"}, err) : "",
       h("input",{class:"obnum otp", id:"ob-code", type:"text", inputmode:"numeric", autocomplete:"one-time-code", maxlength:"6", placeholder:"••••••", oninput:e=>{ const v=e.target.value.replace(/\D/g,""); e.target.value=v; if (v.length===6) verify(v); }}),
       h("div",{class:"obacts"}, h("button",{class:"oblink", onclick:()=>{ step="phone"; draw(); }}, "Change number"), h("button",{class:"oblink", id:"ob-resend", disabled:wait>0, onclick:sendCode}, wait>0? "Resend in "+wait+"s" : "Resend code"))));
     const f=$("#ob-num")||$("#ob-code"); if (f) f.focus();
   };
   async function sendCode(){
-    const d=num.replace(/[^\d]/g,"").replace(/^0+/,""); if (d.length<6) { toast("Enter your phone number."); return; }
-    phone=cc+d; busy=true; draw();
-    const {error}=await SB.auth.signInWithOtp({phone});
+    const d=num.replace(/[^\d]/g,"").replace(/^0+/,""); if (d.length<6) { err="Enter your phone number."; draw(); return; }
+    if (cc==="+1" && d.length===11 && d.startsWith("1")) num=d.slice(1);
+    phone=cc+(cc==="+1" && d.length===11 && d.startsWith("1")? d.slice(1) : d); busy=true; err=""; draw();
+    let error=null;
+    try { const r=await Promise.race([SB.auth.signInWithOtp({phone}), new Promise((_,rej)=>setTimeout(()=>rej(new Error("No answer from the server. Check your connection and try again.")),20000))]); error=r && r.error; }
+    catch (e) { error=e; }
     busy=false;
-    if (error) { toast(error.message||"Couldn't send the code."); draw(); return; }
+    if (error) { err=explainAuthError(error); draw(); return; }
     step="code"; wait=30; clearInterval(timer); timer=setInterval(()=>{ wait--; const r=$("#ob-resend"); if (r){ r.disabled=wait>0; r.textContent=wait>0? "Resend in "+wait+"s" : "Resend code"; } if (wait<=0) clearInterval(timer); },1000); draw();
   }
   async function verify(token){
-    const {data, error}=await SB.auth.verifyOtp({phone, token, type:"sms"});
-    if (error || !data.session) { toast(error? error.message : "That code didn't work."); const c=$("#ob-code"); if (c){ c.value=""; c.focus(); } return; }
+    let data=null, error=null;
+    try { const r=await SB.auth.verifyOtp({phone, token, type:"sms"}); data=r.data; error=r.error; } catch (e) { error=e; }
+    if (error || !data || !data.session) { err=error? explainAuthError(error) : "That code didn't work."; draw(); const c=$("#ob-code"); if (c){ c.value=""; c.focus(); } return; }
     clearInterval(timer); o.remove(); startLive(data.session.user);
   }
   draw();
+}
+function explainAuthError(e){
+  const m=String((e && (e.message||e.msg||e.error_description)) || e || "");
+  if (/signups? not allowed|signup.*disabled/i.test(m)) return "Sign-ups are turned off. In Supabase: Authentication → Sign In / Providers → turn on “Allow new users to sign up”, then Save.";
+  if (/unsupported phone provider|phone.*(provider|logins?).*(disabled|not enabled)|phone_provider_disabled/i.test(m)) return "Phone sign-in is off. In Supabase: Authentication → Sign In / Providers → Phone → turn on “Enable Phone provider”, then Save.";
+  if (/rate limit|too many/i.test(m)) return "Too many tries. Wait a minute and try again.";
+  if (/expired|invalid.*(token|otp)|token.*invalid/i.test(m)) return "That code didn't work. Check the test number and code in Supabase (format 12125551234=123456), then try again.";
+  if (/twilio|sms|send/i.test(m)) return "The text couldn't be sent: "+m;
+  if (/fetch|network|load failed/i.test(m)) return "Can't reach Supabase. Check the Project URL in config.js and your connection.";
+  return m || "Something went wrong. Try again.";
 }
 function openProfileSetup(u, existing){
   if (document.getElementById("profsetup")) return;
