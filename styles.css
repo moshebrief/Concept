@@ -1092,11 +1092,11 @@ svg.i{width:19px;height:19px;stroke-width:1.9}
 .thead .tgpar{box-shadow:0 0 0 2px var(--glass)}
 
 /* chat wallpaper: tools doodle (original drawings) or the user's own photo */
-:root{--chatbg:#E7ECF2;--wp-tools:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22300%22 viewBox=%220 0 300 300%22%3E%3Cg fill=%22none%22 stroke=%22%231B2433%22 stroke-opacity=%220.13%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cg transform=%22translate%2817.0 14.9%29 rotate%2840 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Ccircle cx=%2269.0%22 cy=%2254.9%22 r=%221.6%22/%3E%3Cg transform=%22translate%2886.9 21.1%29 rotate%280 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M5 20l8.5-8.5%22/%3E%3Cpath d=%22M11.5 6.5l3-3 6 6-3 3-1.5-1.5-2 2-3.5-3.5 2-2z%22/%3E%3C/g%3E%3Ccircle cx=%22138.9%22 cy=%2261.1%22 r=%221.6%22/%3E%3Cg transform=%22translate%28161.7 20.6%29 rotate%28-28 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M4 20l4.5-4.5%22/%3E%3Cpath d=%22M8.5 15.5l2 -2 8-8 1.5 1.5-8 8-2 2z%22/%3E%3Cpath d=%22M7 14l3 3%22/%3E%3C/g%3E%3Ccircle cx=%22213.7%22 cy=%2260.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%28244.2 13.6%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Ccircle cx=%22296.2%22 cy=%2253.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2837.0 100.7%29 rotate%28-28 12 12%29 scale%281.25%29%22%3E%3Crect x=%222.5%22 y=%228.5%22 width=%2219%22 height=%227%22 rx=%221%22/%3E%3Cpath d=%22M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3%22/%3E%3C/g%3E%3Ccircle cx=%2289.0%22 cy=%22140.7%22 r=%221.6%22/%3E%3Cg transform=%22translate%28116.1 96.8%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M3 15.5h13.5l4-5H8z%22/%3E%3Cpath d=%22M5 15.5l1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2%22/%3E%3Cpath d=%22M16.5 10.5v-3h4v3%22/%3E%3C/g%3E%3Ccircle cx=%22168.1%22 cy=%22136.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28190.2 88.3%29 rotate%28-15 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3Ccircle cx=%22242.2%22 cy=%22128.3%22 r=%221.6%22/%3E%3Cg transform=%22translate%28264.6 89.6%29 rotate%2812 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Ccircle cx=%2216.6%22 cy=%22129.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2821.3 171.6%29 rotate%2825 12 12%29 scale%281.55%29%22%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%226%22/%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%222%22/%3E%3Cpath d=%22M16 15.5h5.5v2H14%22/%3E%3C/g%3E%3Ccircle cx=%2273.3%22 cy=%22211.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2889.1 171.8%29 rotate%2840 12 12%29 scale%281.25%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Ccircle cx=%22141.1%22 cy=%22211.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28167.9 171.3%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Ccircle cx=%22219.9%22 cy=%22211.3%22 r=%221.6%22/%3E%3Cg transform=%22translate%28236.7 165.8%29 rotate%2840 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3C/g%3E%3Ccircle cx=%22288.7%22 cy=%22205.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%2837.1 242.5%29 rotate%2825 12 12%29 scale%281.4%29%22%3E%3Cpath d=%22M8 3.5h8l1.5 3h-11z%22/%3E%3Cpath d=%22M10 6.5v14h4v-14%22/%3E%3Cpath d=%22M10 10l4-1M10 13l4-1M10 16l4-1%22/%3E%3C/g%3E%3Ccircle cx=%2289.1%22 cy=%22282.5%22 r=%221.6%22/%3E%3Cg transform=%22translate%28110.7 241.5%29 rotate%28-15 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M5 19l1-4.5L16 4.5 19.5 8 9.5 18z%22/%3E%3Cpath d=%22M14 6.5l3.5 3.5%22/%3E%3C/g%3E%3Ccircle cx=%22162.7%22 cy=%22281.5%22 r=%221.6%22/%3E%3Cg transform=%22translate%28194.1 238.8%29 rotate%280 12 12%29 scale%281.55%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Ccircle cx=%22246.1%22 cy=%22278.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28263.4 243.0%29 rotate%2812 12 12%29 scale%281.4%29%22%3E%3Cpath d=%22M6 18l9.5-9.5%22/%3E%3Cpath d=%22M15 4.5a3.5 3.5 0 0 1 4.5 4.5l-2-.3-1.5 1.5%22/%3E%3Cpath d=%22M4 16.5a2.5 2.5 0 0 0 3.5 3.5%22/%3E%3C/g%3E%3Ccircle cx=%2215.4%22 cy=%22283.0%22 r=%221.6%22/%3E%3C/g%3E%3C/svg%3E")}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--chatbg:#0E1218;--wp-tools:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22300%22 viewBox=%220 0 300 300%22%3E%3Cg fill=%22none%22 stroke=%22%23FFFFFF%22 stroke-opacity=%220.09%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cg transform=%22translate%2817.0 14.9%29 rotate%2840 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Ccircle cx=%2269.0%22 cy=%2254.9%22 r=%221.6%22/%3E%3Cg transform=%22translate%2886.9 21.1%29 rotate%280 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M5 20l8.5-8.5%22/%3E%3Cpath d=%22M11.5 6.5l3-3 6 6-3 3-1.5-1.5-2 2-3.5-3.5 2-2z%22/%3E%3C/g%3E%3Ccircle cx=%22138.9%22 cy=%2261.1%22 r=%221.6%22/%3E%3Cg transform=%22translate%28161.7 20.6%29 rotate%28-28 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M4 20l4.5-4.5%22/%3E%3Cpath d=%22M8.5 15.5l2 -2 8-8 1.5 1.5-8 8-2 2z%22/%3E%3Cpath d=%22M7 14l3 3%22/%3E%3C/g%3E%3Ccircle cx=%22213.7%22 cy=%2260.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%28244.2 13.6%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Ccircle cx=%22296.2%22 cy=%2253.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2837.0 100.7%29 rotate%28-28 12 12%29 scale%281.25%29%22%3E%3Crect x=%222.5%22 y=%228.5%22 width=%2219%22 height=%227%22 rx=%221%22/%3E%3Cpath d=%22M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3%22/%3E%3C/g%3E%3Ccircle cx=%2289.0%22 cy=%22140.7%22 r=%221.6%22/%3E%3Cg transform=%22translate%28116.1 96.8%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M3 15.5h13.5l4-5H8z%22/%3E%3Cpath d=%22M5 15.5l1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2%22/%3E%3Cpath d=%22M16.5 10.5v-3h4v3%22/%3E%3C/g%3E%3Ccircle cx=%22168.1%22 cy=%22136.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28190.2 88.3%29 rotate%28-15 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3Ccircle cx=%22242.2%22 cy=%22128.3%22 r=%221.6%22/%3E%3Cg transform=%22translate%28264.6 89.6%29 rotate%2812 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Ccircle cx=%2216.6%22 cy=%22129.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2821.3 171.6%29 rotate%2825 12 12%29 scale%281.55%29%22%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%226%22/%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%222%22/%3E%3Cpath d=%22M16 15.5h5.5v2H14%22/%3E%3C/g%3E%3Ccircle cx=%2273.3%22 cy=%22211.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2889.1 171.8%29 rotate%2840 12 12%29 scale%281.25%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Ccircle cx=%22141.1%22 cy=%22211.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28167.9 171.3%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Ccircle cx=%22219.9%22 cy=%22211.3%22 r=%221.6%22/%3E%3Cg transform=%22translate%28236.7 165.8%29 rotate%2840 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3C/g%3E%3Ccircle cx=%22288.7%22 cy=%22205.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%2837.1 242.5%29 rotate%2825 12 12%29 scale%281.4%29%22%3E%3Cpath d=%22M8 3.5h8l1.5 3h-11z%22/%3E%3Cpath d=%22M10 6.5v14h4v-14%22/%3E%3Cpath d=%22M10 10l4-1M10 13l4-1M10 16l4-1%22/%3E%3C/g%3E%3Ccircle cx=%2289.1%22 cy=%22282.5%22 r=%221.6%22/%3E%3Cg transform=%22translate%28110.7 241.5%29 rotate%28-15 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M5 19l1-4.5L16 4.5 19.5 8 9.5 18z%22/%3E%3Cpath d=%22M14 6.5l3.5 3.5%22/%3E%3C/g%3E%3Ccircle cx=%22162.7%22 cy=%22281.5%22 r=%221.6%22/%3E%3Cg transform=%22translate%28194.1 238.8%29 rotate%280 12 12%29 scale%281.55%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Ccircle cx=%22246.1%22 cy=%22278.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28263.4 243.0%29 rotate%2812 12 12%29 scale%281.4%29%22%3E%3Cpath d=%22M6 18l9.5-9.5%22/%3E%3Cpath d=%22M15 4.5a3.5 3.5 0 0 1 4.5 4.5l-2-.3-1.5 1.5%22/%3E%3Cpath d=%22M4 16.5a2.5 2.5 0 0 0 3.5 3.5%22/%3E%3C/g%3E%3Ccircle cx=%2215.4%22 cy=%22283.0%22 r=%221.6%22/%3E%3C/g%3E%3C/svg%3E")}}
-:root[data-theme="dark"]{--chatbg:#0E1218;--wp-tools:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22300%22 viewBox=%220 0 300 300%22%3E%3Cg fill=%22none%22 stroke=%22%23FFFFFF%22 stroke-opacity=%220.09%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cg transform=%22translate%2817.0 14.9%29 rotate%2840 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Ccircle cx=%2269.0%22 cy=%2254.9%22 r=%221.6%22/%3E%3Cg transform=%22translate%2886.9 21.1%29 rotate%280 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M5 20l8.5-8.5%22/%3E%3Cpath d=%22M11.5 6.5l3-3 6 6-3 3-1.5-1.5-2 2-3.5-3.5 2-2z%22/%3E%3C/g%3E%3Ccircle cx=%22138.9%22 cy=%2261.1%22 r=%221.6%22/%3E%3Cg transform=%22translate%28161.7 20.6%29 rotate%28-28 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M4 20l4.5-4.5%22/%3E%3Cpath d=%22M8.5 15.5l2 -2 8-8 1.5 1.5-8 8-2 2z%22/%3E%3Cpath d=%22M7 14l3 3%22/%3E%3C/g%3E%3Ccircle cx=%22213.7%22 cy=%2260.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%28244.2 13.6%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Ccircle cx=%22296.2%22 cy=%2253.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2837.0 100.7%29 rotate%28-28 12 12%29 scale%281.25%29%22%3E%3Crect x=%222.5%22 y=%228.5%22 width=%2219%22 height=%227%22 rx=%221%22/%3E%3Cpath d=%22M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3%22/%3E%3C/g%3E%3Ccircle cx=%2289.0%22 cy=%22140.7%22 r=%221.6%22/%3E%3Cg transform=%22translate%28116.1 96.8%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M3 15.5h13.5l4-5H8z%22/%3E%3Cpath d=%22M5 15.5l1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2%22/%3E%3Cpath d=%22M16.5 10.5v-3h4v3%22/%3E%3C/g%3E%3Ccircle cx=%22168.1%22 cy=%22136.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28190.2 88.3%29 rotate%28-15 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3Ccircle cx=%22242.2%22 cy=%22128.3%22 r=%221.6%22/%3E%3Cg transform=%22translate%28264.6 89.6%29 rotate%2812 12 12%29 scale%281.25%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Ccircle cx=%2216.6%22 cy=%22129.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2821.3 171.6%29 rotate%2825 12 12%29 scale%281.55%29%22%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%226%22/%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%222%22/%3E%3Cpath d=%22M16 15.5h5.5v2H14%22/%3E%3C/g%3E%3Ccircle cx=%2273.3%22 cy=%22211.6%22 r=%221.6%22/%3E%3Cg transform=%22translate%2889.1 171.8%29 rotate%2840 12 12%29 scale%281.25%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Ccircle cx=%22141.1%22 cy=%22211.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28167.9 171.3%29 rotate%28-28 12 12%29 scale%281.55%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Ccircle cx=%22219.9%22 cy=%22211.3%22 r=%221.6%22/%3E%3Cg transform=%22translate%28236.7 165.8%29 rotate%2840 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3C/g%3E%3Ccircle cx=%22288.7%22 cy=%22205.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%2837.1 242.5%29 rotate%2825 12 12%29 scale%281.4%29%22%3E%3Cpath d=%22M8 3.5h8l1.5 3h-11z%22/%3E%3Cpath d=%22M10 6.5v14h4v-14%22/%3E%3Cpath d=%22M10 10l4-1M10 13l4-1M10 16l4-1%22/%3E%3C/g%3E%3Ccircle cx=%2289.1%22 cy=%22282.5%22 r=%221.6%22/%3E%3Cg transform=%22translate%28110.7 241.5%29 rotate%28-15 12 12%29 scale%281.55%29%22%3E%3Cpath d=%22M5 19l1-4.5L16 4.5 19.5 8 9.5 18z%22/%3E%3Cpath d=%22M14 6.5l3.5 3.5%22/%3E%3C/g%3E%3Ccircle cx=%22162.7%22 cy=%22281.5%22 r=%221.6%22/%3E%3Cg transform=%22translate%28194.1 238.8%29 rotate%280 12 12%29 scale%281.55%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Ccircle cx=%22246.1%22 cy=%22278.8%22 r=%221.6%22/%3E%3Cg transform=%22translate%28263.4 243.0%29 rotate%2812 12 12%29 scale%281.4%29%22%3E%3Cpath d=%22M6 18l9.5-9.5%22/%3E%3Cpath d=%22M15 4.5a3.5 3.5 0 0 1 4.5 4.5l-2-.3-1.5 1.5%22/%3E%3Cpath d=%22M4 16.5a2.5 2.5 0 0 0 3.5 3.5%22/%3E%3C/g%3E%3Ccircle cx=%2215.4%22 cy=%22283.0%22 r=%221.6%22/%3E%3C/g%3E%3C/svg%3E")}
+:root{--chatbg:#E7ECF2;--wp-tools:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22190%22 height=%22190%22 viewBox=%220 0 190 190%22%3E%3Cg fill=%22none%22 stroke=%22%231B2433%22 stroke-opacity=%220.12%22 stroke-width=%221.45%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cg transform=%22translate%2810.4 10.3%29 rotate%2850 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Cg transform=%22translate%2845.9 10.3%29 rotate%28-20 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%2887.0 9.0%29 rotate%2822 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Cg transform=%22translate%28120.7 8.0%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Cg transform=%22translate%28161.1 8.4%29 rotate%28-35 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Cg transform=%22translate%2829.1 48.0%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 4h10v4M5 4v16h10v-4%22/%3E%3Cpath d=%22M15 8h4v8h-4M17 8v-3M17 16v3%22/%3E%3C/g%3E%3Cg transform=%22translate%2864.9 43.2%29 rotate%28-35 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3Cg transform=%22translate%2899.6 42.5%29 rotate%28-20 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 19l1-4.5L16 4.5 19.5 8 9.5 18z%22/%3E%3Cpath d=%22M14 6.5l3.5 3.5%22/%3E%3C/g%3E%3Cg transform=%22translate%28137.4 45.0%29 rotate%2810 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M4 20l4.5-4.5%22/%3E%3Cpath d=%22M8.5 15.5l2-2 8-8 1.5 1.5-8 8-2 2z%22/%3E%3Cpath d=%22M7 14l3 3%22/%3E%3C/g%3E%3Cg transform=%22translate%28180.3 45.4%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28-9.7 45.4%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%288.2 85.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M14.5 3.5l6 6-7 7-6-6z%22/%3E%3Cpath d=%22M7.5 10.5L3.5 20.5l10-4%22/%3E%3C/g%3E%3Cg transform=%22translate%2843.9 86.2%29 rotate%2850 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M3 15.5h13.5l4-5H8z%22/%3E%3Cpath d=%22M5 15.5l1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2%22/%3E%3Cpath d=%22M16.5 10.5v-3h4v3%22/%3E%3C/g%3E%3Cg transform=%22translate%2886.4 84.1%29 rotate%28-20 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M8 3.5h8l1.5 3h-11z%22/%3E%3Cpath d=%22M10 6.5v14h4v-14%22/%3E%3Cpath d=%22M10 10l4-1M10 13l4-1M10 16l4-1%22/%3E%3C/g%3E%3Cg transform=%22translate%28120.0 80.7%29 rotate%2850 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 20l8.5-8.5%22/%3E%3Cpath d=%22M11.5 6.5l3-3 6 6-3 3-1.5-1.5-2 2-3.5-3.5 2-2z%22/%3E%3C/g%3E%3Cg transform=%22translate%28160.6 87.2%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%226%22/%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%222%22/%3E%3Cpath d=%22M16 15.5h5.5v2H14%22/%3E%3C/g%3E%3Cg transform=%22translate%2830.9 125.2%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M6 18l9.5-9.5%22/%3E%3Cpath d=%22M15 4.5a3.5 3.5 0 0 1 4.5 4.5l-2-.3-1.5 1.5%22/%3E%3Cpath d=%22M4 16.5a2.5 2.5 0 0 0 3.5 3.5%22/%3E%3C/g%3E%3Cg transform=%22translate%2864.4 125.6%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%222.5%22 y=%228.5%22 width=%2219%22 height=%227%22 rx=%221%22/%3E%3Cpath d=%22M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28106.1 121.6%29 rotate%28-35 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3C/g%3E%3Cg transform=%22translate%28141.0 122.9%29 rotate%28-8 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Cg transform=%22translate%28176.7 121.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%28-13.3 121.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%287.0 162.4%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Cg transform=%22translate%2846.9 161.1%29 rotate%2835 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Cg transform=%22translate%2881.4 159.3%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Cg transform=%22translate%28122.7 160.5%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M5 4h10v4M5 4v16h10v-4%22/%3E%3Cpath d=%22M15 8h4v8h-4M17 8v-3M17 16v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28163.1 157.2%29 rotate%2850 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--chatbg:#0E1218;--wp-tools:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22190%22 height=%22190%22 viewBox=%220 0 190 190%22%3E%3Cg fill=%22none%22 stroke=%22%23FFFFFF%22 stroke-opacity=%220.085%22 stroke-width=%221.45%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cg transform=%22translate%2810.4 10.3%29 rotate%2850 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Cg transform=%22translate%2845.9 10.3%29 rotate%28-20 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%2887.0 9.0%29 rotate%2822 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Cg transform=%22translate%28120.7 8.0%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Cg transform=%22translate%28161.1 8.4%29 rotate%28-35 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Cg transform=%22translate%2829.1 48.0%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 4h10v4M5 4v16h10v-4%22/%3E%3Cpath d=%22M15 8h4v8h-4M17 8v-3M17 16v3%22/%3E%3C/g%3E%3Cg transform=%22translate%2864.9 43.2%29 rotate%28-35 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3Cg transform=%22translate%2899.6 42.5%29 rotate%28-20 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 19l1-4.5L16 4.5 19.5 8 9.5 18z%22/%3E%3Cpath d=%22M14 6.5l3.5 3.5%22/%3E%3C/g%3E%3Cg transform=%22translate%28137.4 45.0%29 rotate%2810 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M4 20l4.5-4.5%22/%3E%3Cpath d=%22M8.5 15.5l2-2 8-8 1.5 1.5-8 8-2 2z%22/%3E%3Cpath d=%22M7 14l3 3%22/%3E%3C/g%3E%3Cg transform=%22translate%28180.3 45.4%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28-9.7 45.4%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%288.2 85.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M14.5 3.5l6 6-7 7-6-6z%22/%3E%3Cpath d=%22M7.5 10.5L3.5 20.5l10-4%22/%3E%3C/g%3E%3Cg transform=%22translate%2843.9 86.2%29 rotate%2850 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M3 15.5h13.5l4-5H8z%22/%3E%3Cpath d=%22M5 15.5l1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2%22/%3E%3Cpath d=%22M16.5 10.5v-3h4v3%22/%3E%3C/g%3E%3Cg transform=%22translate%2886.4 84.1%29 rotate%28-20 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M8 3.5h8l1.5 3h-11z%22/%3E%3Cpath d=%22M10 6.5v14h4v-14%22/%3E%3Cpath d=%22M10 10l4-1M10 13l4-1M10 16l4-1%22/%3E%3C/g%3E%3Cg transform=%22translate%28120.0 80.7%29 rotate%2850 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 20l8.5-8.5%22/%3E%3Cpath d=%22M11.5 6.5l3-3 6 6-3 3-1.5-1.5-2 2-3.5-3.5 2-2z%22/%3E%3C/g%3E%3Cg transform=%22translate%28160.6 87.2%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%226%22/%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%222%22/%3E%3Cpath d=%22M16 15.5h5.5v2H14%22/%3E%3C/g%3E%3Cg transform=%22translate%2830.9 125.2%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M6 18l9.5-9.5%22/%3E%3Cpath d=%22M15 4.5a3.5 3.5 0 0 1 4.5 4.5l-2-.3-1.5 1.5%22/%3E%3Cpath d=%22M4 16.5a2.5 2.5 0 0 0 3.5 3.5%22/%3E%3C/g%3E%3Cg transform=%22translate%2864.4 125.6%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%222.5%22 y=%228.5%22 width=%2219%22 height=%227%22 rx=%221%22/%3E%3Cpath d=%22M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28106.1 121.6%29 rotate%28-35 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3C/g%3E%3Cg transform=%22translate%28141.0 122.9%29 rotate%28-8 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Cg transform=%22translate%28176.7 121.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%28-13.3 121.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%287.0 162.4%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Cg transform=%22translate%2846.9 161.1%29 rotate%2835 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Cg transform=%22translate%2881.4 159.3%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Cg transform=%22translate%28122.7 160.5%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M5 4h10v4M5 4v16h10v-4%22/%3E%3Cpath d=%22M15 8h4v8h-4M17 8v-3M17 16v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28163.1 157.2%29 rotate%2850 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}}
+:root[data-theme="dark"]{--chatbg:#0E1218;--wp-tools:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22190%22 height=%22190%22 viewBox=%220 0 190 190%22%3E%3Cg fill=%22none%22 stroke=%22%23FFFFFF%22 stroke-opacity=%220.085%22 stroke-width=%221.45%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cg transform=%22translate%2810.4 10.3%29 rotate%2850 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Cg transform=%22translate%2845.9 10.3%29 rotate%28-20 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%2887.0 9.0%29 rotate%2822 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Cg transform=%22translate%28120.7 8.0%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Cg transform=%22translate%28161.1 8.4%29 rotate%28-35 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Cg transform=%22translate%2829.1 48.0%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 4h10v4M5 4v16h10v-4%22/%3E%3Cpath d=%22M15 8h4v8h-4M17 8v-3M17 16v3%22/%3E%3C/g%3E%3Cg transform=%22translate%2864.9 43.2%29 rotate%28-35 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3Cg transform=%22translate%2899.6 42.5%29 rotate%28-20 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 19l1-4.5L16 4.5 19.5 8 9.5 18z%22/%3E%3Cpath d=%22M14 6.5l3.5 3.5%22/%3E%3C/g%3E%3Cg transform=%22translate%28137.4 45.0%29 rotate%2810 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M4 20l4.5-4.5%22/%3E%3Cpath d=%22M8.5 15.5l2-2 8-8 1.5 1.5-8 8-2 2z%22/%3E%3Cpath d=%22M7 14l3 3%22/%3E%3C/g%3E%3Cg transform=%22translate%28180.3 45.4%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28-9.7 45.4%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%222.5%22 y=%229%22 width=%2219%22 height=%226%22 rx=%221.5%22/%3E%3Crect x=%229.5%22 y=%2210.5%22 width=%225%22 height=%223%22 rx=%221.5%22/%3E%3Cpath d=%22M12 10.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%288.2 85.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M14.5 3.5l6 6-7 7-6-6z%22/%3E%3Cpath d=%22M7.5 10.5L3.5 20.5l10-4%22/%3E%3C/g%3E%3Cg transform=%22translate%2843.9 86.2%29 rotate%2850 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M3 15.5h13.5l4-5H8z%22/%3E%3Cpath d=%22M5 15.5l1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2 1 2 1-2%22/%3E%3Cpath d=%22M16.5 10.5v-3h4v3%22/%3E%3C/g%3E%3Cg transform=%22translate%2886.4 84.1%29 rotate%28-20 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M8 3.5h8l1.5 3h-11z%22/%3E%3Cpath d=%22M10 6.5v14h4v-14%22/%3E%3Cpath d=%22M10 10l4-1M10 13l4-1M10 16l4-1%22/%3E%3C/g%3E%3Cg transform=%22translate%28120.0 80.7%29 rotate%2850 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M5 20l8.5-8.5%22/%3E%3Cpath d=%22M11.5 6.5l3-3 6 6-3 3-1.5-1.5-2 2-3.5-3.5 2-2z%22/%3E%3C/g%3E%3Cg transform=%22translate%28160.6 87.2%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%226%22/%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%222%22/%3E%3Cpath d=%22M16 15.5h5.5v2H14%22/%3E%3C/g%3E%3Cg transform=%22translate%2830.9 125.2%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M6 18l9.5-9.5%22/%3E%3Cpath d=%22M15 4.5a3.5 3.5 0 0 1 4.5 4.5l-2-.3-1.5 1.5%22/%3E%3Cpath d=%22M4 16.5a2.5 2.5 0 0 0 3.5 3.5%22/%3E%3C/g%3E%3Cg transform=%22translate%2864.4 125.6%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%222.5%22 y=%228.5%22 width=%2219%22 height=%227%22 rx=%221%22/%3E%3Cpath d=%22M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28106.1 121.6%29 rotate%28-35 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3C/g%3E%3Cg transform=%22translate%28141.0 122.9%29 rotate%28-8 11.8 11.8%29 scale%280.98%29%22%3E%3Cpath d=%22M15.5 4.5a4.2 4.2 0 0 0-5.2 5.4L4 16.2 7.8 20l6.3-6.3a4.2 4.2 0 0 0 5.4-5.2l-2.6 2.6-2.6-.7-.7-2.6z%22/%3E%3C/g%3E%3Cg transform=%22translate%28176.7 121.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%28-13.3 121.2%29 rotate%2810 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M4 7.5h11v5H4z%22/%3E%3Cpath d=%22M15 9h4.5M19.5 9l1.5.5-1.5.5%22/%3E%3Cpath d=%22M7 12.5l-1.5 7h4l1-7%22/%3E%3C/g%3E%3Cg transform=%22translate%287.0 162.4%29 rotate%28-35 9.8 9.8%29 scale%280.82%29%22%3E%3Crect x=%223%22 y=%229%22 width=%2218%22 height=%2210%22 rx=%221.5%22/%3E%3Cpath d=%22M9 9V6.5h6V9M3 13h18M10.5 13v2h3v-2%22/%3E%3C/g%3E%3Cg transform=%22translate%2846.9 161.1%29 rotate%2835 9.8 9.8%29 scale%280.82%29%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%226.2%22/%3E%3C/g%3E%3Cg transform=%22translate%2881.4 159.3%29 rotate%2835 11.8 11.8%29 scale%280.98%29%22%3E%3Crect x=%224%22 y=%223.5%22 width=%2213%22 height=%225%22 rx=%221.5%22/%3E%3Cpath d=%22M17 6h2.5v4.5H11v3%22/%3E%3Crect x=%229.5%22 y=%2213.5%22 width=%223%22 height=%227%22 rx=%221%22/%3E%3C/g%3E%3Cg transform=%22translate%28122.7 160.5%29 rotate%2810 9.8 9.8%29 scale%280.82%29%22%3E%3Cpath d=%22M5 4h10v4M5 4v16h10v-4%22/%3E%3Cpath d=%22M15 8h4v8h-4M17 8v-3M17 16v3%22/%3E%3C/g%3E%3Cg transform=%22translate%28163.1 157.2%29 rotate%2850 10.8 10.8%29 scale%280.9%29%22%3E%3Cpath d=%22M9 3.5l2.5 7M15 3.5l-2.5 7%22/%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%221.6%22/%3E%3Cpath d=%22M11 13.3L8 20.5M13 13.3l3 7.2%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
 .main.chatmain{position:relative;isolation:isolate;background:var(--chatbg)}
-.main.chatmain.wp-tools{background-image:var(--wp-tools);background-size:250px 250px;background-repeat:repeat}
+.main.chatmain.wp-tools{background-image:var(--wp-tools);background-size:190px 190px;background-repeat:repeat}
 .main.chatmain.wp-plain{background-image:none}
 .wplayer{position:absolute;inset:0;z-index:-1;background-size:cover;background-position:center;pointer-events:none}
 .wplayer::after{content:"";position:absolute;inset:0;background:var(--chatbg);opacity:var(--wpdim,.25)}
@@ -1107,7 +1107,7 @@ svg.i{width:19px;height:19px;stroke-width:1.9}
 .wpsheet{gap:14px}
 .wpopts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .wpopt{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--muted)}
-.wpopt .wpv{width:100%;aspect-ratio:3/4;border-radius:12px;background:var(--chatbg);background-size:150px 150px;box-shadow:0 0 0 .5px var(--rule) inset;display:grid;place-items:center;color:var(--muted);overflow:hidden;background-position:center}
+.wpopt .wpv{width:100%;aspect-ratio:3/4;border-radius:12px;background:var(--chatbg);background-size:120px 120px;box-shadow:0 0 0 .5px var(--rule) inset;display:grid;place-items:center;color:var(--muted);overflow:hidden;background-position:center}
 .wpopt .wpv.tools{background-image:var(--wp-tools)}
 .wpopt .wpv.photo{background-size:cover}
 .wpopt .wpv svg.i{width:26px;height:26px}
@@ -1151,3 +1151,386 @@ svg.i{width:19px;height:19px;stroke-width:1.9}
 .oberr{margin:0;width:100%;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--bad) 12%,var(--surface));color:var(--bad);font-size:14px;line-height:1.35;text-align:left}
 .fab.obgo.busy{opacity:.85}
 .spin{width:20px;height:20px;border-radius:50%;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .8s linear infinite}
+
+/* ===================== round 7: composer, media, indicators, ticks ===================== */
+/* composer: emoji + attach inside the input pill */
+.crow{gap:6px;align-items:flex-end}
+.inbox{flex:1;min-width:0;display:flex;align-items:flex-end;background:var(--surface);border:1px solid var(--rule);border-radius:22px;padding:0 4px;transition:border-color .15s}
+.inbox:focus-within{border-color:var(--cobalt)}
+.inbox textarea,.crow .inbox textarea{flex:1;min-width:0;border:0!important;background:none!important;border-radius:0!important;padding:10px 4px!important;box-shadow:none!important;outline:none;min-height:40px}
+.inbtn{width:36px;height:40px;flex:none;display:grid;place-items:center;color:var(--muted);border-radius:50%}
+.inbtn:hover{color:var(--cobalt)}
+.inbtn svg.i{width:21px;height:21px}
+.crow .knotbtn{align-self:flex-end;margin-bottom:2px}
+.crow .sendbtn,.crow .micbtn{align-self:flex-end}
+.crow.has-text .micbtn{display:none}
+/* emoji keyboard */
+.emojipanel{margin-top:8px;background:var(--surface);border-radius:16px;border:1px solid var(--rule);overflow:hidden;display:flex;flex-direction:column;height:min(260px,38vh)}
+.epgrid{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));padding:6px;overscroll-behavior:contain}
+.ep{height:40px;font-size:26px;border-radius:10px;line-height:1}
+.ep:hover,.ep:active{background:var(--fill)}
+.eptabs{display:flex;align-items:center;gap:2px;padding:4px 6px;border-top:1px solid var(--rule);overflow-x:auto;scrollbar-width:none}
+.ept{flex:none;width:36px;height:32px;border-radius:9px;font-size:19px;display:grid;place-items:center;opacity:.55;color:var(--muted)}
+.ept svg.i{width:18px;height:18px}
+.ept.on{opacity:1;background:var(--fill)}
+.ept.del{margin-left:auto;opacity:1}
+/* voice draft + recording keep */
+.vdraft{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--rule);border-radius:18px;padding:5px 6px 5px 6px;margin-bottom:6px}
+.vdplay{width:34px;height:34px;border-radius:50%;background:var(--cobalt);color:#fff;display:grid;place-items:center;flex:none}
+.vdplay svg.i{width:16px;height:16px}
+.vdbars{flex:1;min-width:0;height:24px;display:flex;align-items:center;gap:2px;overflow:hidden}
+.vdbars i{flex:1;min-width:2px;max-width:4px;border-radius:2px;background:var(--cobalt);opacity:.55}
+.vddur{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.reckeep{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--cobalt);background:var(--cobalt-soft);flex:none}
+.reckeep svg.i{width:18px;height:18px}
+.tx.vcap{display:block;margin-top:4px}
+/* attach menu */
+.attachmenu{width:224px;padding:6px}
+.attachmenu>button{gap:12px;padding:7px 8px;font-size:15px}
+.aic{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none}
+.aic svg.i{width:17px;height:17px;color:#fff!important}
+.a-photo{background:#7B61FF}.a-cam{background:#FF3B6B}.a-doc{background:#2D8CFF}.a-loc{background:#1FA855}.a-con{background:#F59E0B}
+/* media bubbles */
+.msg.rich .strip{padding:4px 4px 5px}
+.msg.rich .strip .tx.mcap{display:block;padding:5px 7px 0}
+.msg.rich .strip .mt{margin-right:6px}
+.mbox{position:relative;display:grid;gap:3px;width:min(260px,68vw);border-radius:13px;overflow:hidden}
+.mbox.n2{grid-template-columns:1fr 1fr}
+.mbox.n3{grid-template-columns:1fr 1fr}
+.mbox.n3 .mcell:first-child{grid-column:1/-1}
+.mbox.n4{grid-template-columns:1fr 1fr}
+.mcell{position:relative;background:var(--fill);aspect-ratio:1;overflow:hidden;cursor:pointer;max-width:100%}
+.mbox.n1 .mcell{aspect-ratio:4/3}
+.mcell img,.mcell video{width:100%;height:100%;object-fit:cover;display:block}
+.mcell img.blur{filter:blur(10px);transform:scale(1.08)}
+.playo{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;display:grid;place-items:center;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.playo svg.i{width:20px;height:20px;margin-left:3px}
+.vdurb{position:absolute;left:6px;bottom:6px;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.45);padding:1px 6px;border-radius:6px}
+.moreo{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.45);color:#fff;font-size:24px;font-weight:600}
+.upo{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgba(0,0,0,.28);color:#fff;font-size:12px;font-weight:600}
+.spin{width:20px;height:20px;border-radius:50%;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .8s linear infinite;display:inline-block;flex:none}
+.spin.dark{border-color:color-mix(in srgb,var(--muted) 35%,transparent);border-top-color:var(--cobalt)}
+.spin.big{width:34px;height:34px;border-width:3px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fcard{display:flex;align-items:center;gap:10px;width:min(260px,68vw);padding:8px;border-radius:12px;background:color-mix(in srgb,var(--fill) 70%,transparent);text-align:left;color:inherit}
+.mine .fcard{background:rgba(255,255,255,.16)}
+.fic{width:40px;height:46px;border-radius:7px;background:var(--cobalt);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:800;letter-spacing:.02em;flex:none}
+.fic svg.i{width:20px;height:20px}
+.fnm{flex:1;min-width:0;display:flex;flex-direction:column}
+.fnm b{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fnm span{font-size:12px;opacity:.7}
+.fcard>svg.i{width:16px;height:16px;transform:rotate(90deg);opacity:.6}
+/* contact card */
+.ccard{width:min(250px,66vw);display:flex;flex-direction:column}
+.cchead{display:flex;align-items:center;gap:10px;padding:6px 6px 8px}
+.ccx{display:flex;flex-direction:column;min-width:0}
+.ccx b{font-size:15px;font-weight:600}
+.ccx span{font-size:12.5px;opacity:.75}
+.ccacts{display:flex;border-top:1px solid color-mix(in srgb,currentColor 18%,transparent)}
+.ccacts>*{flex:1;text-align:center;padding:8px 4px 4px;font-size:14px;font-weight:600;color:var(--cobalt);text-decoration:none}
+.mine .ccacts>*{color:#fff}
+.ccacts>*+*{border-left:1px solid color-mix(in srgb,currentColor 18%,transparent)}
+/* location */
+.lcard{display:flex;flex-direction:column;width:min(260px,68vw);border-radius:12px;overflow:hidden;color:inherit;text-decoration:none}
+.lmap{position:relative;height:140px;background-color:#E5E3DF;max-width:100%}
+.lmap.big{height:180px;border-radius:14px}
+.lpin{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-34px 0 0 -17px;color:#E5383B;filter:drop-shadow(0 2px 2px rgba(0,0,0,.35))}
+.lpin svg.i{width:34px;height:34px;fill:#E5383B;stroke:#fff;stroke-width:1.4}
+.lmeta{display:flex;flex-direction:column;padding:6px 8px 2px}
+.lmeta b{font-size:14px;font-weight:600}
+.lmeta span{font-size:12px;opacity:.75;font-variant-numeric:tabular-nums}
+.lmeta i{font-size:9.5px;opacity:.5;font-style:normal}
+.locsheet{gap:12px}
+.locwait{display:flex;align-items:center;gap:10px;color:var(--muted);padding:20px 0}
+.locprev{display:flex;flex-direction:column;gap:10px}
+.primary.wide{width:100%;justify-content:center}
+/* media preview + viewer */
+.mprev,.viewer{background:#000;color:#fff;z-index:95}
+.mp-top,.vw-top{display:flex;align-items:center;gap:8px;padding:10px 12px;position:relative;z-index:2}
+.mp-top .grow,.vw-top .grow{flex:1}
+.mp-main,.vw-main{flex:1;min-height:0;display:grid;place-items:center;padding:6px}
+.mp-main img,.mp-main video,.vw-main img,.vw-main video{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
+.mp-strip{display:flex;gap:6px;padding:6px 12px;overflow-x:auto;scrollbar-width:none}
+.mp-th{flex:none;width:52px;height:52px;border-radius:9px;overflow:hidden;border:2px solid transparent;background:#222;display:grid;place-items:center;color:#fff;padding:0}
+.mp-th.on{border-color:#1FA855}
+.mp-th img,.mp-th video{width:100%;height:100%;object-fit:cover}
+.mp-th.add{border:1.5px dashed rgba(255,255,255,.4)}
+.mp-bot{display:flex;align-items:center;gap:10px;padding:8px 12px calc(12px + env(safe-area-inset-bottom,0px))}
+.vw-count{font-size:13px;opacity:.8;font-variant-numeric:tabular-nums}
+.vw-nav{position:absolute;top:50%;width:40px;height:40px;margin-top:-20px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center;z-index:2}
+.vw-nav.l{left:10px}.vw-nav.r{right:10px}
+.vw-cap{padding:10px 16px calc(14px + env(safe-area-inset-bottom,0px));text-align:center;font-size:15px}
+/* ticks */
+.tk{display:inline-flex;vertical-align:-3px;margin-left:3px;color:currentColor;opacity:.8}
+.tk svg.i{width:16px;height:16px;stroke-width:2}
+.mine .tk.read{color:#9EE7FF;opacity:1}
+.tk.read{color:#34B7F1;opacity:1}
+.tk.pend svg.i{width:13px;height:13px}
+.lineitem .pv{display:flex;align-items:center;gap:2px}
+.lineitem .pv .tk{color:var(--muted);margin:0 2px 0 0;flex:none}
+.lineitem .pv .tk.read{color:#34B7F1}
+.pvt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pvt.typing,#thead-sub.typing{color:var(--ok);font-weight:600}
+.msg.pending .strip{opacity:.92}
+/* typing bubble */
+.typingrow[hidden]{display:none!important}
+.typingrow .tyname:empty{display:none}
+.tybub{display:flex;align-items:center;gap:6px;padding:11px 14px!important;background:var(--surface)!important}
+.dots{display:flex;gap:4px}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:tyb 1.2s infinite ease-in-out}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes tyb{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-4px);opacity:1}}
+.tymic{display:none;color:var(--ok)}
+.tymic svg.i{width:16px;height:16px}
+.typingrow.rec .tymic{display:grid}
+.typingrow.rec .dots i{background:var(--ok)}
+.loadmore{display:block;margin:6px auto 10px;padding:6px 12px;border-radius:999px;background:var(--surface);color:var(--cobalt);font-size:13px;font-weight:600;box-shadow:0 1px 1px rgba(0,0,0,.06)}
+/* three-button dock */
+@media (max-width:860px){ .rail{gap:10px!important} }
+@media (prefers-reduced-motion:reduce){ .dots i,.spin{animation:none} }
+.lineitem .pv:has(.pvt.typing) .tk{display:none}
+
+/* =====================================================================
+   iOS pass — Apple system colors, hairlines, large titles, glass bars
+   ===================================================================== */
+:root{
+  --paper:#F2F2F7; --surface:#FFFFFF; --raised:#FFFFFF; --ink:#000000; --muted:#8A8A8E; --fill:rgba(118,118,128,.12);
+  --rule:rgba(60,60,67,.18); --sep:rgba(60,60,67,.29); --hair:.5px;
+  --cobalt:#007AFF; --cobalt-soft:rgba(0,122,255,.12); --knot:#007AFF; --knot-soft:rgba(0,122,255,.12);
+  --bubble:#E9E9EB; --ok:#34C759; --bad:#FF3B30; --warn:#FF9500; --on-accent:#FFFFFF;
+  --c-todo:#8E8E93; --c-doing:#007AFF; --c-review:#FF9500; --c-done:#34C759;
+  --glass:rgba(249,249,249,.94); --bar:rgba(249,249,249,.9);
+  --chatbg:#EFEFF4;
+  --f-display:-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,Roboto,"Segoe UI",sans-serif;
+  --f-body:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Roboto,"Segoe UI",sans-serif;
+  --shadow:0 0 0 var(--hair) var(--rule); --shadow-lg:0 10px 30px rgba(0,0,0,.12),0 0 0 var(--hair) rgba(0,0,0,.06);
+  --ease:cubic-bezier(.25,.1,.25,1);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#000000; --surface:#1C1C1E; --raised:#2C2C2E; --ink:#FFFFFF; --muted:#8D8D93; --fill:rgba(118,118,128,.24);
+  --rule:rgba(84,84,88,.45); --sep:rgba(84,84,88,.65);
+  --cobalt:#0A84FF; --cobalt-soft:rgba(10,132,255,.18); --knot:#0A84FF; --knot-soft:rgba(10,132,255,.18);
+  --bubble:#262628; --ok:#30D158; --bad:#FF453A; --warn:#FF9F0A;
+  --c-todo:#8E8E93; --c-doing:#0A84FF; --c-review:#FF9F0A; --c-done:#30D158;
+  --glass:rgba(28,28,30,.94); --bar:rgba(22,22,24,.9); --chatbg:#0B0B0D; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#000000; --surface:#1C1C1E; --raised:#2C2C2E; --ink:#FFFFFF; --muted:#8D8D93; --fill:rgba(118,118,128,.24);
+  --rule:rgba(84,84,88,.45); --sep:rgba(84,84,88,.65);
+  --cobalt:#0A84FF; --cobalt-soft:rgba(10,132,255,.18); --knot:#0A84FF; --knot-soft:rgba(10,132,255,.18);
+  --bubble:#262628; --ok:#30D158; --bad:#FF453A; --warn:#FF9F0A;
+  --c-todo:#8E8E93; --c-doing:#0A84FF; --c-review:#FF9F0A; --c-done:#30D158;
+  --glass:rgba(28,28,30,.94); --bar:rgba(22,22,24,.9); --chatbg:#0B0B0D; color-scheme:dark}
+
+body{font-family:var(--f-body);font-size:15px;letter-spacing:-.01em;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+svg.i{stroke-width:1.75}
+button{-webkit-tap-highlight-color:transparent}
+button:active{opacity:.6}
+.fab:active,.roundgo:active,.sendbtn:active,.micbtn:active{opacity:1}
+
+/* ---- large titles + glass navigation bars ---- */
+.h1{font:700 32px/1.1 var(--f-display);letter-spacing:.012em}
+.toprow{min-height:44px}
+.lines-head.toprow{padding:10px 16px 4px}
+.thead,.dhead,.fhead,.compose{background:var(--bar)!important;-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+.thead{border-bottom:var(--hair) solid var(--sep)!important;min-height:50px;padding:5px 8px!important}
+.thead .t b{font:600 16px var(--f-body);letter-spacing:-.02em}
+.thead .t span{font-size:12.5px;color:var(--muted)}
+.thead .glyph,.thead .av.lg{width:36px!important;height:36px!important}
+.compose{border-top:var(--hair) solid var(--sep)!important}
+.iconbtn{color:var(--cobalt);border-radius:50%}
+.iconbtn:hover{background:var(--fill)}
+.thead .iconbtn svg.i{width:22px;height:22px}
+.back svg.i{width:24px;height:24px;stroke-width:2.2}
+
+/* ---- search field (iOS) ---- */
+.search{background:var(--fill)!important;border:0!important;border-radius:10px!important;height:36px;margin:2px 16px 8px!important;padding:0 8px!important;color:var(--muted)}
+.search input{font-size:16px;padding:0!important}
+.search svg.i{width:17px;height:17px}
+
+/* ---- chat list: edge-to-edge rows, inset hairline separators ---- */
+.lines{background:var(--surface)}
+.list{padding:0 0 110px!important}
+.lineitem{position:relative;border-radius:0!important;padding:9px 16px!important;grid-template-columns:52px minmax(0,1fr) auto!important;gap:12px!important;box-shadow:none!important;border:0!important;transform:none!important}
+.lineitem::after{content:"";position:absolute;left:80px;right:0;bottom:0;height:var(--hair);background:var(--sep)}
+.lineitem:last-child::after{display:none}
+.lineitem:hover{background:var(--fill)}
+.lineitem[aria-current="true"]{background:color-mix(in srgb,var(--fill) 80%,transparent)!important}
+.lineitem .glyph,.lineitem .av.lg,.lineitem .tgwrap>.glyph{width:52px!important;height:52px!important;font-size:20px!important}
+.lineitem .nm{font:600 16px var(--f-body);letter-spacing:-.02em}
+.lineitem .pv{font-size:14.5px;color:var(--muted);margin-top:1px}
+.lineitem .meta{font-size:13px;color:var(--muted)}
+.lineitem .meta .mono{font-family:var(--f-body);font-variant-numeric:tabular-nums}
+.lineitem .badge{width:auto!important;min-width:20px!important;height:20px!important;padding:0 6px!important;font:600 12.5px/20px var(--f-body)!important;background:var(--cobalt)!important;color:#fff!important;border-radius:10px!important}
+.lineitem .badge:not(.at){font-size:0!important;min-width:11px!important;width:11px!important;height:11px!important;padding:0!important}
+.seg-label{font:400 13px var(--f-body)!important;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;padding:18px 16px 6px!important}
+
+/* ---- grouped lists (settings, updates, calls) ---- */
+.teamwrap{background:var(--paper)}
+.ulist,.sgroup,.profcard,.tlrows{background:var(--surface)!important;border-radius:12px!important;box-shadow:none!important;border:0!important;overflow:hidden}
+.srow{min-height:44px;padding:6px 16px!important;position:relative}
+.srow+.srow{border-top:0!important}
+.srow+.srow::before{content:"";position:absolute;top:0;left:58px;right:0;height:var(--hair);background:var(--sep)}
+.sic{width:29px!important;height:29px!important;border-radius:7px!important}
+.stx b{font-weight:400!important;font-size:16px!important}
+.stx span{font-size:13px}
+.sinp{background:transparent!important;color:var(--muted);font-size:16px!important;padding:6px 0!important}
+.sinp:focus{box-shadow:none!important;color:var(--ink)}
+.switch{width:51px!important;height:31px!important;border-radius:16px!important;background:rgba(120,120,128,.16)}
+.switch i{width:27px!important;height:27px!important;top:2px!important;left:2px!important;box-shadow:0 3px 8px rgba(0,0,0,.15),0 1px 1px rgba(0,0,0,.16)!important}
+.switch.on{background:var(--ok)!important}
+.switch.on i{transform:translateX(20px)!important}
+.urow{padding:8px 16px!important;border-radius:0!important;position:relative}
+.urow+.urow::before{content:"";position:absolute;top:0;left:72px;right:0;height:var(--hair);background:var(--sep)}
+.profcard{padding:14px 16px!important}
+
+/* ---- segmented controls ---- */
+.segmini,.vtoggle,.segs{background:var(--fill)!important;border-radius:9px!important;padding:2px!important}
+.segmini button,.vtoggle button,.segs button{border-radius:7px!important;font-weight:500!important;font-size:13px!important;color:var(--ink)!important;border:0!important;background:transparent!important}
+.segmini button[aria-pressed="true"],.vtoggle button[aria-pressed="true"],.segs button[aria-pressed="true"]{background:var(--raised)!important;box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04)!important;font-weight:600!important;transform:none!important}
+.vtoggle button[aria-pressed="true"]{color:var(--cobalt)!important}
+
+/* ---- chat bubbles: iMessage style with tails ---- */
+.main.chatmain{background-color:var(--chatbg)}
+.strip{border-radius:18px!important;padding:7px 12px 6px!important;box-shadow:none!important;font-size:16px;line-height:1.32;letter-spacing:-.015em}
+.msg:not(.mine) .strip{background:var(--surface)!important;color:var(--ink)}
+.mine .strip{background:var(--cobalt)!important;color:#fff!important}
+.msg.cont .strip,.msg.mine.cont .strip{border-radius:18px!important}
+.msg:not(.cont):not(.mine) .strip{border-top-left-radius:5px!important}
+.msg.mine:not(.cont) .strip{border-top-right-radius:5px!important}
+.msg:not(.cont):not(.mine):not(.rich) .strip::before,.msg.mine:not(.cont):not(.rich) .strip::before{content:"";position:absolute;top:0;width:9px;height:12px;background:inherit}
+.msg:not(.cont):not(.mine):not(.rich) .strip::before{left:-6px;clip-path:polygon(100% 0,0 0,100% 100%)}
+.msg.mine:not(.cont):not(.rich) .strip::before{right:-6px;clip-path:polygon(0 0,100% 0,0 100%)}
+.msg{margin-bottom:2px!important}
+.msg:not(.cont){margin-top:8px!important}
+.who{font-size:13px!important;font-weight:600;margin-left:12px!important}
+.mt{font-size:11px!important;opacity:.55!important;letter-spacing:0}
+.mine .mt{opacity:.75!important}
+.day{background:color-mix(in srgb,var(--surface) 88%,transparent)!important;color:var(--muted)!important;font:600 12px var(--f-body)!important;padding:4px 10px!important;border-radius:8px!important;box-shadow:none!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.e2enote{border-radius:8px!important;font-size:12px!important}
+.quote{border-radius:6px!important}
+.react{border:var(--hair) solid var(--rule)!important;box-shadow:0 1px 2px rgba(0,0,0,.08)!important}
+.tasktag{border:var(--hair) solid var(--rule)!important;box-shadow:none!important;border-radius:10px!important;background:var(--surface)!important}
+.fwdbtn{background:color-mix(in srgb,var(--surface) 75%,transparent)!important;opacity:.85}
+.tybub{background:var(--surface)!important}
+
+/* ---- composer (iMessage bar) ---- */
+.compose{padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))!important}
+.inbox{border:var(--hair) solid var(--sep)!important;border-radius:20px!important;background:var(--surface)!important;min-height:36px}
+.inbox:focus-within{border-color:var(--sep)!important}
+.inbox textarea{font-size:16px!important;padding:8px 4px!important;min-height:36px!important}
+.inbtn{height:36px;width:34px;color:var(--muted)}
+.inbtn svg.i{width:22px;height:22px}
+.sendbtn,.micbtn{width:36px!important;height:36px!important;box-shadow:none!important;margin-bottom:0}
+.sendbtn svg.i,.micbtn svg.i{width:20px!important;height:20px!important;stroke-width:2.2}
+.knotbtn{width:34px!important;height:36px!important;color:var(--muted)}
+.recbar{border:var(--hair) solid var(--sep)!important;border-radius:20px!important;box-shadow:none!important}
+
+/* ---- menus (iOS context menus) ---- */
+.popmenu{background:color-mix(in srgb,var(--surface) 86%,transparent)!important;-webkit-backdrop-filter:saturate(180%) blur(30px);backdrop-filter:saturate(180%) blur(30px);border:0!important;border-radius:14px!important;box-shadow:0 12px 40px rgba(0,0,0,.18),0 0 0 var(--hair) rgba(0,0,0,.08)!important;padding:0!important;overflow:hidden;min-width:230px}
+.popmenu>button{flex-direction:row-reverse;justify-content:space-between;border-radius:0!important;padding:11px 16px!important;font-size:16px!important;font-weight:400!important;min-height:44px}
+.popmenu>button+button{box-shadow:0 calc(-1 * var(--hair)) 0 var(--sep)}
+.popmenu>button svg.i{color:var(--ink)!important;width:20px;height:20px}
+.attachmenu>button{flex-direction:row;justify-content:flex-start;gap:14px}
+.holdmenu .acts{border-radius:14px!important;box-shadow:0 12px 40px rgba(0,0,0,.18),0 0 0 var(--hair) rgba(0,0,0,.08)!important;background:color-mix(in srgb,var(--surface) 90%,transparent)!important;-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px)}
+.holdmenu .emojis{box-shadow:0 12px 40px rgba(0,0,0,.16),0 0 0 var(--hair) rgba(0,0,0,.08)!important;background:color-mix(in srgb,var(--surface) 92%,transparent)!important;-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px)}
+.chatmenu .pmtask{border-radius:0!important;padding:10px 16px!important}
+.pmlabel{padding:10px 16px 6px!important}
+.pmsep{margin:0!important;height:8px!important;background:var(--fill)!important}
+
+/* ---- sheets & modals ---- */
+.modal{border-radius:14px!important;box-shadow:0 20px 60px rgba(0,0,0,.25)!important}
+.scrim{background:rgba(0,0,0,.4)!important}
+.scrim.clear{background:transparent!important}
+
+/* ---- buttons ---- */
+.primary{border-radius:12px!important;box-shadow:none!important;font-weight:600;font-size:16px;height:44px}
+.ghost{background:var(--fill)!important;color:var(--cobalt)!important;border:0!important;box-shadow:none!important;border-radius:10px!important;font-weight:600}
+.roundgo{box-shadow:none!important}
+.ib{background:var(--fill)!important;color:var(--cobalt)!important}
+.toast{background:rgba(30,30,32,.92)!important;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-radius:14px!important;font-size:14px!important}
+
+/* ---- floating buttons (crisp, solid iOS blue) ---- */
+.fab{background:var(--cobalt)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border:0!important;border-radius:16px!important;box-shadow:0 4px 14px color-mix(in srgb,var(--cobalt) 35%,transparent),0 1px 3px rgba(0,0,0,.12)!important}
+.fab svg.i{stroke-width:2}
+.fab.mini{background:var(--surface)!important;color:var(--cobalt)!important;box-shadow:0 2px 10px rgba(0,0,0,.12),0 0 0 var(--hair) var(--rule)!important}
+
+/* ---- bottom buttons: iOS glass ---- */
+@media (max-width:860px){
+  .navb{background:var(--glass)!important;-webkit-backdrop-filter:saturate(180%) blur(24px)!important;backdrop-filter:saturate(180%) blur(24px)!important;box-shadow:0 0 0 var(--hair) var(--rule),0 6px 20px rgba(0,0,0,.08)!important;color:var(--ink)!important}
+  .navb[aria-current="true"]{background:var(--glass)!important;color:var(--cobalt)!important}
+  .navb[aria-current="true"] .pill svg.i{stroke-width:2.2}
+  .navb[aria-current="true"]::after{content:"";position:absolute;inset:4px;border-radius:999px;background:var(--cobalt-soft);z-index:-1}
+  .navb{isolation:isolate}
+  .navb .dot{border-color:var(--paper)!important;background:var(--bad)!important}
+}
+@media (min-width:861px){
+  .rail{background:var(--surface)!important;border-right:var(--hair) solid var(--sep)!important}
+  .lines{border-right:var(--hair) solid var(--sep)!important}
+  .mark{background:var(--cobalt)!important;box-shadow:none!important;border-radius:10px!important}
+  .navb[aria-current="true"] .pill{background:var(--cobalt-soft)!important;color:var(--cobalt)!important}
+}
+
+/* ---- tasks: flatter, sharper ---- */
+.bhead{background:var(--paper)!important;border:0!important}
+.col{border-radius:14px!important;box-shadow:none!important;background:color-mix(in srgb,var(--c) 7%,var(--fill))!important}
+.card{border-radius:12px!important;box-shadow:0 0 0 var(--hair) var(--rule)!important;border:0!important}
+.card:hover{box-shadow:0 0 0 var(--hair) var(--rule),0 4px 14px rgba(0,0,0,.08)!important;transform:none!important}
+.colpill{font-weight:600!important;border-radius:8px!important}
+.trow+.trow{border-top:0!important;box-shadow:0 calc(-1 * var(--hair)) 0 var(--sep) inset}
+.drawer{background:var(--paper)!important}
+.dhead{border-bottom:var(--hair) solid var(--sep)!important;background:var(--bar)!important}
+.subs,.tfiles,.notes,.metabox,.source{background:var(--surface)!important;border-radius:12px!important}
+.stbtn{border-radius:8px!important}
+.ichip{background:var(--fill)!important}
+.person{border-radius:12px!important;box-shadow:none!important}
+
+/* ---- forward / pickers (full-screen lists) ---- */
+.fwdview{background:var(--paper)!important}
+.fhead{border-bottom:var(--hair) solid var(--sep)!important}
+.flist{padding:0 0 100px!important}
+.frow{border-radius:0!important;padding:8px 16px!important;position:relative;background:var(--surface)}
+.frow+.frow::before{content:"";position:absolute;top:0;left:72px;right:0;height:var(--hair);background:var(--sep)}
+.contact{border-radius:0!important}
+#onboard,#profsetup,#findc{background:var(--paper)!important}
+.obnum,.obcc{box-shadow:none!important;border:var(--hair) solid var(--sep)!important;border-radius:12px!important;background:var(--surface)!important}
+.obnum:focus{border-color:var(--cobalt)!important}
+.oblogo{border-radius:14px!important}
+
+/* ---- task conversations nested under groups ---- */
+.subtoggle{display:inline-flex;align-items:center;gap:3px;height:24px;padding:0 6px 0 7px;border-radius:12px;background:var(--fill);color:var(--muted);font:600 12px var(--f-body);position:relative}
+.subtoggle svg.i{width:14px;height:14px}
+.subtoggle svg.i:last-child{width:13px;height:13px;transition:transform .2s var(--ease)}
+.subtoggle.open{background:var(--cobalt-soft);color:var(--cobalt)}
+.subtoggle.open svg.i:last-child{transform:rotate(180deg)}
+.subtoggle.has{color:var(--cobalt)}
+.tdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--cobalt);flex:none}
+.subtoggle .tdot{position:absolute;top:-2px;right:-2px;box-shadow:0 0 0 2px var(--surface)}
+.lineitem .metaicons{gap:6px}
+.subgroup{position:relative;background:color-mix(in srgb,var(--fill) 45%,var(--surface));animation:subin .18s var(--ease) both}
+@keyframes subin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.subgroup::before{content:"";position:absolute;left:41px;top:0;bottom:22px;width:1.5px;background:var(--sep);border-radius:1px}
+.lineitem.subitem{grid-template-columns:34px minmax(0,1fr) auto!important;padding:7px 16px 7px 58px!important;gap:10px!important}
+.lineitem.subitem::before{content:"";position:absolute;left:41px;top:50%;width:12px;height:1.5px;background:var(--sep)}
+.lineitem.subitem::after{left:102px!important}
+.lineitem.subitem .glyph.tglyph.sm{width:34px!important;height:34px!important}
+.lineitem.subitem .glyph svg.i{width:17px;height:17px}
+.lineitem.subitem .nm{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lineitem.subitem .pv{font-size:13.5px}
+.tglyph.sm{border-radius:50%}
+/* header button + back to group */
+.subsbtn{width:auto!important;padding:0 8px!important;border-radius:16px!important;gap:4px;display:inline-flex!important;align-items:center;position:relative}
+.subsbtn b{font:600 13px var(--f-body)}
+.subsbtn .tdot{position:absolute;top:3px;right:3px}
+.glyph.mini{width:28px!important;height:28px!important;font-size:12px!important}
+.tgwrap .glyph.mini{width:28px!important;height:28px!important}
+/* task tag + conversation button under a message */
+.tagrow{display:flex;align-items:center;gap:6px;margin-top:3px}
+.mine .tagrow{justify-content:flex-end}
+.tagrow .tasktag{margin-top:0}
+.tagthread{height:26px;padding:0 9px;border-radius:13px;display:inline-flex;align-items:center;gap:4px;background:var(--surface);color:var(--cobalt);box-shadow:0 0 0 var(--hair) var(--rule);position:relative}
+.tagthread svg.i{width:15px;height:15px}
+.tagthread.on{background:var(--cobalt-soft)}
+.tagthread .tdot{position:absolute;top:-2px;right:-2px}
+.mlink{color:inherit;text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
+.msg:not(.mine) .mlink{color:var(--cobalt);text-decoration:none}
+a.iconbtn.hcall{display:grid;place-items:center}
