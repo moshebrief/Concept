@@ -1,0 +1,98 @@
+# Concept — cloud builds for the App Store and Google Play (no Mac needed).
+# Codemagic reads this file automatically from the repository.
+#
+# Names used below must match what you create in Codemagic:
+#   • Android keystore reference name:  concept_keystore
+#   • App Store Connect API key name:   Concept ASC
+#   • Email for finished builds:        set in the line "recipients" (2 places)
+
+workflows:
+
+  # ------------------------------------------------------------------ ANDROID
+  android-release:
+    name: Android (Google Play)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      node: 22
+      java: 21
+      android_signing:
+        - concept_keystore
+    scripts:
+      - name: Install
+        script: npm install
+      - name: Web files and icons
+        script: |
+          node native-setup.js web
+          node native-setup.js assets
+      - name: Create Android project
+        script: npx cap add android
+      - name: Icons and splash screen
+        script: npx capacitor-assets generate --android --iconBackgroundColor "#0A55E0" --iconBackgroundColorDark "#0A55E0" --splashBackgroundColor "#007AFF" --splashBackgroundColorDark "#007AFF"
+      - name: Permissions, notifications, version and signing
+        script: node native-setup.js android
+      - name: Sync
+        script: npx cap sync android
+      - name: Build app bundle
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab
+    publishing:
+      email:
+        recipients:
+          - YOUR_EMAIL
+        notify:
+          success: true
+          failure: true
+
+  # ------------------------------------------------------------------ iOS
+  ios-release:
+    name: iPhone (App Store)
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    integrations:
+      app_store_connect: Concept ASC
+    environment:
+      node: 22
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.conceptchat.app
+    scripts:
+      - name: Install
+        script: npm install
+      - name: Web files and icons
+        script: |
+          node native-setup.js web
+          node native-setup.js assets
+      - name: Create iPhone project
+        script: npx cap add ios
+      - name: Icons and splash screen
+        script: npx capacitor-assets generate --ios --splashBackgroundColor "#007AFF" --splashBackgroundColorDark "#007AFF"
+      - name: Permissions, notifications, version
+        script: node native-setup.js ios
+      - name: Sync
+        script: npx cap sync ios
+      - name: Signing
+        script: xcode-project use-profiles
+      - name: Build
+        script: |
+          xcode-project build-ipa \
+            --project "ios/App/App.xcodeproj" \
+            --scheme "App"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - YOUR_EMAIL
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

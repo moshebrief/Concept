@@ -48,7 +48,7 @@ const S = {
   people:{}, team:[], channels:[], tasks:[], msgs:[], msgsFor:null,
   view: (v=>v==="updates"||v==="calls"?"chats":v)(ls.get("view","chats")), active: ls.get("active", null), inThread:false,
   openTask:null, draftTask:null, replyTo:null, editing:null, actFor:null, emojiFor:null,
-  statuses:[], calls:[], teamDocs:{}, statusReply:null, teams:[], teamId:ls.get("teamId",null), prefs:ls.get("prefs",{}), pins:[], expanded:ls.get("expanded",{}), pend:[], msgCache:{}, msgLimit:120, vdraft:null, emojiOpen:false, emojiTab:null, dial:{on:false,q:""}, contacts:[], allContacts:{}, keys:{}, addr:[], addrNames:{}, onConcept:[], selecting:false, sel:[], addingStage:false, listMode:ls.get("listMode","chats"), taskView:ls.get("taskView","stage"),
+  statuses:[], calls:[], teamDocs:{}, statusReply:null, teams:[], teamId:ls.get("teamId",null), prefs:ls.get("prefs",{}), pins:[], blocked:[], pushState:"", expanded:ls.get("expanded",{}), pend:[], msgCache:{}, msgLimit:120, vdraft:null, emojiOpen:false, emojiTab:null, dial:{on:false,q:""}, contacts:[], allContacts:{}, keys:{}, addr:[], addrNames:{}, onConcept:[], selecting:false, sel:[], addingStage:false, listMode:ls.get("listMode","chats"), taskView:ls.get("taskView","stage"),
   q:"", filter:"all", asTask:false, lastRead: ls.get("lastRead", {}), justTied:null
 };
 
@@ -140,7 +140,7 @@ function chanGlyph(c){
 
 // ---------- boot ----------
 async function boot(){
-  applyPrefs(); render();
+  applyPrefs(); nativeInit(); render();
   if (!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase && !/YOUR_/.test(CFG.supabaseUrl+CFG.supabaseKey))) { startDemo("Example data. Add your Supabase keys in config.js to go live."); return; }
   SB=window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:false}});
   const {data}=await SB.auth.getSession();
@@ -662,8 +662,8 @@ const profBtn = () => S.me? h("button",{class:"profbtn", title:"Profile and sett
 function openSettings(){ S.view="settings"; S.openTask=null; S.newFlow=null; ls.set("view","settings"); render(); }
 const toprow = (title, ...extras) => h("div",{class:"toprow"}, h("h1",{class:"h1"},title), h("span",{class:"grow"}), ...extras, profBtn());
 async function loadPins(){
-  if (DB) { store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="prefs")||{}; S.pins=d.pins||[]; setStages(d.stages); render(); }); }
-  else { S.pins = ls.get("pins", ["launch"]); setStages(ls.get("stages", null)); }
+  if (DB) { store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="prefs")||{}; S.pins=d.pins||[]; S.blocked=d.blocked||[]; setStages(d.stages); scheduleRender(); }); }
+  else { S.pins = ls.get("pins", ["launch"]); S.blocked=ls.get("blocked", []); setStages(ls.get("stages", null)); }
 }
 async function togglePin(cid){
   let pins=[...S.pins];
@@ -714,7 +714,14 @@ function renderSettings(){
     row(ICF.all, tm? tm.name : "Team", h("button",{class:"iconbtn", title:"Open team", "aria-label":"Open team", onclick:()=>{ S.view="team"; ls.set("view","team"); render(); }}, svg(IC.arrow))),
     tm && tm.owner===S.me? row(ICF.gear, "Team settings", h("button",{class:"iconbtn", title:"Team settings", "aria-label":"Team settings", onclick:openTeamSettings}, svg(IC.arrow))) : "",
     row(ICF.stage, "Task stages", h("span",{class:"sval"}, STATUSES.length))));
-  if (S.mode==="live") w.append(h("div",{class:"ulist sgroup", style:"margin-top:18px"}, h("button",{class:"srow signout", onclick:signOut}, h("span",{class:"stx"}, h("b",{},"Log out")))));
+  w.append(...group("Help",
+    NATIVE? row(ICF.bell, "Notifications", h("span",{class:"sval"}, S.pushState==="on"? "On" : S.pushState==="off"? "Off — turn on in phone Settings" : "…")) : "",
+    row(ICF.block, "Blocked contacts", h("span",{class:"sval"}, String((S.blocked||[]).length)), (S.blocked||[]).map(id=>nameOf(id).replace(/^Example:\s*/,"")).join(", ")),
+    h("a",{class:"srow", href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, h("span",{class:"sic"}, svg(ICF.lock)), h("span",{class:"stx"}, h("b",{},"Privacy Policy")), svg(IC.arrow)),
+    h("a",{class:"srow", href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, h("span",{class:"sic"}, svg(ICF.doc)), h("span",{class:"stx"}, h("b",{},"Terms of Service")), svg(IC.arrow))));
+  w.append(h("div",{class:"ulist sgroup", style:"margin-top:18px"},
+    S.mode==="live"? h("button",{class:"srow signout", onclick:signOut}, h("span",{class:"stx"}, h("b",{},"Log out"))) : "",
+    h("button",{class:"srow signout", onclick:openDeleteAccount}, h("span",{class:"stx"}, h("b",{},"Delete my account")))));
   return w;
 }
 
@@ -806,7 +813,7 @@ function setStages(arr){
   STATUSES.splice(0, STATUSES.length, ...a);
 }
 async function savePrefsDoc(){
-  const doc={pins:S.pins, stages:STATUSES.map(s=>({id:s.id,name:s.name,c:s.c}))};
+  const doc={pins:S.pins, blocked:S.blocked||[], stages:STATUSES.map(s=>({id:s.id,name:s.name,c:s.c}))};
   if (DB) { try { await store.set("data/users/"+S.me+"/prefs", doc); } catch { toast("Couldn't save. Check your connection."); } }
   else { ls.set("pins", S.pins); ls.set("stages", doc.stages); }
 }
@@ -943,6 +950,7 @@ function saveAddr(list){
   toast(`${clean.length} contacts · ${S.onConcept.length} on Concept`);
 }
 async function importContacts(){
+  if (NATIVE && await nativeContacts()) return;
   if (navigator.contacts && navigator.contacts.select) {
     try { const r=await navigator.contacts.select(["name","tel"],{multiple:true}); if (r && r.length) { saveAddr(r.map(c=>({n:(c.name||[])[0]||"", p:c.tel||[]}))); return; } } catch {}
   }
@@ -1148,7 +1156,9 @@ function chatMenu(c, x, y){
     h("div",{class:"pmsep"}),
     h("button",{onclick:()=>{ scrim.remove(); togglePin(c.id); }}, svg(IC.pin), pinned? "Unpin chat" : "Pin chat"),
     h("button",{onclick:()=>{ scrim.remove(); S.view="board"; S.filter="chan:"+c.id; ls.set("view","board"); render(); }}, svg(ICF.stage), "Show on task board"),
-    h("button",{onclick:()=>{ scrim.remove(); openWallpaper(); }}, svg(ICF.image), "Wallpaper")));
+    h("button",{onclick:()=>{ scrim.remove(); openWallpaper(); }}, svg(ICF.image), "Wallpaper"),
+    dmPeer(c)? h("button",{class:"dangerrow", onclick:()=>{ scrim.remove(); setBlocked(dmPeer(c), !isBlocked(dmPeer(c))); }}, svg(ICF.block), isBlocked(dmPeer(c))? "Unblock "+nameOf(dmPeer(c)).replace(/^Example:\s*/,"") : "Block "+nameOf(dmPeer(c)).replace(/^Example:\s*/,"")) : "",
+    h("button",{class:"dangerrow", onclick:()=>{ scrim.remove(); openReport({title: dmPeer(c)? "Report "+nameOf(dmPeer(c)).replace(/^Example:\s*/,"") : "Report group", user:dmPeer(c)||"", channel:c.id}); }}, svg(ICF.flag2), dmPeer(c)? "Report contact" : "Report group")));
   document.body.append(scrim);
 }
 
@@ -1262,6 +1272,7 @@ function openLogin(){
       h("div",{class:"obrow"}, h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c))),
         h("input",{class:"obnum", id:"ob-num", type:"tel", inputmode:"tel", autocomplete:"tel-national", placeholder:"Phone number", value:num, oninput:e=>num=e.target.value, onkeydown:e=>{ if (e.key==="Enter") sendCode(); }})),
       err? h("p",{class:"oberr", role:"alert"}, err) : "",
+      h("p",{class:"obterms"}, "By continuing you agree to the ", h("a",{href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, "Terms"), " and ", h("a",{href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, "Privacy Policy"), ". Concept has no tolerance for abusive or objectionable content."),
       h("div",{class:"obacts end"}, h("button",{class:"fab obgo"+(busy?" busy":""), "aria-label":"Send code", disabled:busy, onclick:sendCode}, busy? h("span",{class:"spin"}) : svg(IC.arrow)))));
     else o.replaceChildren(h("div",{class:"ob"},
       h("div",{class:"oblogo"}, svg(ICF.lock)),
@@ -1328,6 +1339,7 @@ async function startLive(u){
   if (!mine || !mine.name) openProfileSetup(u, mine);
   else if (u.phone && fmtPhone(u.phone)!==mine.phone) store.update("team/"+S.me, {phone:fmtPhone(u.phone)}).catch(()=>{});
   subscribeAll(); render();
+  setTimeout(pushRegister, 1500);
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch {} location.reload(); }
 
@@ -1354,7 +1366,7 @@ function updateBadges(){
   const ur=S.channels.filter(unread).length; const ud=$("#unreadDot"); if (ud){ ud.hidden=!ur; ud.textContent=ur; }
   const mine=visibleTasks().filter(t=>t.assignee===S.me && t.status!=="done").length; const md=$("#mineDot"); if (md){ md.hidden=!mine; md.textContent=mine; }
 }
-function msgsFor(cid){ const have=new Set(S.msgs.map(m=>m.id)); return S.msgs.concat(S.pend.filter(p=>p.cid===cid && !have.has(p.id))); }
+function msgsFor(cid){ const have=new Set(S.msgs.map(m=>m.id)); const all=S.msgs.concat(S.pend.filter(p=>p.cid===cid && !have.has(p.id))); return (S.blocked||[]).length? all.filter(m=>!isBlocked(m.by)) : all; }
 const newMsgId = () => "m"+now().toString(36)+uidShort().slice(0,4);
 
 // ===================== typing & recording indicators =====================
@@ -1671,6 +1683,107 @@ function renderVoiceDraft(){
   return h("div",{class:"vdraft"}, btn, h("div",{class:"vdbars"}, (d.peaks||[]).map(p=>h("i",{style:`height:${Math.round(18+p*82)}%`}))), h("span",{class:"vddur mono"}, fmtDur(d.dur)), h("button",{class:"iconbtn sm","aria-label":"Remove voice note", title:"Remove", onclick:()=>{ if (DRAFT_AUDIO) DRAFT_AUDIO.pause(); S.vdraft=null; render(true); }}, svg(IC.x)));
 }
 
+// ===================== native app (iPhone / Android) =====================
+const CAP = window.Capacitor;
+const NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
+const PLAT = NATIVE ? CAP.getPlatform() : "web";
+const NP = name => (NATIVE && CAP.Plugins && CAP.Plugins[name]) || null;
+const siteLink = file => (NATIVE || CFG.siteUrl? (CFG.siteUrl||"https://concept-rnmb.onrender.com").replace(/\/$/,"")+"/" : "") + file;
+let PUSH_READY=false;
+async function nativeInit(){
+  if (!NATIVE) return;
+  document.documentElement.classList.add("native", "plat-"+PLAT);
+  const kb=NP("Keyboard");
+  if (kb) { try { kb.setAccessoryBarVisible && kb.setAccessoryBarVisible({isVisible:false}); } catch {}
+    kb.addListener("keyboardDidShow", ()=>{ const st=$("#stream"); if (st) st.scrollTop=st.scrollHeight; }); }
+  const app=NP("App");
+  if (app) app.addListener("appStateChange", ({isActive})=>{ if (isActive && S.inThread && S.view==="chats") { markRead(); scheduleRender(); } });
+  const sb=NP("SystemBars"); const dark=matchMedia("(prefers-color-scheme: dark)").matches;
+  if (sb) { try { sb.setStyle({style: "DEFAULT"}); } catch {} }
+  void dark;
+  const ss=NP("SplashScreen"); if (ss) setTimeout(()=>{ try { ss.hide({fadeOutDuration:180}); } catch {} }, 120);
+}
+async function pushRegister(){
+  const fm=NP("FirebaseMessaging"); if (!fm || PUSH_READY || S.mode!=="live") return;
+  PUSH_READY=true;
+  try {
+    if (PLAT==="android" && fm.createChannel) { try { await fm.createChannel({id:"messages", name:"Messages", description:"New messages", importance:5, visibility:1, vibration:true}); } catch {} }
+    let perm=await fm.checkPermissions(); if (perm.receive!=="granted") perm=await fm.requestPermissions();
+    if (perm.receive!=="granted") { S.pushState="off"; return; }
+    S.pushState="on";
+    const {token}=await fm.getToken(); if (token) await saveDeviceToken(token);
+    fm.addListener("tokenReceived", ev=>{ if (ev && ev.token) saveDeviceToken(ev.token); });
+    fm.addListener("notificationActionPerformed", ev=>{ const d=(ev && ev.notification && ev.notification.data)||{}; if (d.cid) { S.view="chats"; selectChannel(d.cid); } });
+    fm.addListener("notificationReceived", ()=>{});
+  } catch (e) { PUSH_READY=false; }
+}
+async function saveDeviceToken(token){
+  try {
+    const cur=(await store.get("devices/"+S.me))||{}; const tokens={...(cur.tokens||{})};
+    tokens[token.slice(-40)]={t:token, p:PLAT, at:now()};
+    const keep=Object.entries(tokens).sort((a,b)=>b[1].at-a[1].at).slice(0,5);
+    await store.set("devices/"+S.me, {tokens:Object.fromEntries(keep)});
+  } catch {}
+}
+async function nativeContacts(){
+  const c=NP("Contacts"); if (!c) return false;
+  try {
+    let p=await c.checkPermissions(); if (p.contacts!=="granted") p=await c.requestPermissions();
+    if (p.contacts!=="granted") { toast("Allow Contacts in Settings to find people you know."); return true; }
+    const r=await c.getContacts({projection:{name:true, phones:true}});
+    saveAddr((r.contacts||[]).map(x=>({n:(x.name&&(x.name.display||[x.name.given,x.name.family].filter(Boolean).join(" ")))||"", p:(x.phones||[]).map(ph=>ph.number).filter(Boolean)})));
+  } catch { toast("Couldn't read your contacts."); }
+  return true;
+}
+
+// ===================== block & report (required by the app stores) =====================
+const isBlocked = id => (S.blocked||[]).includes(id);
+async function setBlocked(id, on){
+  S.blocked = on? [...new Set([...(S.blocked||[]), id])] : (S.blocked||[]).filter(x=>x!==id);
+  if (!DB) ls.set("blocked", S.blocked);
+  await savePrefsDoc(); render(true);
+  toast(on? nameOf(id).replace(/^Example:\s*/,"")+" blocked" : "Unblocked");
+}
+function dmPeer(c){ return c && c.kind==="dm"? (c.members||[]).find(x=>x!==S.me) : null; }
+function openReport(opts){
+  const reasons=["Spam","Harassment or bullying","Hate or violence","Sexual content","Scam or fraud","Something else"];
+  let reason="", alsoBlock=!!opts.user;
+  const scrim=h("div",{class:"scrim", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
+  const draw=()=>scrim.replaceChildren(h("div",{class:"modal reportsheet", role:"dialog", "aria-label":"Report"},
+    h("div",{class:"sheethead"}, h("b",{class:"sheettitle"}, opts.title||"Report"), h("span",{class:"grow"}), h("button",{class:"iconbtn","aria-label":"Close", title:"Close", onclick:()=>scrim.remove()}, svg(IC.x))),
+    h("div",{class:"ulist sgroup"}, reasons.map(r=>h("button",{class:"srow pick1"+(reason===r?" on":""), onclick:()=>{ reason=r; draw(); }}, h("span",{class:"stx"}, h("b",{}, r)), reason===r? svg(ICF.check) : ""))),
+    opts.user? h("label",{class:"srow chk"}, h("input",{type:"checkbox", checked:alsoBlock, onchange:e=>alsoBlock=e.target.checked}), h("span",{class:"stx"}, h("b",{}, "Also block "+nameOf(opts.user).replace(/^Example:\s*/,"")))) : "",
+    h("button",{class:"primary wide danger-bg", disabled:!reason, onclick:async()=>{
+      scrim.remove();
+      const id="r"+now().toString(36)+uidShort().slice(0,4);
+      const doc={by:S.me, user:opts.user||"", channel:opts.channel||"", message:opts.message||"", text:String(opts.text||"").slice(0,2000), reason, at:now()};
+      try { if (DB) await store.set("reports/"+id, doc); } catch {}
+      if (alsoBlock && opts.user) await setBlocked(opts.user, true);
+      toast("Thanks — we'll review this report.");
+    }}, "Send report")));
+  draw(); document.body.append(scrim);
+}
+
+// ===================== delete account (required by the app stores) =====================
+function openDeleteAccount(){
+  let typed="";
+  const scrim=h("div",{class:"scrim", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
+  const draw=()=>scrim.replaceChildren(h("div",{class:"modal", role:"dialog", "aria-label":"Delete account"},
+    h("h3",{}, "Delete your account?"),
+    h("p",{class:"note", style:"margin:0"}, "This permanently deletes your profile, contacts, settings and devices, removes you from all chats, and signs you out. Messages you already sent stay with the people who received them."),
+    h("input",{class:"inp", id:"del-confirm", placeholder:"Type DELETE to confirm", autocomplete:"off", autocapitalize:"characters", oninput:e=>{ typed=e.target.value; const b=$("#del-go"); if (b) b.disabled=typed.trim().toUpperCase()!=="DELETE"; }}),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:()=>scrim.remove()}, "Cancel"),
+      h("button",{class:"primary danger-bg", id:"del-go", disabled:true, onclick:async e=>{
+        e.currentTarget.disabled=true; e.currentTarget.textContent="Deleting…";
+        if (!SB) { scrim.remove(); toast("This is the test version — nothing to delete."); return; }
+        try { const {error}=await SB.functions.invoke("delete-account", {body:{confirm:true}}); if (error) throw error; }
+        catch (err) { scrim.remove(); toast("Couldn't delete your account. Try again."); return; }
+        try { localStorage.clear(); } catch {}
+        await signOut();
+      }}, "Delete"))));
+  draw(); document.body.append(scrim); setTimeout(()=>{ const i=$("#del-confirm"); if (i) i.focus(); }, 50);
+}
+
 // ---------- toast ----------
 let toastT; function toast(t, act){ let el=$("#toast"); if (!el){ el=h("div",{class:"toast",id:"toast",role:"status"}); document.body.append(el);} el.replaceChildren(h("span",{},t), act? h("button",{class:"toastbtn", onclick:()=>{ el.hidden=true; act.fn(); }}, act.label):""); el.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>el.hidden=true, act?4500:2400); }
 
@@ -1708,7 +1821,7 @@ function render(keepComposer){
   else app.append(renderTeam());
   if (S.openTask) app.append(renderDrawer());
 
-  const nta=$("#composer"); if (nta){ nta.value = S.editing? (plain(S.msgs.find(m=>m.id===S.editing))||"") : draft; autoGrow(nta); nta.closest(".crow").classList.toggle("has-text", !!nta.value.trim() || !!S.editing); if (hadFocus||S.editing||S.replyTo) nta.focus(); }
+  const nta=$("#composer"); if (nta){ nta.value = S.editing? (plain(S.msgs.find(m=>m.id===S.editing))||"") : draft; autoGrow(nta); nta.closest(".crow").classList.toggle("has-text", !!nta.value.trim() || !!S.editing || !!(S.vdraft && S.vdraft.cid===S.active)); if (hadFocus||S.editing||S.replyTo) nta.focus(); }
   const ns=$("#stream"); if (ns){ if (scrollDown||atBottom) ns.scrollTop=ns.scrollHeight; else ns.scrollTop=prevScroll; scrollDown=false; }
   if ($("#list")) $("#list").scrollTop=listScroll;
   if (boardScroll && $("#board")) { $("#board").scrollLeft=boardScroll[0]; $("#board").scrollTop=boardScroll[1]; }
@@ -1873,7 +1986,7 @@ function renderMsg(m, cont, chan){
         h("button",{title:"Select", "aria-label":"Select messages", onclick:e=>{ e.stopPropagation(); S.selecting=true; S.sel=[m.id]; S.actFor=null; render(true); }}, svg(ICF.selm)),
         plain(m)? h("button",{title:"Copy", "aria-label":"Copy", onclick:()=>copyMsg(m)}, svg(ICF.copy)) : "",
         mine && !m.kind && plain(m)!==false? h("button",{title:"Edit", onclick:()=>{S.editing=m.id; S.actFor=null; render(true);}, "aria-label":"Edit"}, svg(IC.edit)):"",
-        mine? h("button",{title:"Delete", onclick:()=>deleteMsg(m), "aria-label":"Delete message"}, svg(IC.trash)):"")));
+        mine? h("button",{title:"Delete", onclick:()=>deleteMsg(m), "aria-label":"Delete message"}, svg(IC.trash)) : h("button",{title:"Report", "aria-label":"Report message", onclick:()=>{ S.actFor=null; render(true); openReport({title:"Report message", user:m.by, channel:S.active, message:m.id, text:msgText(m)}); }}, svg(ICF.flag2)))));
   }
   return el;
 }
@@ -1881,6 +1994,7 @@ function renderMsg(m, cont, chan){
 function renderComposer(c){
   const box = h("div",{class:"compose"}); const inner=h("div",{class:"inner"}); box.append(inner);
   if (!S.canWrite) { inner.append(h("div",{class:"hint",style:"text-align:center"},"View only")); return box; }
+  const bp=dmPeer(c); if (bp && isBlocked(bp)) { inner.append(h("button",{class:"blockedbar", onclick:()=>setBlocked(bp,false)}, "You blocked this contact. ", h("b",{},"Tap to unblock."))); return box; }
   if (S.replyTo || S.editing) {
     const r = S.msgs.find(x=>x.id===(S.replyTo||S.editing));
     inner.append(h("div",{class:"replybar"}, svg(S.editing?IC.edit:IC.reply), h("b",{}, S.editing? "Editing" : "Replying to "+nameOf(r&&r.by)), h("span",{}, r? (r.kind==="voice"?"🎤 Voice note":shown(r)):""), h("button",{class:"iconbtn","aria-label":"Cancel", onclick:()=>{S.replyTo=null; S.editing=null; const t=$("#composer"); if(t) t.value=""; render(true);}}, svg(IC.x))));
@@ -1902,12 +2016,12 @@ function renderComposer(c){
     oninput:e=>{ autoGrow(e.target); e.target.closest(".crow").classList.toggle("has-text", !!e.target.value.trim() || !!(S.vdraft&&S.vdraft.cid===S.active)); if (!S.editing) { ls.set("draft:"+S.active, e.target.value); onComposerTyping(e.target.value); } updateMention(e.target, c); },
     onkeydown:e=>{ if (e.key==="Enter" && !e.shiftKey && !e.isComposing && S.prefs.enterSends!==false) { e.preventDefault(); const v=e.target.value; e.target.value=""; autoGrow(e.target); e.target.closest(".crow").classList.toggle("has-text", !!(S.vdraft&&S.vdraft.cid===S.active)); ls.set("draft:"+S.active,""); sendMessage(v); } if (e.key==="Escape") { S.replyTo=null; S.editing=null; render(true);} }});
   inner.append(h("div",{class:"mentionbox", id:"mentionbox", hidden:true}));
-  inner.append(h("div",{class:"crow"+(S.vdraft&&S.vdraft.cid===S.active?" has-text":"")},
+  inner.append(h("div",{class:"crow"+(S.vdraft&&S.vdraft.cid===S.active?" has-text":"")+(S.editing?" editing":"")},
+    S.editing? "" : h("button",{class:"plusbtn", "aria-label":"Attach", title:"Attach", onclick:e=>openAttach(e.currentTarget)}, svg(IC.plus)),
     h("div",{class:"inbox"},
-      h("button",{class:"inbtn emobtn", "aria-label":S.emojiOpen?"Keyboard":"Emoji", title:"Emoji", onmousedown:e=>e.preventDefault(), onclick:()=>{ S.emojiOpen=!S.emojiOpen; if (S.emojiOpen) { const t=$("#composer"); if (t) t.blur(); } render(true); if (!S.emojiOpen) setTimeout(()=>{ const t=$("#composer"); if (t) t.focus(); }); }}, svg(S.emojiOpen? ICF.kbd : ICF.smile)),
       ta,
-      S.editing? "" : h("button",{class:"inbtn clipbtn", "aria-label":"Attach", title:"Attach", onclick:e=>openAttach(e.currentTarget)}, svg(ICF.clip))),
-    S.editing? "" : h("button",{class:"knotbtn","aria-pressed":String(S.asTask), title:"Send this message and turn it into a task", onclick:()=>{S.asTask=!S.asTask; render(true); $("#composer").focus();}}, svg(IC.knot)),
+      h("button",{class:"inbtn emobtn", "aria-label":S.emojiOpen?"Keyboard":"Emoji", title:"Emoji", onmousedown:e=>e.preventDefault(), onclick:()=>{ S.emojiOpen=!S.emojiOpen; if (S.emojiOpen) { const t=$("#composer"); if (t) t.blur(); } render(true); if (!S.emojiOpen) setTimeout(()=>{ const t=$("#composer"); if (t) t.focus(); }); }}, svg(S.emojiOpen? ICF.kbd : ICF.smile)),
+      S.editing? "" : h("button",{class:"inbtn knotbtn","aria-pressed":String(S.asTask), title:"Send this message and turn it into a task", onclick:()=>{S.asTask=!S.asTask; render(true); $("#composer").focus();}}, svg(IC.knot))),
     h("button",{class:"sendbtn", "aria-label":S.editing?"Save edit":"Send", onmousedown:e=>e.preventDefault(), onclick:()=>{ const t=$("#composer"); const v=t.value; t.value=""; autoGrow(t); t.closest(".crow").classList.remove("has-text"); ls.set("draft:"+S.active,""); sendMessage(v); }}, svg(S.editing?IC.edit:IC.send)),
     S.editing? "" : h("button",{class:"micbtn", "aria-label":"Record a voice note", title:"Record a voice note", onclick:startRec}, svg(IC.mic))
   ));
@@ -1927,7 +2041,7 @@ function canSeeTask(t){
   return true;
 }
 const visibleTasks = () => S.tasks.filter(canSeeTask);
-const ICF = { camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', doc:'<path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/>', pin2:'<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>', contact:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="10" r="2.8"/><path d="M6.8 18c1.1-2.3 3-3.4 5.2-3.4s4.1 1.1 5.2 3.4"/>', smile:'<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c.9 1.4 2.1 2.1 3.5 2.1s2.6-.7 3.5-2.1"/><circle cx="9.2" cy="10" r="1" fill="currentColor"/><circle cx="14.8" cy="10" r="1" fill="currentColor"/>', kbd:'<rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13.5h10"/>', fwd2:'<path d="M11 5l6 6-6 6"/><path d="M16 5l6 6-6 6"/><path d="M17 11H9a6 6 0 0 0-6 6v2"/>', clip:'<path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.4 3.4 0 0 1 4.8 4.8l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>', image:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/>', fwd:'<path d="M14 5l6 6-6 6"/><path d="M20 11h-9a6 6 0 0 0-6 6v2"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', chev:'<path d="M7 10l5 5 5-5"/>', lock:'<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>', book:'<path d="M5 4.5h12.5a1.5 1.5 0 0 1 1.5 1.5v13.5H6.5A1.5 1.5 0 0 1 5 18z"/><circle cx="12" cy="10.5" r="2.4"/><path d="M8.5 16c.5-1.6 1.8-2.5 3.5-2.5s3 .9 3.5 2.5M19 8h1.5M19 12h1.5"/>', more:'<circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none"/>', selm:'<rect x="4" y="4" width="16" height="16" rx="5"/><path d="M8.5 12.2l2.4 2.4 4.8-5"/>', list:'<path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>', stage:'<rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/>', listv:'<path d="M8.5 6H20M8.5 12H20M8.5 18H20"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor"/>', info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>', moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', drop:'<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/>', bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4"/>', vib:'<rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4 9v6M20 9v6"/>', grid:'<circle cx="6" cy="6" r="1.4"/><circle cx="12" cy="6" r="1.4"/><circle cx="18" cy="6" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/><circle cx="6" cy="18" r="1.4"/><circle cx="12" cy="18" r="1.4"/><circle cx="18" cy="18" r="1.4"/>', cell:'<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>', media:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M10 9.5v5l4.2-2.5z" fill="currentColor"/>', all:'<circle cx="8" cy="9" r="2.6"/><circle cx="16" cy="9" r="2.6"/><path d="M3 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4M11 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4"/>', none:'<circle cx="12" cy="9" r="3.2" stroke-dasharray="2.5 2"/><path d="M5.5 19c.7-3 3.2-4.6 6.5-4.6s5.8 1.6 6.5 4.6" stroke-dasharray="2.5 2"/>', gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>', flag:'<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>', cal:'<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>', check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>', personplus:'<circle cx="10" cy="8" r="3.4"/><path d="M3.5 20c.6-3.6 3.2-5.4 6.5-5.4 1.4 0 2.6.3 3.6.9M18 14v6M15 17h6"/>', goto:'<path d="M7 17L17 7M9 7h8v8"/>' };
+const ICF = { block:'<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>', flag2:'<path d="M5.5 21V4.5M5.5 4.5h11l-2 4 2 4h-11"/>', camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', doc:'<path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/>', pin2:'<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>', contact:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="10" r="2.8"/><path d="M6.8 18c1.1-2.3 3-3.4 5.2-3.4s4.1 1.1 5.2 3.4"/>', smile:'<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c.9 1.4 2.1 2.1 3.5 2.1s2.6-.7 3.5-2.1"/><circle cx="9.2" cy="10" r="1" fill="currentColor"/><circle cx="14.8" cy="10" r="1" fill="currentColor"/>', kbd:'<rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13.5h10"/>', fwd2:'<path d="M11 5l6 6-6 6"/><path d="M16 5l6 6-6 6"/><path d="M17 11H9a6 6 0 0 0-6 6v2"/>', clip:'<path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.4 3.4 0 0 1 4.8 4.8l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>', image:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/>', fwd:'<path d="M14 5l6 6-6 6"/><path d="M20 11h-9a6 6 0 0 0-6 6v2"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', chev:'<path d="M7 10l5 5 5-5"/>', lock:'<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>', book:'<path d="M5 4.5h12.5a1.5 1.5 0 0 1 1.5 1.5v13.5H6.5A1.5 1.5 0 0 1 5 18z"/><circle cx="12" cy="10.5" r="2.4"/><path d="M8.5 16c.5-1.6 1.8-2.5 3.5-2.5s3 .9 3.5 2.5M19 8h1.5M19 12h1.5"/>', more:'<circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none"/>', selm:'<rect x="4" y="4" width="16" height="16" rx="5"/><path d="M8.5 12.2l2.4 2.4 4.8-5"/>', list:'<path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>', stage:'<rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/>', listv:'<path d="M8.5 6H20M8.5 12H20M8.5 18H20"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor"/>', info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>', moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', drop:'<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/>', bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4"/>', vib:'<rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4 9v6M20 9v6"/>', grid:'<circle cx="6" cy="6" r="1.4"/><circle cx="12" cy="6" r="1.4"/><circle cx="18" cy="6" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/><circle cx="6" cy="18" r="1.4"/><circle cx="12" cy="18" r="1.4"/><circle cx="18" cy="18" r="1.4"/>', cell:'<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>', media:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M10 9.5v5l4.2-2.5z" fill="currentColor"/>', all:'<circle cx="8" cy="9" r="2.6"/><circle cx="16" cy="9" r="2.6"/><path d="M3 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4M11 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4"/>', none:'<circle cx="12" cy="9" r="3.2" stroke-dasharray="2.5 2"/><path d="M5.5 19c.7-3 3.2-4.6 6.5-4.6s5.8 1.6 6.5 4.6" stroke-dasharray="2.5 2"/>', gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>', flag:'<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>', cal:'<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>', check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>', personplus:'<circle cx="10" cy="8" r="3.4"/><path d="M3.5 20c.6-3.6 3.2-5.4 6.5-5.4 1.4 0 2.6.3 3.6.9M18 14v6M15 17h6"/>', goto:'<path d="M7 17L17 7M9 7h8v8"/>' };
 
 function filteredTasks(){
   const f=S.filter;

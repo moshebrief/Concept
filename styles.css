@@ -1534,3 +1534,60 @@ button:active{opacity:.6}
 .mlink{color:inherit;text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
 .msg:not(.mine) .mlink{color:var(--cobalt);text-decoration:none}
 a.iconbtn.hcall{display:grid;place-items:center}
+
+/* =====================================================================
+   Message bar — iMessage-style, every control on one 36px baseline
+   ===================================================================== */
+.compose{padding:7px max(8px,env(safe-area-inset-right,0px)) calc(7px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))!important}
+.compose .inner{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:6px}
+.crow{display:flex!important;align-items:flex-end!important;gap:8px!important;margin:0!important}
+.plusbtn{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--fill);color:var(--ink);padding:0}
+.plusbtn svg.i{width:20px;height:20px;stroke-width:2.1}
+.plusbtn:active{opacity:.6}
+.inbox{flex:1;min-width:0;display:flex!important;align-items:flex-end!important;gap:0!important;min-height:36px!important;padding:0 2px 0 0!important;background:var(--surface)!important;border:var(--hair) solid var(--sep)!important;border-radius:18px!important;box-shadow:none!important}
+.inbox textarea,.crow .inbox textarea,#composer{flex:1;min-width:0;display:block;margin:0!important;border:0!important;outline:none!important;background:transparent!important;box-shadow:none!important;resize:none;font:400 16px/20px var(--f-body)!important;letter-spacing:-.01em;padding:8px 6px 8px 14px!important;min-height:36px!important;max-height:132px;color:var(--ink)}
+#composer::placeholder{color:var(--muted)}
+.inbtn{flex:none;width:32px!important;height:36px!important;border-radius:16px!important;display:grid!important;place-items:center;color:var(--muted)!important;padding:0!important;margin:0!important;background:none!important}
+.inbtn svg.i{width:21px!important;height:21px!important}
+.inbtn.knotbtn[aria-pressed="true"]{color:var(--cobalt)!important}
+.inbtn.emobtn{margin-right:-2px!important}
+.knotbtn:not(.inbtn){display:none!important}
+.sendbtn,.micbtn{flex:none;width:36px!important;height:36px!important;border-radius:50%!important;display:grid!important;place-items:center;background:var(--cobalt)!important;color:#fff!important;padding:0!important;margin:0!important;box-shadow:none!important;transition:transform .12s var(--ease)}
+.sendbtn svg.i,.micbtn svg.i{width:19px!important;height:19px!important;stroke-width:2.2!important}
+.sendbtn svg.i{transform:rotate(-90deg)}
+.crow .sendbtn{display:none!important}
+.crow.has-text .sendbtn,.crow.editing .sendbtn{display:grid!important}
+.crow.has-text .micbtn,.crow.editing .micbtn{display:none!important}
+.micbtn{background:transparent!important;color:var(--cobalt)!important}
+.micbtn svg.i{width:22px!important;height:22px!important;stroke-width:1.9!important}
+.micbtn.sending{background:var(--cobalt)!important;color:#fff!important}
+.micbtn.sending svg.i{width:19px!important;height:19px!important;transform:rotate(-90deg)}
+/* bars that sit above the input share the same width and radius */
+.replybar,.vdraft{margin:0!important;border-radius:14px!important;border:0!important;background:var(--fill)!important;padding:6px 6px 6px 12px!important;min-height:44px;display:flex;align-items:center;gap:10px}
+.replybar{border-left:3px solid var(--cobalt)!important;border-radius:10px!important}
+.recbar{display:flex!important;align-items:center!important;gap:10px!important;min-height:36px!important;padding:0 0 0 4px!important;border:0!important;background:transparent!important;margin:0!important}
+.recbar .rectrash{width:36px;height:36px}
+.recbar .recbars{height:24px}
+.recbar .reckeep{width:36px!important;height:36px!important}
+.mentionbox{margin:0!important}
+.emojipanel{margin:0!important}
+.hint:empty{display:none}
+/* the bar never covers the last message */
+.stream{padding-bottom:10px!important}
+
+/* ---- store-required UI: report, block, delete, consent ---- */
+.obterms{margin:0;font-size:12.5px;line-height:1.45;color:var(--muted);text-align:center;max-width:320px}
+.obterms a{color:var(--cobalt);text-decoration:none;font-weight:500}
+.reportsheet{gap:12px}
+.srow.pick1{width:100%;text-align:left;background:none;border:0;color:var(--ink)}
+.srow.pick1 svg.i{color:var(--cobalt);width:20px;height:20px}
+.srow.chk{gap:12px;cursor:pointer}
+.srow.chk input{width:20px;height:20px;accent-color:var(--cobalt)}
+.danger-bg{background:var(--bad)!important;color:#fff!important}
+.danger-bg:disabled{opacity:.4}
+.popmenu>button.dangerrow,.popmenu>button.dangerrow svg.i{color:var(--bad)!important}
+.blockedbar{width:100%;min-height:44px;border-radius:12px;background:var(--fill);color:var(--muted);font-size:14.5px}
+.blockedbar b{color:var(--cobalt);font-weight:600}
+a.srow{color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:12px}
+a.srow>svg.i{color:var(--muted);width:16px;height:16px}
+.modalacts .primary{height:40px;padding:0 18px}

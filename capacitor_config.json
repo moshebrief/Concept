@@ -1,0 +1,43 @@
+{
+  "appId": "com.conceptchat.app",
+  "appName": "Concept",
+  "webDir": "www",
+  "backgroundColor": "#F2F2F7",
+  "ios": {
+    "contentInset": "never",
+    "scheme": "Concept",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchShowDuration": 2000,
+      "backgroundColor": "#007AFF",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "Keyboard": {
+      "resize": "native",
+      "resizeOnFullScreen": true
+    },
+    "SystemBars": {
+      "insetsHandling": "native",
+      "initialViewportFitValueHint": "cover"
+    },
+    "FirebaseMessaging": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  },
+  "experimental": {
+    "ios": {
+      "spm": {
+        "packageOptions": {
+          "@capacitor-firebase/messaging": { "symlink": true }
+        }
+      }
+    }
+  }
+}

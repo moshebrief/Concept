@@ -1,0 +1,27 @@
+{
+  "name": "concept",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Concept — chat with anyone and turn messages into tasks",
+  "scripts": {
+    "web": "node native-setup.js web",
+    "android": "node native-setup.js web && npx cap add android && node native-setup.js assets && npx capacitor-assets generate --android && node native-setup.js android && npx cap sync android",
+    "ios": "node native-setup.js web && npx cap add ios && node native-setup.js assets && npx capacitor-assets generate --ios && node native-setup.js ios && npx cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/keyboard": "8.0.6",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor-community/contacts": "8.0.0",
+    "@capacitor-firebase/messaging": "8.5.2",
+    "firebase": "^12.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.5.3",
+    "sharp": "^0.34.0"
+  }
+}
