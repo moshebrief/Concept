@@ -21,12 +21,12 @@ function web() {
   const out = path.join(ROOT, "www");
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(out, { recursive: true });
-  const files = ["index.html", "styles.css", "app.js", "config.js", "supabase.js", "591.supabase.js",
+  const files = ["index.html", "styles.css", "tones.js", "app.js", "config.js", "supabase.js", "591.supabase.js",
                  "manifest.json", "icon.svg", "icon-192.png", "icon-512.png", "privacy.html", "terms.html"];
   for (const f of files) {
     const src = path.join(ROOT, f);
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(out, f));
-    else must(!["index.html", "styles.css", "app.js", "config.js", "supabase.js"].includes(f), `${f} is missing from the repository`);
+    else must(!["index.html", "styles.css", "tones.js", "app.js", "config.js", "supabase.js"].includes(f), `${f} is missing from the repository`);
   }
   const conf = read(path.join(out, "config.js"));
   must(!/YOUR_SUPABASE/.test(conf), "config.js still has the placeholder keys — add your Supabase URL and key first");
@@ -106,6 +106,10 @@ function android() {
 `<?xml version="1.0" encoding="utf-8"?>
 <resources><color name="notify_color">#007AFF</color></resources>
 `);
+  // Notification tones
+  const { TONES, wav } = require("./tones.js");
+  for (const t of TONES) write2(path.join(app, "src", "main", "res", "raw", `tone_${t.id}.wav`), wav(t));
+  log(`${TONES.length} notification tones added`);
   log(`Android ready — ${APP_ID} version ${VERSION} (${BUILD})`);
 }
 
@@ -113,6 +117,18 @@ function android() {
 function pbxId(seed) { // 24 hex chars, stable per seed
   let h = 0n; for (const c of seed) h = (h * 131n + BigInt(c.charCodeAt(0))) % (1n << 96n);
   return h.toString(16).toUpperCase().padStart(24, "0").slice(-24);
+}
+const write2 = (p, bytes) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, bytes); };
+function addResource(pbx, name, type) {
+  const fileRef = pbxId(name + "-fileref"), buildFile = pbxId(name + "-buildfile");
+  pbx = pbx.replace("/* Begin PBXBuildFile section */", `/* Begin PBXBuildFile section */\n\t\t${buildFile} /* ${name} in Resources */ = {isa = PBXBuildFile; fileRef = ${fileRef} /* ${name} */; };`);
+  pbx = pbx.replace("/* Begin PBXFileReference section */", `/* Begin PBXFileReference section */\n\t\t${fileRef} /* ${name} */ = {isa = PBXFileReference; lastKnownFileType = ${type}; path = "${name}"; sourceTree = "<group>"; };`);
+  const cfgRef = /(\w{24}) \/\* config\.xml \*\/,/.exec(pbx);
+  must(cfgRef, "could not find config.xml in the Xcode project");
+  pbx = pbx.replace(cfgRef[0], `${cfgRef[0]}\n\t\t\t\t${fileRef} /* ${name} */,`);
+  const cfgBuild = /(\w{24}) \/\* config\.xml in Resources \*\/,/.exec(pbx);
+  must(cfgBuild, "could not find the Resources build phase");
+  return pbx.replace(cfgBuild[0], `${cfgBuild[0]}\n\t\t\t\t${buildFile} /* ${name} in Resources */,`);
 }
 function ios() {
   const dir = path.join(ROOT, "ios", "App");
@@ -154,6 +170,14 @@ function ios() {
     }
     log("GoogleService-Info.plist added");
   } else log("WARNING: GoogleService-Info.plist not found — notifications will not work on iPhone");
+  // Notification tones must be inside the app bundle
+  const { TONES, wav } = require("./tones.js");
+  for (const t of TONES) {
+    const name = `tone_${t.id}.wav`;
+    write2(path.join(dir, "App", name), wav(t));
+    if (!pbx.includes(`/* ${name} */`)) pbx = addResource(pbx, name, "audio.wav");
+  }
+  log(`${TONES.length} notification tones added`);
   write(pbxP, pbx);
 
   // Info.plist: permission texts, background push, portrait

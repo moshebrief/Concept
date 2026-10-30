@@ -28,7 +28,7 @@
       "initialViewportFitValueHint": "cover"
     },
     "FirebaseMessaging": {
-      "presentationOptions": ["badge", "sound", "alert"]
+      "presentationOptions": ["badge"]
     }
   },
   "experimental": {

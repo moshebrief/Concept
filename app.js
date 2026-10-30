@@ -49,7 +49,8 @@ const S = {
   view: (v=>v==="updates"||v==="calls"?"chats":v)(ls.get("view","chats")), active: ls.get("active", null), inThread:false,
   openTask:null, draftTask:null, replyTo:null, editing:null, actFor:null, emojiFor:null,
   statuses:[], calls:[], teamDocs:{}, statusReply:null, teams:[], teamId:ls.get("teamId",null), prefs:ls.get("prefs",{}), pins:[], blocked:[], pushState:"", expanded:ls.get("expanded",{}), pend:[], msgCache:{}, msgLimit:120, vdraft:null, emojiOpen:false, emojiTab:null, dial:{on:false,q:""}, contacts:[], allContacts:{}, keys:{}, addr:[], addrNames:{}, onConcept:[], selecting:false, sel:[], addingStage:false, listMode:ls.get("listMode","chats"), taskView:ls.get("taskView","stage"),
-  q:"", filter:"all", asTask:false, lastRead: ls.get("lastRead", {}), justTied:null
+  q:"", filter:"all", asTask:false, lastRead: ls.get("lastRead", {}), justTied:null,
+  nt: {tone:"note", groupTone:"chime", tones:{}, mute:{}, cleared:{}, unr:[], ...ls.get("nt",{})}
 };
 
 // ---------- data layer: real (db) or sample preview ----------
@@ -161,7 +162,7 @@ function subscribeAll(){
     await resolvePeople(rows.flatMap(c=>[...(c.members||[]), c.last&&c.last.by]).filter(Boolean));
     if (!S.active || !S.channels.find(c=>c.id===S.active)) S.active = S.channels[0] ? S.channels[0].id : null;
     decryptMany(S.channels.map(c=>c.last&&c.last.enc)).then(ch=>{ if (ch) scheduleRender(); });
-    rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
+    noticeIncoming(S.channels); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
     openMsgs(); scheduleRender();
   });
   store.sub("tasks", async rows => { S.tasks=rows.sort((a,b)=>(a.num||0)-(b.num||0)); await resolvePeople(rows.flatMap(t=>[t.assignee,t.createdBy]).filter(Boolean)); scheduleRender(); });
@@ -184,8 +185,8 @@ function openMsgs(){
   });
 }
 let _initP=null; function initPromise(){ return Promise.race([new Promise(r=>{ const t=setInterval(()=>{ if (E2E.ready){ clearInterval(t); r(); } },50); setTimeout(()=>{ clearInterval(t); r(); },1500); })]); }
-function markRead(){ if (!S.active) return; const c=S.channels.find(x=>x.id===S.active); const t=(c&&c.last&&c.last.at)||now(); S.lastRead[S.active]=t; ls.set("lastRead", S.lastRead); if (S.inThread || window.innerWidth>860) ackRead(c); }
-const unread = c => c.last && c.last.by!==S.me && c.last.at > (S.lastRead[c.id]||0) && c.id!==S.active;
+function markRead(){ if (!S.active) return; if ((S.nt.unr||[]).includes(S.active)) { S.nt.unr=S.nt.unr.filter(x=>x!==S.active); saveNt(); } const c=S.channels.find(x=>x.id===S.active); const t=(c&&c.last&&c.last.at)||now(); S.lastRead[S.active]=t; ls.set("lastRead", S.lastRead); if (S.inThread || window.innerWidth>860) ackRead(c); }
+const unread = c => (c.last && c.last.by!==S.me && c.last.at > (S.lastRead[c.id]||0) && c.id!==S.active) || ((S.nt.unr||[]).includes(c.id) && !(c.id===S.active && S.inThread));
 
 // ---------- actions ----------
 async function sendMessage(text){
@@ -662,7 +663,7 @@ const profBtn = () => S.me? h("button",{class:"profbtn", title:"Profile and sett
 function openSettings(){ S.view="settings"; S.openTask=null; S.newFlow=null; ls.set("view","settings"); render(); }
 const toprow = (title, ...extras) => h("div",{class:"toprow"}, h("h1",{class:"h1"},title), h("span",{class:"grow"}), ...extras, profBtn());
 async function loadPins(){
-  if (DB) { store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="prefs")||{}; S.pins=d.pins||[]; S.blocked=d.blocked||[]; setStages(d.stages); scheduleRender(); }); }
+  if (DB) { store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="prefs")||{}; S.pins=d.pins||[]; S.blocked=d.blocked||[]; setStages(d.stages); S.nt={tone:d.tone||"note", groupTone:d.groupTone||"chime", tones:d.tones||{}, mute:d.mute||{}, cleared:d.cleared||{}, unr:d.unr||[]}; scheduleRender(); }); }
   else { S.pins = ls.get("pins", ["launch"]); S.blocked=ls.get("blocked", []); setStages(ls.get("stages", null)); }
 }
 async function togglePin(cid){
@@ -673,13 +674,17 @@ async function togglePin(cid){
 }
 function rowMenu(c, x, y){
   const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }, oncontextmenu:e=>{ e.preventDefault(); scrim.remove(); }});
-  const pinned=S.pins.includes(c.id);
-  const m=h("div",{class:"popmenu", role:"menu", style:`left:${Math.min(x, innerWidth-220)}px;top:${Math.min(y, innerHeight-140)}px`},
-    h("button",{role:"menuitem", onclick:()=>{ scrim.remove(); togglePin(c.id); }}, svg(IC.pin), pinned? "Unpin chat":"Pin chat"),
-    h("button",{role:"menuitem", onclick:()=>{ scrim.remove(); S.lastRead[c.id]=now(); ls.set("lastRead",S.lastRead); render(); }}, svg(ICF.check), "Mark as read"));
+  const pinned=S.pins.includes(c.id), ur=unread(c), mu=isMuted(c), isTop=!(c.kind==="task" && c.parent);
+  const go=fn=>()=>{ scrim.remove(); fn(); };
+  const m=h("div",{class:"popmenu", role:"menu", style:`left:${Math.min(x, innerWidth-230)}px;top:${Math.min(y, innerHeight-250)}px`},
+    isTop? h("button",{role:"menuitem", onclick:go(()=>togglePin(c.id))}, svg(IC.pin), pinned? "Unpin chat":"Pin chat") : "",
+    h("button",{role:"menuitem", onclick:go(()=>toggleUnread(c))}, svg(ur? ICF.check : ICF.dotchat), ur? "Mark as read" : "Mark as unread"),
+    h("button",{role:"menuitem", onclick:go(()=>mu? setMute(c.id, null) : openMute(c))}, svg(mu? ICF.bell : ICF.bellx), mu? "Unmute" : "Mute"),
+    h("button",{role:"menuitem", onclick:go(()=>openChatNotif(c))}, svg(ICF.music), "Notification tone"),
+    h("button",{role:"menuitem", class:"dangerrow", onclick:go(()=>confirmDeleteChat(c))}, svg(IC.trash), "Delete chat"));
   scrim.append(m); document.body.append(scrim);
 }
-function longPress(el, fn){ let t; el.addEventListener("pointerdown", e=>{ if (e.pointerType!=="touch") return; t=setTimeout(()=>{ el.dataset.lp="1"; fn(e.clientX, e.clientY); }, 520); }); ["pointerup","pointerleave","pointercancel","pointermove"].forEach(ev=>el.addEventListener(ev, e=>{ if (ev==="pointermove" && Math.abs(e.movementY)<4) return; clearTimeout(t); })); el.addEventListener("contextmenu", e=>{ e.preventDefault(); fn(e.clientX, e.clientY); }); el.addEventListener("click", e=>{ if (el.dataset.lp) { e.stopImmediatePropagation(); e.preventDefault(); delete el.dataset.lp; } }, true); }
+function longPress(el, fn){ let t, sx=0, sy=0; const stop=()=>clearTimeout(t); el.addEventListener("pointerdown", e=>{ if (e.pointerType!=="touch") return; sx=e.clientX; sy=e.clientY; t=setTimeout(()=>{ if (SW.drag) return; el.dataset.lp="1"; fn(e.clientX, e.clientY); }, 520); }); el.addEventListener("pointermove", e=>{ if (Math.abs(e.clientX-sx)>8 || Math.abs(e.clientY-sy)>8) stop(); }); ["pointerup","pointerleave","pointercancel"].forEach(ev=>el.addEventListener(ev, stop)); el.addEventListener("contextmenu", e=>{ e.preventDefault(); fn(e.clientX, e.clientY); }); el.addEventListener("click", e=>{ if (el.dataset.lp) { e.stopImmediatePropagation(); e.preventDefault(); delete el.dataset.lp; } }, true); }
 
 function renderSettings(){
   const w=h("section",{class:"teamwrap settings","aria-label":"Settings"});
@@ -706,16 +711,22 @@ function renderSettings(){
     row(IC.send, "Enter key sends", toggle("enterSends", true)),
     row(IC.knot, "Swipe left to make task", h("div",{class:"segmini", role:"group", "aria-label":"Swipe left"}, [["open","Open task"],["silent","Just add"]].map(([v,l])=>h("button",{"aria-pressed":String((p.swipeTask||"open")===v), onclick:()=>setPref("swipeTask",v)}, l)))),
     row(IC.pin, "Pinned chats", h("span",{class:"sval"}, S.pins.length+"/5"))));
-  w.append(...group("Calls & notifications",
-    row(ICF.bell, "Ringtone", toggle("ring", true)),
-    row(ICF.vib, "Vibrate", toggle("vibrate", true))));
+  const nMuted=S.channels.filter(c=>mutedId(c.id)).length, nCustom=Object.keys(S.nt.tones||{}).length;
+  const pickRow=(icon, title, val, fn, sub)=>h("button",{class:"srow pick", onclick:fn}, h("span",{class:"sic"}, svg(icon)), h("span",{class:"stx"}, h("b",{},title), sub? h("span",{},sub):""), h("span",{class:"sval"}, val), svg(IC.arrow));
+  w.append(...group("Notifications",
+    NATIVE? row(ICF.bell, "Notifications", h("span",{class:"sval"}, S.pushState==="on"? "On" : S.pushState==="off"? "Off" : "…"), S.pushState==="off"? "Turn on in your phone's Settings → Concept" : "") : "",
+    pickRow(ICF.music, "Message tone", toneName(S.nt.tone), ()=>openTonePicker({title:"Message tone", value:S.nt.tone, onPick:v=>{ S.nt.tone=v; saveNt(); render(); }}), "Private chats"),
+    pickRow(ICF.music, "Group tone", toneName(S.nt.groupTone), ()=>openTonePicker({title:"Group tone", value:S.nt.groupTone, onPick:v=>{ S.nt.groupTone=v; saveNt(); render(); }}), "Groups and task conversations"),
+    row(ICF.speaker, "In-app sounds", toggle("inAppSound", true), "Play the tone while Concept is open"),
+    row(ICF.banner, "In-app banners", toggle("inAppBanner", true)),
+    row(ICF.vib, "Vibrate", toggle("vibrate", true)),
+    nMuted||nCustom? pickRow(ICF.bellx, "Muted & custom chats", (nMuted? nMuted+" muted":"")+(nMuted&&nCustom?" · ":"")+(nCustom? nCustom+" custom":""), resetNotif, "Tap to reset all") : ""));
   const tm=curTeam();
   w.append(...group("Team",
     row(ICF.all, tm? tm.name : "Team", h("button",{class:"iconbtn", title:"Open team", "aria-label":"Open team", onclick:()=>{ S.view="team"; ls.set("view","team"); render(); }}, svg(IC.arrow))),
     tm && tm.owner===S.me? row(ICF.gear, "Team settings", h("button",{class:"iconbtn", title:"Team settings", "aria-label":"Team settings", onclick:openTeamSettings}, svg(IC.arrow))) : "",
     row(ICF.stage, "Task stages", h("span",{class:"sval"}, STATUSES.length))));
   w.append(...group("Help",
-    NATIVE? row(ICF.bell, "Notifications", h("span",{class:"sval"}, S.pushState==="on"? "On" : S.pushState==="off"? "Off — turn on in phone Settings" : "…")) : "",
     row(ICF.block, "Blocked contacts", h("span",{class:"sval"}, String((S.blocked||[]).length)), (S.blocked||[]).map(id=>nameOf(id).replace(/^Example:\s*/,"")).join(", ")),
     h("a",{class:"srow", href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, h("span",{class:"sic"}, svg(ICF.lock)), h("span",{class:"stx"}, h("b",{},"Privacy Policy")), svg(IC.arrow)),
     h("a",{class:"srow", href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, h("span",{class:"sic"}, svg(ICF.doc)), h("span",{class:"stx"}, h("b",{},"Terms of Service")), svg(IC.arrow))));
@@ -813,7 +824,7 @@ function setStages(arr){
   STATUSES.splice(0, STATUSES.length, ...a);
 }
 async function savePrefsDoc(){
-  const doc={pins:S.pins, blocked:S.blocked||[], stages:STATUSES.map(s=>({id:s.id,name:s.name,c:s.c}))};
+  const n=S.nt; const doc={pins:S.pins, blocked:S.blocked||[], stages:STATUSES.map(s=>({id:s.id,name:s.name,c:s.c})), tone:n.tone, groupTone:n.groupTone, tones:n.tones||{}, mute:n.mute||{}, cleared:n.cleared||{}, unr:n.unr||[]};
   if (DB) { try { await store.set("data/users/"+S.me+"/prefs", doc); } catch { toast("Couldn't save. Check your connection."); } }
   else { ls.set("pins", S.pins); ls.set("stages", doc.stages); }
 }
@@ -1155,6 +1166,7 @@ function chatMenu(c, x, y){
       : h("div",{class:"pmempty"}, "—"),
     h("div",{class:"pmsep"}),
     h("button",{onclick:()=>{ scrim.remove(); togglePin(c.id); }}, svg(IC.pin), pinned? "Unpin chat" : "Pin chat"),
+    h("button",{onclick:()=>{ scrim.remove(); openChatNotif(c); }}, svg(isMuted(c)? ICF.bellx : ICF.bell), "Notifications", h("span",{class:"pmval"}, isMuted(c)? muteText(c) : toneName(toneFor(c)))),
     h("button",{onclick:()=>{ scrim.remove(); S.view="board"; S.filter="chan:"+c.id; ls.set("view","board"); render(); }}, svg(ICF.stage), "Show on task board"),
     h("button",{onclick:()=>{ scrim.remove(); openWallpaper(); }}, svg(ICF.image), "Wallpaper"),
     dmPeer(c)? h("button",{class:"dangerrow", onclick:()=>{ scrim.remove(); setBlocked(dmPeer(c), !isBlocked(dmPeer(c))); }}, svg(ICF.block), isBlocked(dmPeer(c))? "Unblock "+nameOf(dmPeer(c)).replace(/^Example:\s*/,"") : "Block "+nameOf(dmPeer(c)).replace(/^Example:\s*/,"")) : "",
@@ -1345,7 +1357,7 @@ async function signOut(){ try { await SB.auth.signOut(); } catch {} location.rel
 
 // ===================== smooth rendering =====================
 let RQ=0;
-function scheduleRender(){ if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
+function scheduleRender(){ if (SW.drag) { SW.pending=true; return; } if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
 function softRender(){
   const main=$(".chatmain");
   const canPatch = S.view==="chats" && !S.newFlow && main && main.dataset.cid===String(S.active||"") && !S.openTask;
@@ -1360,13 +1372,13 @@ function patchThread(main){
   const sub=$("#thead-sub"); if (sub) sub.dataset.orig=theadSub(c);
   if (playing) syncPlayer();
 }
-function patchList(){ const l=$("#list"); if (!l || S.newFlow) return; const y=l.scrollTop; l.replaceChildren(...listChildren()); l.scrollTop=y; }
+function patchList(){ if (SW.drag) { SW.pending=true; return; } const l=$("#list"); if (!l || S.newFlow) return; const y=l.scrollTop; l.replaceChildren(...listChildren()); l.scrollTop=y; }
 function updateBadges(){
   updateDots();
   const ur=S.channels.filter(unread).length; const ud=$("#unreadDot"); if (ud){ ud.hidden=!ur; ud.textContent=ur; }
   const mine=visibleTasks().filter(t=>t.assignee===S.me && t.status!=="done").length; const md=$("#mineDot"); if (md){ md.hidden=!mine; md.textContent=mine; }
 }
-function msgsFor(cid){ const have=new Set(S.msgs.map(m=>m.id)); const all=S.msgs.concat(S.pend.filter(p=>p.cid===cid && !have.has(p.id))); return (S.blocked||[]).length? all.filter(m=>!isBlocked(m.by)) : all; }
+function msgsFor(cid){ const have=new Set(S.msgs.map(m=>m.id)); const cl=(S.nt.cleared||{})[cid]||0; const all=S.msgs.concat(S.pend.filter(p=>p.cid===cid && !have.has(p.id))).filter(m=>!cl || (m.at||0)>cl); return (S.blocked||[]).length? all.filter(m=>!isBlocked(m.by)) : all; }
 const newMsgId = () => "m"+now().toString(36)+uidShort().slice(0,4);
 
 // ===================== typing & recording indicators =====================
@@ -1683,6 +1695,153 @@ function renderVoiceDraft(){
   return h("div",{class:"vdraft"}, btn, h("div",{class:"vdbars"}, (d.peaks||[]).map(p=>h("i",{style:`height:${Math.round(18+p*82)}%`}))), h("span",{class:"vddur mono"}, fmtDur(d.dur)), h("button",{class:"iconbtn sm","aria-label":"Remove voice note", title:"Remove", onclick:()=>{ if (DRAFT_AUDIO) DRAFT_AUDIO.pause(); S.vdraft=null; render(true); }}, svg(IC.x)));
 }
 
+// ===================== notification tones, mute, delete & swipe actions =====================
+const TN = window.CONCEPT_TONES || {TONES:[], render:()=>new Float32Array(1)};
+const toneName = id => id==="none"? "None" : ((TN.TONES.find(t=>t.id===id)||TN.TONES[0]||{name:"Default"}).name);
+const validTone = id => id==="none" || TN.TONES.some(t=>t.id===id);
+function toneFor(c){ const tt=S.nt.tones||{}; const own=tt[c.id] || (c.parent && tt[c.parent]); if (own && validTone(own)) return own; return c.kind==="dm"? (S.nt.tone||"note") : (S.nt.groupTone||"chime"); }
+const muteUntil = id => { const u=(S.nt.mute||{})[id]; return u===undefined || u===null? null : u; };
+const mutedId = id => { const u=muteUntil(id); return u===0 || (u!==null && u>now()); };
+const isMuted = c => !!c && (mutedId(c.id) || (c.kind==="task" && !!c.parent && mutedId(c.parent)));
+function muteText(c){ const u=muteUntil(c.id); if (u===0) return "Always"; if (u && u>now()) { const d=new Date(u); const same=new Date().toDateString()===d.toDateString(); return "Until "+(same? d.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}) : d.toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"})); } return c.parent && mutedId(c.parent)? "Group muted" : "Off"; }
+function saveNt(){ ls.set("nt", S.nt); savePrefsDoc(); }
+function setMute(cid, until){ const m={...(S.nt.mute||{})}; if (until===null) delete m[cid]; else m[cid]=until; S.nt.mute=m; saveNt(); render(true); toast(until===null? "Unmuted" : "Muted"); }
+function setChatTone(cid, id){ const t={...(S.nt.tones||{})}; if (!id) delete t[cid]; else t[cid]=id; S.nt.tones=t; saveNt(); }
+function toggleUnread(c){ const u=S.nt.unr||[]; if (unread(c)) { S.nt.unr=u.filter(x=>x!==c.id); S.lastRead[c.id]=now(); ls.set("lastRead",S.lastRead); } else S.nt.unr=[...new Set([...u, c.id])]; saveNt(); render(true); }
+
+// --- sound ---
+let AC=null; const toneBuf={};
+function audioCtx(){ if (!AC) { try { AC=new (window.AudioContext||window.webkitAudioContext)(); } catch { AC=null; } } if (AC && AC.state==="suspended") AC.resume().catch(()=>{}); return AC; }
+["pointerdown","keydown"].forEach(ev=>addEventListener(ev, ()=>audioCtx(), {once:true, capture:true}));
+function playTone(id){
+  if (!id || id==="none") return; const t=TN.TONES.find(x=>x.id===id); const ac=audioCtx(); if (!t || !ac) return;
+  try {
+    if (!toneBuf[id]) { const d=TN.render(t, ac.sampleRate); const b=ac.createBuffer(1, d.length, ac.sampleRate); b.getChannelData(0).set(d); toneBuf[id]=b; }
+    const src=ac.createBufferSource(), g=ac.createGain(); g.gain.value=.55; src.buffer=toneBuf[id]; src.connect(g).connect(ac.destination); src.start();
+  } catch {}
+}
+let seenLast=null, lastBuzz=0;
+function noticeIncoming(chans){
+  const fresh=!seenLast; if (fresh) seenLast={};
+  let hit=null;
+  for (const c of chans) { const l=c.last; if (!l) continue; const prev=seenLast[c.id]; seenLast[c.id]=l.at;
+    if (fresh || prev===undefined || l.at<=prev || l.by===S.me || isBlocked(l.by) || isMuted(c)) continue;
+    if (now()-l.at>60000) continue;
+    if (!hit || l.at>hit.last.at) hit=c; }
+  if (!hit) return;
+  const visible=document.visibilityState==="visible", here=hit.id===S.active && S.inThread && S.view==="chats";
+  if (!visible) return;
+  if (Date.now()-lastBuzz<1200) return; lastBuzz=Date.now();
+  if (S.prefs.inAppSound!==false) playTone(here? null : toneFor(hit)) ;
+  if (here) { if (S.prefs.inAppSound!==false) playTone(null); return; }
+  if (S.prefs.vibrate!==false && navigator.vibrate) try { navigator.vibrate(60); } catch {}
+  if (S.prefs.inAppBanner!==false) msgBanner(hit);
+}
+let bannerT;
+function msgBanner(c){
+  document.querySelectorAll(".inbanner").forEach(x=>x.remove());
+  const l=c.last||{}; const who=c.kind!=="dm" && l.by? nameOf(l.by).replace(/^Example:\s*/,"").split(" ")[0]+": " : "";
+  const b=h("button",{class:"inbanner", role:"status", onclick:()=>{ b.remove(); selectChannel(c.id); }}, chanGlyph(c), h("span",{class:"ibx"}, h("b",{}, chanTitle(c)), h("span",{}, who+lastPreview(l))));
+  let sy=null; b.addEventListener("pointerdown", e=>sy=e.clientY); b.addEventListener("pointermove", e=>{ if (sy!==null && e.clientY-sy<-14) { b.classList.add("out"); setTimeout(()=>b.remove(), 200); sy=null; } });
+  document.body.append(b); clearTimeout(bannerT); bannerT=setTimeout(()=>{ b.classList.add("out"); setTimeout(()=>b.remove(), 220); }, 3800);
+}
+
+// --- sheets ---
+function sheet(title, build, opts={}){
+  const scrim=h("div",{class:"scrim", onclick:e=>{ if (e.target===scrim) close(); }}); const close=()=>{ scrim.remove(); opts.onClose&&opts.onClose(); };
+  const draw=()=>scrim.replaceChildren(h("div",{class:"modal ntsheet", role:"dialog", "aria-label":title},
+    h("div",{class:"sheethead"}, h("b",{class:"sheettitle"}, title), h("span",{class:"grow"}), h("button",{class:"iconbtn", title:"Close", "aria-label":"Close", onclick:close}, svg(IC.x))),
+    ...[build(draw, close)].flat()));
+  draw(); document.body.append(scrim); return close;
+}
+const pickList = (items, cur, pick) => h("div",{class:"ulist sgroup"}, items.map(([v,l,sub])=>h("button",{class:"srow pick1"+(v===cur?" on":""), onclick:()=>pick(v)}, h("span",{class:"stx"}, h("b",{}, l), sub? h("span",{}, sub):""), v===cur? svg(ICF.check) : "")));
+const toneItems = () => [...TN.TONES.map(t=>[t.id, t.name]), ["none","None"]];
+function openTonePicker({title, value, onPick}){
+  let cur=value;
+  sheet(title, draw=>[pickList(toneItems(), cur, v=>{ cur=v; playTone(v); onPick(v); draw(); })]);
+}
+const MUTE_OPTS = [["8h","8 hours"],["1w","1 week"],["always","Always"]];
+const muteFor = k => k==="8h"? now()+8*3600e3 : k==="1w"? now()+7*86400e3 : 0;
+function openMute(c){
+  sheet("Mute "+chanTitle(c), (draw, close)=>[h("p",{class:"note", style:"margin:0"}, "No sound or banner for new messages. "+(c.kind==="dm"? "They won't know." : "Others won't know.")),
+    pickList(MUTE_OPTS, null, k=>{ close(); setMute(c.id, muteFor(k)); })]);
+}
+function openChatNotif(c){
+  sheet(chanTitle(c), draw=>{
+    const u=muteUntil(c.id), on=mutedId(c.id); const tt=(S.nt.tones||{})[c.id]||"";
+    const def=c.kind==="dm"? S.nt.tone : S.nt.groupTone;
+    return [
+      h("div",{class:"seg-label"}, "Mute"),
+      h("div",{class:"segmini wide", role:"group", "aria-label":"Mute"}, [["off","Off"],...MUTE_OPTS].map(([k,l])=>h("button",{"aria-pressed":String(k==="off"? !on : on && (k==="always"? u===0 : k==="1w"? u>now()+86400e3 : u!==0 && u<=now()+86400e3)), onclick:()=>{ const m={...(S.nt.mute||{})}; if (k==="off") delete m[c.id]; else m[c.id]=muteFor(k); S.nt.mute=m; saveNt(); draw(); }}, l))),
+      on? h("p",{class:"note", style:"margin:-6px 4px 0"}, u===0? "Muted until you turn it back on" : "Muted "+muteText(c).toLowerCase()) : "",
+      h("div",{class:"seg-label"}, "Notification tone"),
+      pickList([["", "Default", toneName(def)], ...toneItems()], tt, v=>{ setChatTone(c.id, v); playTone(v||def); draw(); })];
+  }, {onClose:()=>render(true)});
+}
+function confirmDeleteChat(c){
+  sheet("Delete chat?", (draw, close)=>[
+    h("p",{class:"note", style:"margin:0"}, "“"+chanTitle(c)+"” will be removed from your chat list and its messages hidden on your devices. It comes back if someone sends a new message."),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary danger-bg", onclick:()=>{ close(); deleteChat(c); }}, "Delete"))]);
+}
+function deleteChat(c){
+  const t=Math.max(now(), (c.last&&c.last.at)||0, ...subsOf(c.id).map(x=>(x.last&&x.last.at)||0));
+  S.nt.cleared={...(S.nt.cleared||{}), [c.id]:t}; S.nt.unr=(S.nt.unr||[]).filter(x=>x!==c.id);
+  if (S.pins.includes(c.id)) S.pins=S.pins.filter(x=>x!==c.id);
+  if (S.active===c.id) { S.inThread=false; S.active=null; ls.set("active", null); }
+  saveNt(); render(); toast("Chat deleted", {label:"Undo", fn:()=>{ const cl={...S.nt.cleared}; delete cl[c.id]; S.nt.cleared=cl; saveNt(); render(); }});
+}
+function resetNotif(){
+  sheet("Reset notifications?", (draw, close)=>[h("p",{class:"note", style:"margin:0"}, "Unmutes every chat and puts every chat back on the default tone."),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary", onclick:()=>{ close(); S.nt.mute={}; S.nt.tones={}; saveNt(); render(); toast("Reset"); }}, "Reset"))]);
+}
+
+// --- swipe a chat row: right = read/pin, left = mute/delete ---
+const SW={drag:false, pending:false, open:null};
+const SWB=72;
+function swipeActs(c){
+  const isTop=!(c.kind==="task" && c.parent), ur=unread(c), mu=isMuted(c), pinned=S.pins.includes(c.id);
+  return {
+    l:[{k:"read", cls:"sw-blue", icon: ur? ICF.check : ICF.dotchat, label: ur? "Read" : "Unread", fn:()=>toggleUnread(c)},
+       isTop? {k:"pin", cls:"sw-gray", icon:IC.pin, label: pinned? "Unpin" : "Pin", fn:()=>togglePin(c.id)} : null].filter(Boolean),
+    r:[{k:"mute", cls:"sw-orange", icon: mu? ICF.bell : ICF.bellx, label: mu? "Unmute" : "Mute", fn:()=> mu? setMute(c.id, null) : openMute(c)},
+       {k:"del", cls:"sw-red", icon:IC.trash, label:"Delete", fn:()=>confirmDeleteChat(c)}]
+  };
+}
+function closeSwipe(anim=true){ if (!SW.open) return; const r=document.querySelector(`.swrow[data-sw="${SW.open}"]`); SW.open=null; if (r) setOff(r, 0, anim); }
+function setOff(row, x, anim){ const li=row.querySelector(":scope > .lineitem"); if (!li) return; row.classList.toggle("anim", !!anim); li.style.setProperty("--swx", x+"px"); row.dataset.off=String(x); row.classList.toggle("sl", x>0); row.classList.toggle("sr", x<0); }
+document.addEventListener("pointerdown", e=>{ if (SW.open && !e.target.closest(`.swrow[data-sw="${SW.open}"] .swacts`)) { const inRow=e.target.closest(`.swrow[data-sw="${SW.open}"]`); closeSwipe(); if (inRow) inRow.dataset.eat="1"; } }, true);
+function swipeWrap(li, c){
+  const A=swipeActs(c), lw=A.l.length*SWB, rw=A.r.length*SWB;
+  const btn=a=>h("button",{class:"swbtn "+a.cls, "aria-label":a.label, onclick:e=>{ e.stopPropagation(); SW.open=null; a.fn(); }}, svg(a.icon), h("span",{}, a.label));
+  const row=h("div",{class:"swrow", "data-sw":c.id}, h("div",{class:"swacts l", style:`width:${lw}px`}, A.l.map(btn)), h("div",{class:"swacts r", style:`width:${rw}px`}, A.r.map(btn)), li);
+  if (SW.open===c.id) setOff(row, Number(SW.openX)||0, false);
+  let st=null;
+  row.addEventListener("pointerdown", e=>{ if (e.button>0 || e.target.closest(".swacts") || e.target.closest(".subtoggle")) return; st={x:e.clientX, y:e.clientY, id:e.pointerId, base:Number(row.dataset.off)||0, mode:null, off:0}; });
+  row.addEventListener("pointermove", e=>{
+    if (!st || e.pointerId!==st.id) return; const dx=e.clientX-st.x, dy=e.clientY-st.y;
+    if (!st.mode) { if (Math.abs(dx)>9 && Math.abs(dx)>Math.abs(dy)*1.3) { st.mode="h"; SW.drag=true; try { row.setPointerCapture(st.id); } catch {} if (SW.open && SW.open!==c.id) closeSwipe(); } else if (Math.abs(dy)>9) { st=null; return; } else return; }
+    let x=st.base+dx; const W=row.clientWidth;
+    if (x>0 && !lw) x=x*.15; if (x<0 && !rw) x=x*.15;
+    if (x>lw) x=lw+(x-lw)*.55; if (x<-rw) x=-rw+(x+rw)*.55; x=Math.max(-W, Math.min(W, x));
+    st.off=x; setOff(row, x, false);
+    const full=Math.abs(x)>W*.62; row.classList.toggle("full", full); e.preventDefault();
+  });
+  const end=e=>{
+    if (!st) return; const s=st; st=null; if (s.mode!=="h") return;
+    row.dataset.eat="1"; setTimeout(()=>{ delete row.dataset.eat; }, 350);
+    const x=s.off, W=row.clientWidth; row.classList.remove("full"); SW.drag=false;
+    let open=0, act=null;
+    if (x<0 && rw) { if (-x>W*.62) act=A.r[A.r.length-1]; else if (-x>rw*.45) open=-rw; }
+    if (x>0 && lw) { if (x>W*.62) act=A.l[0]; else if (x>lw*.45) open=lw; }
+    setOff(row, open, true); SW.open=open? c.id : null; SW.openX=open;
+    if (act) { if (navigator.vibrate) try { navigator.vibrate(12); } catch {} setTimeout(()=>act.fn(), 180); }
+    if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag) scheduleRender(); }, 260); }
+  };
+  row.addEventListener("pointerup", end); row.addEventListener("pointercancel", end);
+  row.addEventListener("click", e=>{ if (row.dataset.eat) { e.stopImmediatePropagation(); e.preventDefault(); delete row.dataset.eat; } }, true);
+  return row;
+}
+
 // ===================== native app (iPhone / Android) =====================
 const CAP = window.Capacitor;
 const NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
@@ -1707,7 +1866,11 @@ async function pushRegister(){
   const fm=NP("FirebaseMessaging"); if (!fm || PUSH_READY || S.mode!=="live") return;
   PUSH_READY=true;
   try {
-    if (PLAT==="android" && fm.createChannel) { try { await fm.createChannel({id:"messages", name:"Messages", description:"New messages", importance:5, visibility:1, vibration:true}); } catch {} }
+    if (PLAT==="android" && fm.createChannel) {
+      try { await fm.createChannel({id:"messages", name:"Messages", description:"New messages", importance:5, visibility:1, vibration:true}); } catch {}
+      for (const t of TN.TONES) { try { await fm.createChannel({id:"msg_"+t.id, name:"Messages · "+t.name, description:"Messages that use the "+t.name+" tone", importance:5, visibility:1, vibration:true, sound:"tone_"+t.id+".wav"}); } catch {} }
+      try { await fm.createChannel({id:"msg_none", name:"Messages · No sound", description:"Messages with no tone", importance:2, visibility:1, vibration:false}); } catch {}
+    }
     let perm=await fm.checkPermissions(); if (perm.receive!=="granted") perm=await fm.requestPermissions();
     if (perm.receive!=="granted") { S.pushState="off"; return; }
     S.pushState="on";
@@ -1854,30 +2017,31 @@ function listChildren(){
   const subMatch = new Set(chans.filter(isSub).map(c=>c.parent));
   const top = S.channels.filter(c => !isSub(c) && (chans.includes(c) || subMatch.has(c.id)));
   const act = c => Math.max((c.last&&c.last.at)||c.at||0, ...subsOf(c.id).map(x=>(x.last&&x.last.at)||x.at||0));
+  for (let i=top.length-1; i>=0; i--) { const cl=(S.nt.cleared||{})[top[i].id]; if (cl && act(top[i])<=cl && top[i].id!==S.active) top.splice(i,1); }
   top.sort((a,b)=>act(b)-act(a));
   const pinned=S.pins.map(id=>top.find(c=>c.id===id)).filter(Boolean);
   const rest=top.filter(c=>!S.pins.includes(c.id));
   const item = c => {
-    const el=itemEl(c); longPress(el,(x,y)=>rowMenu(c,x,y));
+    const li=itemEl(c); longPress(li,(x,y)=>rowMenu(c,x,y)); const el=swipeWrap(li, c);
     const subs=c.kind!=="dm" && c.kind!=="task"? subsOf(c.id).filter(x=>!q || chans.includes(x) || chans.includes(c)) : [];
     if (!subs.length) return el;
     const open = !!S.expanded[c.id] || (q && subMatch.has(c.id));
     const su=subs.filter(unread).length;
     const tog=h("button",{class:"subtoggle"+(open?" open":"")+(su?" has":""), "aria-expanded":String(open), "aria-label":(open?"Hide":"Show")+" task conversations", title:"Task conversations", onclick:e=>{ e.stopPropagation(); S.expanded[c.id]=!open; ls.set("expanded",S.expanded); patchList(); updateTypingUI(); }}, svg(IC.thread), h("b",{}, subs.length), su? h("i",{class:"tdot"}) : "", svg(ICF.chev));
-    el.querySelector(".metaicons").prepend(tog);
+    li.querySelector(".metaicons").prepend(tog);
     if (!open) return el;
     subs.sort((a,b)=>((b.last&&b.last.at)||b.at||0)-((a.last&&a.last.at)||a.at||0));
     return [el, h("div",{class:"subgroup"}, subs.map(x=>{ const t=S.tasks.find(z=>z.id===x.taskId); const st=t? STATUSES.find(z=>z.id===stOf(t)) : null;
       const row=h("button",{class:"lineitem subitem", "aria-current":String(x.id===S.active && (S.inThread || window.innerWidth>860)), onclick:()=>selectChannel(x.id)},
         h("span",{class:"glyph tglyph sm", style:`--st:${st? st.c : "var(--muted)"}`}, svg(IC.knot)),
         h("span",{style:"min-width:0"}, h("div",{class:"nm"}, t? h("span",{class:"tidmini", style:`--c:${st.c}`},"CN-"+t.num) : "", " ", t? t.title : chanTitle(x)), h("div",{class:"pv"}, h("span",{class:"pvt", "data-cid":x.id}, x.last? (x.last.by!==S.me? nameOf(x.last.by).replace(/^Example:\s*/,"").split(" ")[0]+": ":"")+lastPreview(x.last) : (st? st.name : "")))),
-        h("span",{class:"meta"}, x.last? h("span",{class:"mono"}, fmtShort(x.last.at)):"", h("span",{class:"metaicons"}, unread(x)? h("span",{class:"badge"},"1"):"")));
-      longPress(row,(px,py)=>rowMenu(x,px,py)); return row; }))];
+        h("span",{class:"meta"}, x.last? h("span",{class:"mono"}, fmtShort(x.last.at)):"", h("span",{class:"metaicons"}, isMuted(x)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", unread(x)? h("span",{class:"badge"+(isMuted(x)?" muted":"")},"1"):"")));
+      longPress(row,(px,py)=>rowMenu(x,px,py)); return swipeWrap(row, x); }))];
   };
   const itemEl = c => h("button",{class:"lineitem", "aria-current":String(c.id===S.active && S.inThread || (c.id===S.active && window.innerWidth>860)), onclick:()=>selectChannel(c.id)},
     chanGlyph(c),
     h("span",{style:"min-width:0"}, h("div",{class:"nm"}, chanTitle(c)), h("div",{class:"pv"}, c.last && c.last.by===S.me? ticks({by:S.me, at:c.last.at}, c) : "", h("span",{class:"pvt", "data-cid":c.id}, c.last? (c.kind!=="dm" && c.last.by!==S.me? nameOf(c.last.by).replace(/^Example:\s*/,"").split(" ")[0]+": ":"")+lastPreview(c.last) : ""))),
-    h("span",{class:"meta"}, c.last? h("span",{class:"mono"}, fmtShort(c.last.at)):"", h("span",{class:"metaicons"}, S.pins.includes(c.id)? h("span",{class:"pinmark", title:"Pinned"}, svg(IC.pin)):"", unread(c)? h("span",{class:"badge"+((c.last.mentions||[]).includes(S.me)?" at":"")}, (c.last.mentions||[]).includes(S.me)? "@" : "1"):""))
+    h("span",{class:"meta"}, c.last? h("span",{class:"mono"}, fmtShort(c.last.at)):"", h("span",{class:"metaicons"}, isMuted(c)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", S.pins.includes(c.id)? h("span",{class:"pinmark", title:"Pinned"}, svg(IC.pin)):"", unread(c)? h("span",{class:"badge"+(isMuted(c)?" muted":"")+(c.last&&(c.last.mentions||[]).includes(S.me)?" at":"")}, c.last&&(c.last.mentions||[]).includes(S.me)? "@" : "1"):""))
   );
   function taskConvos(q){
     if (!curTeam()) return h("div",{class:"empty",style:"margin-top:30px"}, h("p",{},"Create a team on the Team tab to see task conversations."));
@@ -2041,7 +2205,7 @@ function canSeeTask(t){
   return true;
 }
 const visibleTasks = () => S.tasks.filter(canSeeTask);
-const ICF = { block:'<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>', flag2:'<path d="M5.5 21V4.5M5.5 4.5h11l-2 4 2 4h-11"/>', camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', doc:'<path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/>', pin2:'<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>', contact:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="10" r="2.8"/><path d="M6.8 18c1.1-2.3 3-3.4 5.2-3.4s4.1 1.1 5.2 3.4"/>', smile:'<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c.9 1.4 2.1 2.1 3.5 2.1s2.6-.7 3.5-2.1"/><circle cx="9.2" cy="10" r="1" fill="currentColor"/><circle cx="14.8" cy="10" r="1" fill="currentColor"/>', kbd:'<rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13.5h10"/>', fwd2:'<path d="M11 5l6 6-6 6"/><path d="M16 5l6 6-6 6"/><path d="M17 11H9a6 6 0 0 0-6 6v2"/>', clip:'<path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.4 3.4 0 0 1 4.8 4.8l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>', image:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/>', fwd:'<path d="M14 5l6 6-6 6"/><path d="M20 11h-9a6 6 0 0 0-6 6v2"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', chev:'<path d="M7 10l5 5 5-5"/>', lock:'<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>', book:'<path d="M5 4.5h12.5a1.5 1.5 0 0 1 1.5 1.5v13.5H6.5A1.5 1.5 0 0 1 5 18z"/><circle cx="12" cy="10.5" r="2.4"/><path d="M8.5 16c.5-1.6 1.8-2.5 3.5-2.5s3 .9 3.5 2.5M19 8h1.5M19 12h1.5"/>', more:'<circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none"/>', selm:'<rect x="4" y="4" width="16" height="16" rx="5"/><path d="M8.5 12.2l2.4 2.4 4.8-5"/>', list:'<path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>', stage:'<rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/>', listv:'<path d="M8.5 6H20M8.5 12H20M8.5 18H20"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor"/>', info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>', moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', drop:'<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/>', bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4"/>', vib:'<rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4 9v6M20 9v6"/>', grid:'<circle cx="6" cy="6" r="1.4"/><circle cx="12" cy="6" r="1.4"/><circle cx="18" cy="6" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/><circle cx="6" cy="18" r="1.4"/><circle cx="12" cy="18" r="1.4"/><circle cx="18" cy="18" r="1.4"/>', cell:'<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>', media:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M10 9.5v5l4.2-2.5z" fill="currentColor"/>', all:'<circle cx="8" cy="9" r="2.6"/><circle cx="16" cy="9" r="2.6"/><path d="M3 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4M11 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4"/>', none:'<circle cx="12" cy="9" r="3.2" stroke-dasharray="2.5 2"/><path d="M5.5 19c.7-3 3.2-4.6 6.5-4.6s5.8 1.6 6.5 4.6" stroke-dasharray="2.5 2"/>', gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>', flag:'<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>', cal:'<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>', check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>', personplus:'<circle cx="10" cy="8" r="3.4"/><path d="M3.5 20c.6-3.6 3.2-5.4 6.5-5.4 1.4 0 2.6.3 3.6.9M18 14v6M15 17h6"/>', goto:'<path d="M7 17L17 7M9 7h8v8"/>' };
+const ICF = { bellx:'<path d="M6 16V11a6 6 0 0 1 9.4-4.9M18 10.5V16l1.5 2H9"/><path d="M10 20.5h4M4.5 4.5l15 15"/>', music:'<path d="M9 18V5.8l10-2.3V16"/><circle cx="6.6" cy="18" r="2.4"/><circle cx="16.6" cy="16" r="2.4"/>', speaker:'<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>', banner:'<rect x="3.5" y="4" width="17" height="7" rx="2.5"/><path d="M6.5 15h11M6.5 19h7"/>', dotchat:'<path d="M13 5H5.5A1.5 1.5 0 0 0 4 6.5v8A1.5 1.5 0 0 0 5.5 16H7v3.5l4.5-3.5h7a1.5 1.5 0 0 0 1.5-1.5V11"/><circle cx="18.5" cy="5.5" r="2.5" fill="currentColor"/>', block:'<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>', flag2:'<path d="M5.5 21V4.5M5.5 4.5h11l-2 4 2 4h-11"/>', camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', doc:'<path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/>', pin2:'<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>', contact:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="10" r="2.8"/><path d="M6.8 18c1.1-2.3 3-3.4 5.2-3.4s4.1 1.1 5.2 3.4"/>', smile:'<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c.9 1.4 2.1 2.1 3.5 2.1s2.6-.7 3.5-2.1"/><circle cx="9.2" cy="10" r="1" fill="currentColor"/><circle cx="14.8" cy="10" r="1" fill="currentColor"/>', kbd:'<rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13.5h10"/>', fwd2:'<path d="M11 5l6 6-6 6"/><path d="M16 5l6 6-6 6"/><path d="M17 11H9a6 6 0 0 0-6 6v2"/>', clip:'<path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.4 3.4 0 0 1 4.8 4.8l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>', image:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/>', fwd:'<path d="M14 5l6 6-6 6"/><path d="M20 11h-9a6 6 0 0 0-6 6v2"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', chev:'<path d="M7 10l5 5 5-5"/>', lock:'<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>', book:'<path d="M5 4.5h12.5a1.5 1.5 0 0 1 1.5 1.5v13.5H6.5A1.5 1.5 0 0 1 5 18z"/><circle cx="12" cy="10.5" r="2.4"/><path d="M8.5 16c.5-1.6 1.8-2.5 3.5-2.5s3 .9 3.5 2.5M19 8h1.5M19 12h1.5"/>', more:'<circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none"/>', selm:'<rect x="4" y="4" width="16" height="16" rx="5"/><path d="M8.5 12.2l2.4 2.4 4.8-5"/>', list:'<path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>', stage:'<rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/>', listv:'<path d="M8.5 6H20M8.5 12H20M8.5 18H20"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor"/>', info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>', moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', drop:'<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/>', bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4"/>', vib:'<rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4 9v6M20 9v6"/>', grid:'<circle cx="6" cy="6" r="1.4"/><circle cx="12" cy="6" r="1.4"/><circle cx="18" cy="6" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/><circle cx="6" cy="18" r="1.4"/><circle cx="12" cy="18" r="1.4"/><circle cx="18" cy="18" r="1.4"/>', cell:'<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>', media:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M10 9.5v5l4.2-2.5z" fill="currentColor"/>', all:'<circle cx="8" cy="9" r="2.6"/><circle cx="16" cy="9" r="2.6"/><path d="M3 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4M11 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4"/>', none:'<circle cx="12" cy="9" r="3.2" stroke-dasharray="2.5 2"/><path d="M5.5 19c.7-3 3.2-4.6 6.5-4.6s5.8 1.6 6.5 4.6" stroke-dasharray="2.5 2"/>', gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>', flag:'<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>', cal:'<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>', check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>', personplus:'<circle cx="10" cy="8" r="3.4"/><path d="M3.5 20c.6-3.6 3.2-5.4 6.5-5.4 1.4 0 2.6.3 3.6.9M18 14v6M15 17h6"/>', goto:'<path d="M7 17L17 7M9 7h8v8"/>' };
 
 function filteredTasks(){
   const f=S.filter;
@@ -2267,6 +2431,6 @@ $("#meAv").addEventListener("click", ()=>openSettings());
 document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S.view=b.dataset.view; ls.set("view",S.view); if (S.view==="chats") S.inThread=false; else S.newFlow=null; if (S.view==="calls") ls.set("callsSeen", now()); if (S.view!=="calls") S.dial.on=false; if (S.view==="board" && S.filter.startsWith("chan:")) {} render(); }));
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
-if (/[?&]test=1/.test(location.search)) window.__concept={demoTyping, S};
+if (/[?&]test=1/.test(location.search)) window.__concept={demoTyping, S, msgBanner, playTone, noticeIncoming};
 boot();
 })();

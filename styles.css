@@ -1591,3 +1591,44 @@ a.iconbtn.hcall{display:grid;place-items:center}
 a.srow{color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:12px}
 a.srow>svg.i{color:var(--muted);width:16px;height:16px}
 .modalacts .primary{height:40px;padding:0 18px}
+
+/* ===== notifications: swipe actions, mute, tones, in-app banner ===== */
+.swrow{position:relative;overflow:hidden;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.swrow > .lineitem{position:relative;z-index:1;background:var(--surface);will-change:transform;transform:translate3d(var(--swx,0px),0,0)!important}
+.swrow > .lineitem[aria-current="true"]{background:var(--cobalt-soft)}
+.swrow.anim > .lineitem{transition:transform .28s cubic-bezier(.2,.9,.25,1)}
+.swacts{position:absolute;top:0;bottom:0;display:flex;visibility:hidden}
+.swrow.sl .swacts.l,.swrow.sr .swacts.r{visibility:visible}
+.swacts.l{left:0}.swacts.r{right:0}
+.swbtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;font:600 11.5px/1 var(--f-body);border:0;padding:0;transition:flex .2s ease}
+.swbtn svg.i{width:22px;height:22px;color:#fff}
+.sw-blue{background:#007AFF}.sw-gray{background:#8E8E93}.sw-orange{background:#FF9500}.sw-red{background:#FF3B30}
+.swrow.full.sr .swacts.r{width:100%!important}
+.swrow.full.sr .swacts.r .swbtn:not(:last-child),.swrow.full.sl .swacts.l .swbtn:not(:first-child){flex:0 0 0;overflow:hidden}
+.swrow.full.sl .swacts.l{width:100%!important}
+.swrow.full .swbtn{align-items:center}
+.subgroup .swrow > .lineitem{background:transparent}
+.subgroup .swrow{background:var(--surface)}
+.subgroup .swrow > .lineitem.subitem{background:var(--surface)}
+.mutemark{display:inline-grid;place-items:center;color:var(--muted)}
+.mutemark svg.i{width:14px;height:14px}
+.lineitem .badge.muted{background:#AEAEB2!important}
+.popmenu .pmval{margin-left:auto;color:var(--muted);font-weight:400;font-size:13px;padding-left:10px}
+.popmenu button.dangerrow,.popmenu button.dangerrow svg.i{color:#FF3B30}
+.srow.pick{width:100%;text-align:left;background:none;border:0;color:var(--ink);cursor:pointer}
+.srow.pick .sval{margin-left:auto}
+.srow.pick > svg.i:last-child{color:var(--muted);width:16px;height:16px;flex:none}
+.ntsheet{gap:12px;max-height:min(86vh,720px);overflow:auto}
+.ntsheet .seg-label{margin:2px 4px -4px}
+.ntsheet .ulist{max-height:none}
+.segmini.wide{display:flex;width:100%}
+.segmini.wide button{flex:1;padding:0 6px}
+.segmini button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.inbanner{position:fixed;z-index:80;left:50%;top:calc(8px + env(safe-area-inset-top,0px));transform:translateX(-50%);width:min(420px,calc(100% - 16px));display:flex;align-items:center;gap:10px;padding:10px 12px;border:0;text-align:left;color:var(--ink);background:var(--glass,rgba(249,249,249,.94));-webkit-backdrop-filter:blur(20px) saturate(1.8);backdrop-filter:blur(20px) saturate(1.8);border-radius:18px;box-shadow:0 10px 34px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.08);animation:bannerin .32s cubic-bezier(.2,.9,.25,1) both;cursor:pointer}
+.inbanner.out{animation:bannerout .2s ease both}
+.inbanner .glyph,.inbanner .av{width:38px!important;height:38px!important;flex:none;font-size:15px}
+.inbanner .ibx{min-width:0;display:flex;flex-direction:column;gap:1px}
+.inbanner b{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inbanner span span,.inbanner .ibx > span{font-size:13.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes bannerin{from{transform:translate(-50%,-130%)}to{transform:translate(-50%,0)}}
+@keyframes bannerout{to{transform:translate(-50%,-130%);opacity:0}}
