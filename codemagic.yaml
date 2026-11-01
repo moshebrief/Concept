@@ -3,7 +3,7 @@
 #
 # Names used below must match what you create in Codemagic:
 #   • Android keystore reference name:  concept_keystore
-#   • App Store Connect API key name:   Task Message ASC
+#   • App Store Connect API key name:   Task message
 #   • Email for finished builds:        set in the line "recipients" (2 places)
 
 workflows:
@@ -54,7 +54,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 90
     integrations:
-      app_store_connect: Task Message ASC
+      app_store_connect: Task message
     environment:
       node: 22
       xcode: latest
