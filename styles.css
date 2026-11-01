@@ -1737,3 +1737,6 @@ input.iname:focus{outline:none;background:var(--surface)}
 .infoview ~ .scrim{z-index:90}
 .toast{z-index:95}
 .infoview .ulist{overflow:visible}
+.srow.col{flex-wrap:wrap}
+.srow.col .segmini{flex:1 0 100%;margin-top:8px}
+.bkbusy{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;color:var(--muted);font-size:14px}

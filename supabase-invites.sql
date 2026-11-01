@@ -1,4 +1,4 @@
--- Concept — team invites by phone number
+-- Task Message — team invites by phone number
 create or replace function public.my_phone()
 returns text language sql stable security definer set search_path = public, auth as $$
   select regexp_replace(coalesce((select phone from auth.users where id = auth.uid()), ''), '\D', '', 'g');

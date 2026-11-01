@@ -1,11 +1,11 @@
 {
-  "appId": "com.conceptchat.app",
-  "appName": "Concept",
+  "appId": "com.taskmessage.app",
+  "appName": "Task Message",
   "webDir": "www",
   "backgroundColor": "#F2F2F7",
   "ios": {
     "contentInset": "never",
-    "scheme": "Concept",
+    "scheme": "TaskMessage",
     "limitsNavigationsToAppBoundDomains": false
   },
   "android": {

@@ -1,5 +1,5 @@
 -- =====================================================================
--- Concept — database update for the phone apps
+-- Task Message — database update for the phone apps
 -- Adds: notification device tokens, reports, and the "new message"
 -- trigger that asks the push function to send notifications.
 --

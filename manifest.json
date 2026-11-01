@@ -1,6 +1,6 @@
 {
-  "name": "Concept",
-  "short_name": "Concept",
+  "name": "Task Message",
+  "short_name": "Task Message",
   "description": "Chat with anyone and turn messages into tasks.",
   "start_url": "./",
   "scope": "./",

@@ -1,9 +1,9 @@
-# Concept — cloud builds for the App Store and Google Play (no Mac needed).
+# Task Message — cloud builds for the App Store and Google Play (no Mac needed).
 # Codemagic reads this file automatically from the repository.
 #
 # Names used below must match what you create in Codemagic:
 #   • Android keystore reference name:  concept_keystore
-#   • App Store Connect API key name:   Concept ASC
+#   • App Store Connect API key name:   Task Message ASC
 #   • Email for finished builds:        set in the line "recipients" (2 places)
 
 workflows:
@@ -54,13 +54,13 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 90
     integrations:
-      app_store_connect: Concept ASC
+      app_store_connect: Task Message ASC
     environment:
       node: 22
       xcode: latest
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.conceptchat.app
+        bundle_identifier: com.taskmessage.app
     scripts:
       - name: Install
         script: npm install

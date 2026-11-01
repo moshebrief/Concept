@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Concept — prepares the iPhone and Android projects during the cloud build (Codemagic).
+// Task Message — prepares the iPhone and Android projects during the cloud build (Codemagic).
 // Usage: node native-setup.js web | assets | android | ios
 const fs = require("fs");
 const path = require("path");
@@ -34,11 +34,11 @@ function web() {
 }
 
 // ---------------------------------------------------------------- icons & splash (rendered from vector art)
-const ICON_GLYPH = `<g transform="translate(256 256) scale(.82) translate(-256 -279)" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"><path d="M110 150h292v186H246l-92 72v-72h-44z"/><path d="M196 245l42 42 86-90"/></g>`;
+const ICON_GLYPH = `<g transform="translate(256 256) scale(.92) translate(-256 -256)"><path d="M146 92h176a66 66 0 0 1 66 66v94a66 66 0 0 1-66 66H214l-62 52a10 10 0 0 1-16-8v-46a66 66 0 0 1-56-65v-93a66 66 0 0 1 66-66z" fill="#fff"/><path d="M152 176h150M152 234h96" stroke="#2F7BFF" stroke-width="26" stroke-linecap="round" fill="none"/><circle cx="364" cy="364" r="98" fill="#34C759" stroke="#0E5FE8" stroke-width="20"/><path d="M318 364l32 32 62-66" stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`;
 const svgIcon = (bg) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3D8BFF"/><stop offset="1" stop-color="#0A55E0"/></linearGradient></defs>${bg ? `<rect width="512" height="512" fill="url(#g)"/>` : ""}${ICON_GLYPH}</svg>`;
-const svgForeground = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><g transform="translate(96 96) scale(.625)">${ICON_GLYPH}</g></svg>`;
+const svgForeground = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><g transform="translate(96 96) scale(.625)">${ICON_GLYPH.replace(/#0E5FE8/g,"none")}</g></svg>`;
 const svgBackground = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3D8BFF"/><stop offset="1" stop-color="#0A55E0"/></linearGradient></defs><rect width="512" height="512" fill="url(#g)"/></svg>`;
-const svgSplash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732"><rect width="2732" height="2732" fill="#007AFF"/><g transform="translate(1366 1366) scale(1.5) translate(-256 -256)">${ICON_GLYPH}</g></svg>`;
+const svgSplash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732"><rect width="2732" height="2732" fill="#007AFF"/><g transform="translate(1366 1366) scale(1.5) translate(-256 -256)">${ICON_GLYPH.replace(/#0E5FE8/g,"#007AFF")}</g></svg>`;
 async function assets() {
   const sharp = require("sharp");
   const dir = path.join(ROOT, "assets");
@@ -184,12 +184,12 @@ function ios() {
   const plP = path.join(dir, "App", "Info.plist");
   let pl = read(plP);
   const add = (k, v) => { if (!pl.includes(`<key>${k}</key>`)) pl = pl.replace(/<\/dict>\s*<\/plist>\s*$/, `\t<key>${k}</key>\n\t${v}\n</dict>\n</plist>\n`); };
-  add("NSCameraUsageDescription", "<string>Concept uses the camera so you can take photos and videos to send in chats.</string>");
-  add("NSMicrophoneUsageDescription", "<string>Concept uses the microphone so you can record voice notes.</string>");
-  add("NSPhotoLibraryUsageDescription", "<string>Concept lets you choose photos and videos to send in chats.</string>");
-  add("NSPhotoLibraryAddUsageDescription", "<string>Concept can save photos and videos you receive.</string>");
-  add("NSContactsUsageDescription", "<string>Concept checks your contacts to show which of your friends use Concept. Your address book is not uploaded.</string>");
-  add("NSLocationWhenInUseUsageDescription", "<string>Concept uses your location only when you choose to share it in a chat.</string>");
+  add("NSCameraUsageDescription", "<string>Task Message uses the camera so you can take photos and videos to send in chats.</string>");
+  add("NSMicrophoneUsageDescription", "<string>Task Message uses the microphone so you can record voice notes.</string>");
+  add("NSPhotoLibraryUsageDescription", "<string>Task Message lets you choose photos and videos to send in chats.</string>");
+  add("NSPhotoLibraryAddUsageDescription", "<string>Task Message can save photos and videos you receive.</string>");
+  add("NSContactsUsageDescription", "<string>Task Message checks your contacts to show which of your friends use Task Message. Your address book is not uploaded.</string>");
+  add("NSLocationWhenInUseUsageDescription", "<string>Task Message uses your location only when you choose to share it in a chat.</string>");
   add("UIBackgroundModes", "<array>\n\t\t<string>remote-notification</string>\n\t</array>");
   add("UIRequiresFullScreen", "<true/>");
   pl = pl.replace(/(<key>UISupportedInterfaceOrientations<\/key>\s*<array>)[\s\S]*?(<\/array>)/, "$1\n\t\t<string>UIInterfaceOrientationPortrait</string>\n\t$2");

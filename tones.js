@@ -1,4 +1,4 @@
-// Concept — notification tones.
+// Task Message — notification tones.
 // One list used by the app (to play and preview tones) and by native-setup.js (to make the
 // sound files inside the iPhone and Android apps). Each note: [frequency, start s, length s, wave, volume, slide-to frequency]
 (function (root) {

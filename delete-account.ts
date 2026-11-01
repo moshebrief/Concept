@@ -1,4 +1,4 @@
-// Concept — "delete-account" Edge Function
+// Task Message — "delete-account" Edge Function
 // Permanently deletes the signed-in user's account (required by the App Store and Google Play).
 // Deploy with "Verify JWT" turned ON (the default).
 import { createClient } from "npm:@supabase/supabase-js@2";

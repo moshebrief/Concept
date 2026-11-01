@@ -1,4 +1,4 @@
-// Concept — "push" Edge Function
+// Task Message — "push" Edge Function
 // Sends a notification to everyone in a chat (except the sender) when a new message arrives.
 // Called by the database trigger in supabase-update.sql.
 // Needs the secret FCM_SERVICE_ACCOUNT (the Firebase service account JSON).

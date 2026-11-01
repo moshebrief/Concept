@@ -1,4 +1,4 @@
-/* Concept — chat that turns messages into tasks. */
+/* Task Message — chat that turns messages into tasks. */
 (() => {
 "use strict";
 // ---------- tiny helpers ----------
@@ -164,7 +164,7 @@ function subscribeAll(){
     await resolvePeople(rows.flatMap(c=>[...(c.members||[]), c.last&&c.last.by]).filter(Boolean));
     if (!S.active || !S.channels.find(c=>c.id===S.active)) S.active = S.channels[0] ? S.channels[0].id : null;
     decryptMany(S.channels.map(c=>c.last&&c.last.enc)).then(ch=>{ if (ch) scheduleRender(); });
-    LOCAL.save("channels", S.channels); noticeIncoming(S.channels); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
+    LOCAL.save("channels", S.channels); syncSoon(); noticeIncoming(S.channels); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
     openMsgs(); scheduleRender();
   });
   store.sub("tasks", async rows => { S.tasks=rows.sort((a,b)=>(a.num||0)-(b.num||0)); await resolvePeople(rows.flatMap(t=>[t.assignee,t.createdBy]).filter(Boolean)); scheduleRender(); });
@@ -183,10 +183,8 @@ function openMsgs(){
     await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
     if (S.msgsFor!==cid) return;
     S.msgCache[cid]=rows;
-    const first=(rows[0]||{}).at||Infinity, have=new Set(rows.map(m=>m.id));
-    const older=(LOCAL.older[cid]||[]).filter(m=>m.at<first && !have.has(m.id));
-    S.msgs=older.length? [...older, ...rows] : rows;
-    LOCAL.save("m:"+cid, S.msgs.slice(-2000), 800);
+    S.msgs=(LOCAL.older[cid]||[]).length? mergeById(LOCAL.older[cid], rows) : rows;
+    LOCAL.save("m:"+cid, S.msgs.slice(-5000), 800);
     const ids=new Set(rows.map(r=>r.id)); if (S.pend.some(p=>ids.has(p.id))) S.pend=S.pend.filter(p=>!ids.has(p.id));
     markRead(); scheduleRender();
   });
@@ -388,8 +386,9 @@ async function sendVoice(blob, dur, peaks, target, vextra={}, caption=""){
 }
 async function voiceUrl(v, env){
   if (VOICE_URLS[v.id]) return VOICE_URLS[v.id];
-  let b64="";
-  for (let i=0;i<v.parts;i++){ const p=await store.get(`voice/${v.id}/parts/${i}`); if (!p) throw new Error("missing"); b64+=p.d; }
+  if (S.mode==="live") { const dec=await kvGet(LOCAL.key("vd:"+v.id)); if (dec) { const u=b64d(dec); return VOICE_URLS[v.id]=URL.createObjectURL(new Blob([u],{type:v.mime||"audio/webm"})); } }
+  let b64=S.mode==="live"? (await kvGet(LOCAL.key("v:"+v.id)))||"" : "";
+  if (!b64) for (let i=0;i<v.parts;i++){ const p=await store.get(`voice/${v.id}/parts/${i}`); if (!p) throw new Error("missing"); b64+=p.d; }
   let u8=b64d(b64);
   if (v.eiv && env) { const mk=await openKey(env); u8=new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(v.eiv)}, mk, u8)); }
   return VOICE_URLS[v.id]=URL.createObjectURL(new Blob([u8],{type:v.mime||"audio/webm"}));
@@ -607,7 +606,7 @@ async function replyToStatus(id, st){
 
 // ---------- calls ----------
 const RING_MS=45000;
-const callUrl = c => `https://meet.jit.si/Concept-${c.room}#config.prejoinConfig.enabled=false&config.startWithVideoMuted=${c.kind!=="video"}&userInfo.displayName=%22${encodeURIComponent(nameOf(S.me)==="You"? ((S.people[S.me]||{}).name||"Concept user") : nameOf(S.me))}%22`;
+const callUrl = c => `https://meet.jit.si/Concept-${c.room}#config.prejoinConfig.enabled=false&config.startWithVideoMuted=${c.kind!=="video"}&userInfo.displayName=%22${encodeURIComponent(nameOf(S.me)==="You"? ((S.people[S.me]||{}).name||"Task Message user") : nameOf(S.me))}%22`;
 let ringing=null, ringTimer=null, ringAudio=null;
 async function startCall(c, kind){
   if (!S.canWrite) return;
@@ -626,7 +625,7 @@ function showOutgoing(call){
   const draw=()=>{ const cur=S.calls.find(x=>x.id===call.id)||call;
     const st = cur.status==="answered"? "Answered" : cur.status==="declined"? "Declined" : cur.status==="missed"? "No answer" : cur.status==="ended"? "Call ended" : "Ringing…";
     o.replaceChildren(
-      h("div",{class:"cs-top"}, h("span",{class:"cs-kind"}, svg(call.kind==="video"? IC.video : IC.phone), call.kind==="video"? "Concept video call":"Concept voice call")),
+      h("div",{class:"cs-top"}, h("span",{class:"cs-kind"}, svg(call.kind==="video"? IC.video : IC.phone), call.kind==="video"? "Task Message video call":"Task Message voice call")),
       h("div",{class:"cs-mid"}, h("div",{class:"cs-av"+(cur.status==="ringing"?" pulse":"")}, call.title? h("span",{class:"glyph", style:`background:${colorFor(call.channel)};width:120px;height:120px;font-size:46px`}, call.title[0].toUpperCase()) : avatar(peer,"xl")), h("b",{class:"cs-name"}, callTitle(call)), h("span",{class:"cs-st"}, st)),
       phone? h("div",{class:"cs-phone"}, "Or call their phone: ", h("a",{href:"tel:"+phone.replace(/[^\d+]/g,""), class:"selectable"}, phone)) : "",
       h("div",{class:"cs-acts"},
@@ -643,7 +642,7 @@ function showIncoming(call){
   const caller=call.from;
   o.replaceChildren(
     h("div",{class:"cs-top"}, h("span",{class:"cs-kind"}, svg(call.kind==="video"? IC.video : IC.phone), call.kind==="video"? "Incoming video call":"Incoming voice call")),
-    h("div",{class:"cs-mid"}, h("div",{class:"cs-av pulse"}, avatar(caller,"xl")), h("b",{class:"cs-name"}, nameOf(caller).replace(/^Example:\s*/,"")), h("span",{class:"cs-st"}, call.title? "Calling "+call.title : "Concept call")),
+    h("div",{class:"cs-mid"}, h("div",{class:"cs-av pulse"}, avatar(caller,"xl")), h("b",{class:"cs-name"}, nameOf(caller).replace(/^Example:\s*/,"")), h("span",{class:"cs-st"}, call.title? "Calling "+call.title : "Task Message call")),
     h("div",{class:"cs-acts"},
       h("div",{class:"cs-btn"}, h("button",{class:"round end", "aria-label":"Decline", onclick:()=>{ store.update("calls/"+call.id, {status:"declined"}).catch(()=>{}); closeCallUI(); }}, svg(IC.phone)), h("span",{},"Decline")),
       h("div",{class:"cs-btn"}, h("a",{class:"round go", href:callUrl(call), target:"_blank", rel:"noopener", "aria-label":"Accept", onclick:()=>{ store.update("calls/"+call.id, {status:"answered", joined:[...new Set([...(call.joined||[]), S.me])]}).catch(()=>{}); setTimeout(closeCallUI, 300); }}, svg(call.kind==="video"? IC.video: IC.phone)), h("span",{},"Accept"))
@@ -741,7 +740,7 @@ function renderSettings(){
     S.mode==="live"? row(ICF.personplus, "Name", h("input",{class:"sinp", id:"s-name", maxlength:"40", value:me.name||"", onchange:e=>{ const v=e.target.value.trim(); if (v) guarded(store.update("team/"+S.me,{name:v})).then(()=>toast("Saved")).catch(()=>{}); }})) : "",
     row(ICF.info, "About", h("input",{class:"sinp", id:"s-about", maxlength:"80", placeholder:"Available", value:me.about||"", onchange:e=>S.canWrite&&guarded(store.update("team/"+S.me,{about:e.target.value.trim()})).then(()=>toast("Saved")).catch(()=>{})})),
     row(IC.phone, "Phone number", h("input",{class:"sinp", id:"s-phone", type:"tel", placeholder:"Add number", value:me.phone||"", onchange:e=>S.canWrite&&savePhone(e.target.value)})),
-    row(ICF.book, "Phone contacts", h("button",{class:"iconbtn", title:"Import contacts", "aria-label":"Import contacts", onclick:importContacts}, svg(IC.arrow)), S.addr.length? `${S.addr.length} · ${S.onConcept.length} on Concept` : "")));
+    row(ICF.book, "Phone contacts", h("button",{class:"iconbtn", title:"Import contacts", "aria-label":"Import contacts", onclick:importContacts}, svg(IC.arrow)), S.addr.length? `${S.addr.length} · ${S.onConcept.length} on Task Message` : "")));
   w.append(...group("Privacy",
     row(TICK2, "Read receipts", toggle("readReceipts", true), "If you turn this off, you won't send or see blue ticks"),
     row(ICF.lock, "End-to-end encryption", h("span",{class:"sval mono", id:"fp"}, E2E.ready? "On" : "Off"))));
@@ -751,16 +750,17 @@ function renderSettings(){
     row(ICF.drop, "Accent color", h("div",{class:"swatches"}, ACCENTS.map(([n,c])=>h("button",{class:"sw"+((p.accent||"#0A6CFF")===c?" on":""), style:`--sw:${c}`, title:n, "aria-label":n+" accent", onclick:()=>setPref("accent", c==="#0A6CFF"? "" : c)}))))));
   w.append(...group("Chats",
     row(ICF.image, "Chat wallpaper", h("button",{class:"iconbtn", title:"Change wallpaper", "aria-label":"Change wallpaper", onclick:openWallpaper}, svg(IC.arrow)), wpMode()==="photo"? "Your photo" : wpMode()==="plain"? "Plain" : "Tools"),
+    h("button",{class:"srow pick", onclick:openBackup}, h("span",{class:"sic"}, svg(ICF.lock)), h("span",{class:"stx"}, h("b",{},"Chat backup"), h("span",{}, "iCloud Drive or Google Drive")), h("span",{class:"sval"}, (S.prefs.backup||{}).last? fmtShort(S.prefs.backup.last) : "Never"), svg(IC.arrow)),
     row(IC.send, "Enter key sends", toggle("enterSends", true)),
     row(IC.knot, "Swipe left to make task", h("div",{class:"segmini", role:"group", "aria-label":"Swipe left"}, [["open","Open task"],["silent","Just add"]].map(([v,l])=>h("button",{"aria-pressed":String((p.swipeTask||"open")===v), onclick:()=>setPref("swipeTask",v)}, l)))),
     row(IC.pin, "Pinned chats", h("span",{class:"sval"}, S.pins.length+"/5"))));
   const nMuted=S.channels.filter(c=>mutedId(c.id)).length, nCustom=Object.keys(S.nt.tones||{}).length;
   const pickRow=(icon, title, val, fn, sub)=>h("button",{class:"srow pick", onclick:fn}, h("span",{class:"sic"}, svg(icon)), h("span",{class:"stx"}, h("b",{},title), sub? h("span",{},sub):""), h("span",{class:"sval"}, val), svg(IC.arrow));
   w.append(...group("Notifications",
-    NATIVE? row(ICF.bell, "Notifications", h("span",{class:"sval"}, S.pushState==="on"? "On" : S.pushState==="off"? "Off" : "…"), S.pushState==="off"? "Turn on in your phone's Settings → Concept" : "") : "",
+    NATIVE? row(ICF.bell, "Notifications", h("span",{class:"sval"}, S.pushState==="on"? "On" : S.pushState==="off"? "Off" : "…"), S.pushState==="off"? "Turn on in your phone's Settings → Task Message" : "") : "",
     pickRow(ICF.music, "Message tone", toneName(S.nt.tone), ()=>openTonePicker({title:"Message tone", value:S.nt.tone, onPick:v=>{ S.nt.tone=v; saveNt(); render(); }}), "Private chats"),
     pickRow(ICF.music, "Group tone", toneName(S.nt.groupTone), ()=>openTonePicker({title:"Group tone", value:S.nt.groupTone, onPick:v=>{ S.nt.groupTone=v; saveNt(); render(); }}), "Groups and task conversations"),
-    row(ICF.speaker, "In-app sounds", toggle("inAppSound", true), "Play the tone while Concept is open"),
+    row(ICF.speaker, "In-app sounds", toggle("inAppSound", true), "Play the tone while Task Message is open"),
     row(ICF.banner, "In-app banners", toggle("inAppBanner", true)),
     row(ICF.vib, "Vibrate", toggle("vibrate", true)),
     nMuted||nCustom? pickRow(ICF.bellx, "Muted & custom chats", (nMuted? nMuted+" muted":"")+(nMuted&&nCustom?" · ":"")+(nCustom? nCustom+" custom":""), resetNotif, "Tap to reset all") : ""));
@@ -845,8 +845,8 @@ function openCallPicker(mode="keypad"){
       h("div",{class:"kpbar"}, h("span"), h("a",{class:"round go kpcall"+(digits(num).length<3?" off":""), href: digits(num).length>=3? "tel:"+digits(num) : null, "aria-label":"Call", title:"Call", onclick:e=>{ if (digits(num).length<3) { e.preventDefault(); toast("Enter a number first."); return; } logPhoneCall(num); setTimeout(()=>scrim.remove(),200); }}, svg(IC.phone)),
         h("button",{class:"iconbtn kpdel", "aria-label":"Delete digit", title:"Delete", onclick:()=>{ num=num.slice(0,-1); draw(); }}, svg('<path d="M9 5h11v14H9l-6-7z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/>'))))
     : h("div",{class:"picklist tall"}, S.team.filter(id=>id!==S.me).map(id=>{ const ph=(S.teamDocs[id]||{}).phone; return h("div",{class:"pick"}, avatar(id), h("span",{class:"ctx", style:"flex:1"}, h("b",{}, fullName(id).replace(/^Example:\s*/,"")), h("span",{}, ph||"No phone number")),
-      h("button",{class:"ib","aria-label":"Voice call in Concept", title:"Concept voice call", onclick:()=>{ scrim.remove(); callPerson(id,"voice"); }}, svg(IC.phone)),
-      h("button",{class:"ib","aria-label":"Video call in Concept", title:"Concept video call", onclick:()=>{ scrim.remove(); callPerson(id,"video"); }}, svg(IC.video)),
+      h("button",{class:"ib","aria-label":"Voice call in Task Message", title:"Task Message voice call", onclick:()=>{ scrim.remove(); callPerson(id,"voice"); }}, svg(IC.phone)),
+      h("button",{class:"ib","aria-label":"Video call in Task Message", title:"Task Message video call", onclick:()=>{ scrim.remove(); callPerson(id,"video"); }}, svg(IC.video)),
       ph? h("a",{class:"ib cell","aria-label":"Call phone", title:"Call "+ph, href:"tel:"+digits(ph), onclick:()=>{ logPhoneCall(ph); setTimeout(()=>scrim.remove(),200); }}, svg(ICF.cell)) : ""); }));
     scrim.replaceChildren(h("div",{class:"modal callsheet", role:"dialog", "aria-label":"New call"},
       h("div",{class:"sheethead"}, h("div",{class:"segmini wide", role:"tablist"}, h("button",{"aria-pressed":String(tab==="keypad"), onclick:()=>{ tab="keypad"; draw(); }}, svg(ICF.grid), "Keypad"), h("button",{"aria-pressed":String(tab==="contacts"), onclick:()=>{ tab="contacts"; draw(); }}, svg(ICF.all), "Contacts")), h("button",{class:"iconbtn","aria-label":"Close", title:"Close", onclick:()=>scrim.remove()}, svg(IC.x))),
@@ -1001,7 +1001,7 @@ function saveAddr(list){
   const seen=new Set(); const clean=[]; for (const c of list) { const ps=[...new Set((c.p||[]).map(normPhone))].filter(p=>p.replace(/\D/g,"").length>=6); const key=ps.map(phoneKey).join(","); if (!ps.length || seen.has(key)) continue; seen.add(key); clean.push({n:String(c.n||ps[0]).slice(0,60), p:ps}); }
   const merged=[...(S.addr||[])]; for (const c of clean) if (!merged.some(m=>m.p.some(p=>c.p.map(phoneKey).includes(phoneKey(p))))) merged.push(c);
   S.addr=merged.sort((a,b)=>a.n.localeCompare(b.n)); ls.set("addr:"+S.me, S.addr); matchAddr(); render();
-  toast(`${clean.length} contacts · ${S.onConcept.length} on Concept`);
+  toast(`${clean.length} contacts · ${S.onConcept.length} on Task Message`);
 }
 async function importContacts(){
   if (NATIVE && await nativeContacts()) return;
@@ -1034,7 +1034,7 @@ function inviteRow(c){
   const ph=c.p[0];
   return h("div",{class:"contact"}, h("span",{class:"glyph", style:`background:${colorFor(c.n)};width:44px;height:44px;font-size:16px`}, (c.n||"?").trim()[0].toUpperCase()),
     h("span",{class:"ctx"}, h("b",{}, c.n), h("span",{}, ph)),
-    h("a",{class:"invbtn", href:"sms:"+normPhone(ph)+"?&body="+encodeURIComponent("Join me on Concept"), title:"Invite", "aria-label":"Invite "+c.n}, "Invite"));
+    h("a",{class:"invbtn", href:"sms:"+normPhone(ph)+"?&body="+encodeURIComponent("Join me on Task Message"), title:"Invite", "aria-label":"Invite "+c.n}, "Invite"));
 }
 
 // ---------- inline dial pad ----------
@@ -1049,8 +1049,8 @@ function dialMatches(q){
 function dialRow(m){
   return h("div",{class:"drow"}, m.id? avatar(m.id) : h("span",{class:"glyph", style:`background:${colorFor(m.n)};width:32px;height:32px;font-size:13px`}, (m.n||"?")[0].toUpperCase()),
     h("span",{class:"ctx"}, h("b",{}, m.n), h("span",{}, m.ph||"")),
-    m.id && S.canWrite? h("button",{class:"ib", title:"Concept voice call", "aria-label":"Voice call "+m.n, onclick:()=>callPerson(m.id,"voice")}, svg(IC.phone)) : "",
-    m.id && S.canWrite? h("button",{class:"ib", title:"Concept video call", "aria-label":"Video call "+m.n, onclick:()=>callPerson(m.id,"video")}, svg(IC.video)) : "",
+    m.id && S.canWrite? h("button",{class:"ib", title:"Task Message voice call", "aria-label":"Voice call "+m.n, onclick:()=>callPerson(m.id,"voice")}, svg(IC.phone)) : "",
+    m.id && S.canWrite? h("button",{class:"ib", title:"Task Message video call", "aria-label":"Video call "+m.n, onclick:()=>callPerson(m.id,"video")}, svg(IC.video)) : "",
     m.ph? h("a",{class:"ib cell", title:"Call "+m.ph, "aria-label":"Call phone "+m.n, href:"tel:"+digits(m.ph), onclick:()=>logPhoneCall(m.ph)}, svg(ICF.cell)) : "");
 }
 function refreshDial(){
@@ -1138,7 +1138,7 @@ function forwardMenu(msgs){
       h("div",{class:"flist"},
         freq.length? [h("div",{class:"seg-label"},"Frequently contacted"), ...freq.map(chanRow)] : "",
         recent.length? [h("div",{class:"seg-label"},"Recent chats"), ...recent.filter(c=>!freq.includes(c)).map(chanRow)] : "",
-        people.length? [h("div",{class:"seg-label"},"Contacts on Concept"), ...people.map(id=>row({type:"person",id}, avatar(id,"lg"), nameOf(id).replace(/^Example:\s*/,""), (S.teamDocs[id]||{}).about||""))] : "",
+        people.length? [h("div",{class:"seg-label"},"Contacts on Task Message"), ...people.map(id=>row({type:"person",id}, avatar(id,"lg"), nameOf(id).replace(/^Example:\s*/,""), (S.teamDocs[id]||{}).about||""))] : "",
         !recent.length && !people.length? h("p",{class:"note center"},"No results") : ""),
       sel.length? h("div",{class:"fbar"}, h("span",{class:"fnames"}, sel.map(labelOf).join(", ")), h("button",{class:"fsend","aria-label":"Send", title:"Send", onclick:send}, svg(IC.send))) : "");
   }
@@ -1347,7 +1347,7 @@ function openLogin(){
       h("div",{class:"obrow"}, h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c))),
         h("input",{class:"obnum", id:"ob-num", type:"tel", inputmode:"tel", autocomplete:"tel-national", placeholder:"Phone number", value:num, oninput:e=>num=e.target.value, onkeydown:e=>{ if (e.key==="Enter") sendCode(); }})),
       err? h("p",{class:"oberr", role:"alert"}, err) : "",
-      h("p",{class:"obterms"}, "By continuing you agree to the ", h("a",{href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, "Terms"), " and ", h("a",{href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, "Privacy Policy"), ". Concept has no tolerance for abusive or objectionable content."),
+      h("p",{class:"obterms"}, "By continuing you agree to the ", h("a",{href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, "Terms"), " and ", h("a",{href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, "Privacy Policy"), ". Task Message has no tolerance for abusive or objectionable content."),
       h("div",{class:"obacts end"}, h("button",{class:"fab obgo"+(busy?" busy":""), "aria-label":"Send code", disabled:busy, onclick:sendCode}, busy? h("span",{class:"spin"}) : svg(IC.arrow)))));
     else o.replaceChildren(h("div",{class:"ob"},
       h("div",{class:"oblogo"}, svg(ICF.lock)),
@@ -1416,6 +1416,7 @@ async function startLive(u){
   else if (u.phone && fmtPhone(u.phone)!==mine.phone) store.update("team/"+S.me, {phone:fmtPhone(u.phone)}).catch(()=>{});
   subscribeAll(); render();
   setTimeout(pushRegister, 1500);
+  setTimeout(backupReminder, 8000);
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch {} clearLocalCopy(); setTimeout(()=>location.reload(), 150); }
 
@@ -1531,7 +1532,9 @@ function ensureMedia(it){
   if (MEDIA_CACHE[k]) return Promise.resolve(MEDIA_CACHE[k]);
   if (MEDIA_P[k]) return MEDIA_P[k];
   return MEDIA_P[k]=(async()=>{
-    const r=await fetch(blobUrl(k)); if (!r.ok) throw new Error("load"); let buf=await r.arrayBuffer();
+    if (S.mode==="live") { const dec=await kvGet(LOCAL.key("fd:"+k)); if (dec) return MEDIA_CACHE[k]=URL.createObjectURL(new Blob([dec], {type:it.mime||"application/octet-stream"})); }
+    let buf=S.mode==="live"? await kvGet(LOCAL.key("f:"+k)) : null;
+    if (!buf) { const r=await fetch(blobUrl(k)); if (!r.ok) throw new Error("load"); buf=await r.arrayBuffer(); if (S.mode==="live") kvSet(LOCAL.key("f:"+k), buf); }
     if (it.k) { const key=await crypto.subtle.importKey("raw", b64d(it.k), {name:"AES-GCM"}, false, ["decrypt"]); buf=await crypto.subtle.decrypt({name:"AES-GCM", iv:b64d(it.iv)}, key, buf); }
     return MEDIA_CACHE[k]=URL.createObjectURL(new Blob([buf], {type:it.mime||"application/octet-stream"}));
   })().catch(e=>{ delete MEDIA_P[k]; throw e; });
@@ -1698,7 +1701,7 @@ function renderContactCard(p){
   return h("div",{class:"ccard", onclick:e=>e.stopPropagation()},
     h("div",{class:"cchead"}, uid && S.people[uid]? avatar(uid,"lg") : h("span",{class:"glyph", style:`background:${colorFor(p.n||ph)};width:44px;height:44px;font-size:16px`}, (p.n||"?").trim()[0].toUpperCase()), h("div",{class:"ccx"}, h("b",{}, p.n||ph), h("span",{}, ph))),
     h("div",{class:"ccacts"},
-      uid? h("button",{onclick:async()=>{ const id=await ensureDM(uid); if (id) selectChannel(id); }}, "Message") : ph? h("a",{href:"sms:"+normPhone(ph)+"?&body="+encodeURIComponent("Join me on Concept")}, "Invite") : "",
+      uid? h("button",{onclick:async()=>{ const id=await ensureDM(uid); if (id) selectChannel(id); }}, "Message") : ph? h("a",{href:"sms:"+normPhone(ph)+"?&body="+encodeURIComponent("Join me on Task Message")}, "Invite") : "",
       uid && !S.contacts.includes(uid)? h("button",{onclick:()=>setContact(uid,true)}, "Save") : ph? h("a",{href:"tel:"+normPhone(ph)}, "Call") : ""));
 }
 function openContactPicker(){
@@ -1712,7 +1715,7 @@ function openContactPicker(){
     o.replaceChildren(
       h("header",{class:"fhead"}, h("button",{class:"iconbtn","aria-label":"Close", title:"Close", onclick:()=>o.remove()}, svg(IC.back)), h("input",{id:"cp-q", class:"fsearch", placeholder:"Search contacts", value:q, oninput:e=>{ q=e.target.value; draw(); const n=$("#cp-q"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }})),
       h("div",{class:"flist"},
-        onC.length? [h("div",{class:"seg-label"},"On Concept"), ...onC.map(id=>h("button",{class:"frow", onclick:()=>send({n:nameOf(id).replace(/^Example:\s*/,""), p:[(S.teamDocs[id]||{}).phone].filter(Boolean), uid:id})}, h("span",{class:"cav"}, avatar(id,"lg")), h("span",{class:"ctx"}, h("b",{}, nameOf(id).replace(/^Example:\s*/,"")), h("span",{}, (S.teamDocs[id]||{}).phone||""))))] : "",
+        onC.length? [h("div",{class:"seg-label"},"On Task Message"), ...onC.map(id=>h("button",{class:"frow", onclick:()=>send({n:nameOf(id).replace(/^Example:\s*/,""), p:[(S.teamDocs[id]||{}).phone].filter(Boolean), uid:id})}, h("span",{class:"cav"}, avatar(id,"lg")), h("span",{class:"ctx"}, h("b",{}, nameOf(id).replace(/^Example:\s*/,"")), h("span",{}, (S.teamDocs[id]||{}).phone||""))))] : "",
         book.length? [h("div",{class:"seg-label"},"Phone contacts"), ...book.map(c=>h("button",{class:"frow", onclick:()=>send({n:c.n, p:c.p})}, h("span",{class:"glyph", style:`background:${colorFor(c.n)};width:44px;height:44px;font-size:16px`}, (c.n||"?")[0].toUpperCase()), h("span",{class:"ctx"}, h("b",{}, c.n), h("span",{}, c.p[0]))))] : "",
         !onC.length && !book.length? h("div",{class:"flowempty"}, h("p",{}, ql? "No results" : "No contacts yet"), ql? "" : h("button",{class:"ghost", onclick:()=>{ o.remove(); importContacts(); }}, svg(ICF.book), "Import phone contacts")) : ""));
   };
@@ -1911,7 +1914,7 @@ const dgt = s => String(s||"").replace(/\D/g,"");
 function toE164(raw, cc){ const t=String(raw||"").trim(); if (!t) return ""; if (t.startsWith("+")) return "+"+dgt(t); if (t.startsWith("00")) return "+"+dgt(t).slice(2); const d=dgt(t); if (!d) return ""; const c=dgt(cc||"+1"); return "+"+(c==="1" && d.length===11 && d[0]==="1"? d : c+d.replace(/^0+/,"")); }
 function userByPhone(e164){ const d=dgt(e164); if (d.length<7) return null; for (const [id,doc] of Object.entries(S.teamDocs)) { const p=dgt(doc.phone); if (p && (p===d || (p.length>=10 && d.length>=10 && p.slice(-10)===d.slice(-10) && p.length===d.length))) return id; } return null; }
 const myName = () => ((S.teamDocs[S.me]||{}).name || (S.people[S.me]||{}).name || "A friend").replace(/^Example:\s*/,"");
-function inviteText(teamName){ const link=siteLink("").replace(/\/$/,"") || location.origin; return `${myName()} invited you to the team “${teamName}” on Concept. Sign up with this phone number to join: ${link}`; }
+function inviteText(teamName){ const link=siteLink("").replace(/\/$/,"") || location.origin; return `${myName()} invited you to the team “${teamName}” on Task Message. Sign up with this phone number to join: ${link}`; }
 function smsHref(phone, body){ const ios=/iP(hone|ad|od)/.test(navigator.userAgent) || PLAT==="ios"; return "sms:"+phone+(ios? "&" : "?")+"body="+encodeURIComponent(body); }
 function openSms(phone, body){ const a=h("a",{href:smsHref(phone, body), style:"display:none"}); document.body.append(a); a.click(); a.remove(); }
 const pendingInvites = tm => (S.invites||[]).filter(v=>v.team===tm.id && !v.status);
@@ -1947,9 +1950,9 @@ function openAddMembers(){
         h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c))),
         h("input",{class:"inp", id:"inv-num", type:"tel", inputmode:"tel", autocomplete:"tel", placeholder:"Phone number", value:num, oninput:e=>{ num=e.target.value; const b=$("#inv-go"); if (b) b.disabled=dgt(num).length<6; }, onkeydown:e=>{ if (e.key==="Enter") go(); }}),
         h("button",{class:"roundgo", id:"inv-go", "aria-label":"Invite", title:"Invite", disabled:dgt(num).length<6, onclick:go}, svg(IC.send))),
-      h("p",{class:"note", style:"margin:-4px 4px 0"}, "If they're on Concept they're added right away. If not, they get a text, and they join when they sign up with that number."),
+      h("p",{class:"note", style:"margin:-4px 4px 0"}, "If they're on Task Message they're added right away. If not, they get a text, and they join when they sign up with that number."),
       (cands.length || addr.length || q)? h("label",{class:"search"}, svg(IC.search), h("input",{id:"inv-q", placeholder:"Search people", value:q, oninput:e=>{ q=e.target.value.toLowerCase(); draw(); const n=$("#inv-q"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }})) : "",
-      cands.length? [h("div",{class:"seg-label"}, "On Concept"), h("div",{class:"picklist"}, cands.map(id=>h("button",{class:"pick contact","aria-pressed":String(sel.has(id)), onclick:()=>{ sel.has(id)?sel.delete(id):sel.add(id); draw(); }}, h("span",{class:"cav"}, avatar(id), sel.has(id)? h("span",{class:"tick"}, svg(ICF.check)):""), fullName(id).replace(/^Example:\s*/,""))))] : "",
+      cands.length? [h("div",{class:"seg-label"}, "On Task Message"), h("div",{class:"picklist"}, cands.map(id=>h("button",{class:"pick contact","aria-pressed":String(sel.has(id)), onclick:()=>{ sel.has(id)?sel.delete(id):sel.add(id); draw(); }}, h("span",{class:"cav"}, avatar(id), sel.has(id)? h("span",{class:"tick"}, svg(ICF.check)):""), fullName(id).replace(/^Example:\s*/,""))))] : "",
       sel.size? h("button",{class:"primary wide", onclick:async()=>{ const ids=[...sel]; close(); await guarded(store.update("teams/"+tm.id, {members:[...new Set([...(tm.members||[]), ...ids])]})); toast(ids.length===1? "Added to the team" : ids.length+" people added"); }}, "Add "+sel.size) : "",
       addr.length? [h("div",{class:"seg-label"}, "From your phone contacts"), h("div",{class:"ulist sgroup"}, addr.map(c=>h("button",{class:"srow pick1", onclick:async()=>{ await inviteByPhone(tm, c.p[0], cc, c.n); draw(); }}, h("span",{class:"stx"}, h("b",{}, c.n||c.p[0]), h("span",{}, c.p[0])), h("span",{class:"invtag"}, "Invite"))))] : "",
     ];
@@ -2009,16 +2012,136 @@ function localMessages(cid){
     if (!E2E.ready) await initPromise();
     await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
     if (S.msgsFor!==cid) return;
-    if (S.msgCache[cid]) { // server copy already here: only add older messages the server no longer has
-      const first=(S.msgCache[cid][0]||{}).at||Infinity; const ids=new Set(S.msgCache[cid].map(m=>m.id));
-      const older=rows.filter(m=>m.at<first && !ids.has(m.id)); LOCAL.older[cid]=older;
-      if (older.length) { S.msgs=[...older, ...S.msgCache[cid]]; scheduleRender(); }
-      return;
+    if (S.msgCache[cid]) { // server copy already here: add what only this device still has
+      LOCAL.older[cid]=rows; S.msgs=mergeById(rows, S.msgCache[cid]); scheduleRender(); return;
     }
     LOCAL.older[cid]=rows; S.msgs=rows; scheduleRender();
   });
 }
 function clearLocalCopy(){ try { indexedDB.deleteDatabase("concept"); } catch {} }
+
+// ===================== WhatsApp-style storage: every chat is downloaded to this device =====================
+// The server only holds messages until everyone in the chat has them on their device (or for 30 days).
+const mergeById = (a, b) => { const m=new Map(); for (const x of a||[]) m.set(x.id, x); for (const x of b||[]) m.set(x.id, {...(m.get(x.id)||{}), ...x}); return [...m.values()].sort((x,y)=>(x.at||0)-(y.at||0)); };
+let SYNCING=false, SYNC_AGAIN=false, SYNC_T=0;
+function syncSoon(){ clearTimeout(SYNC_T); SYNC_T=setTimeout(syncAll, 1200); }
+async function syncAll(){
+  if (S.mode!=="live" || !SB || !S.me) return;
+  if (SYNCING) { SYNC_AGAIN=true; return; } SYNCING=true;
+  try {
+    const meta=(await LOCAL.load("syncmeta"))||{};
+    for (const c of [...S.channels]) {
+      const top=(c.last&&c.last.at)||0; if (!top || (meta[c.id]||0)>=top) continue;
+      let q=SB.from("docs").select("path,data").eq("col","channels/"+c.id+"/messages").order("updated_at",{ascending:true}).limit(1000);
+      if (meta[c.id]) q=q.gte("updated_at", new Date(meta[c.id]-10*60e3).toISOString());
+      const {data, error}=await q; if (error) continue;
+      const rows=(data||[]).map(r=>({id:r.path.split("/").pop(), ...r.data}));
+      if (!E2E.ready) await initPromise();
+      await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
+      const merged=mergeById((await LOCAL.load("m:"+c.id))||[], rows).slice(-5000);
+      await kvSet(LOCAL.key("m:"+c.id), merged);
+      for (const r of rows) { try { await saveAttachments(r); } catch {} }
+      meta[c.id]=top; await kvSet(LOCAL.key("syncmeta"), meta);
+      if ((c["s_"+S.me]||0) < top) queueAck(c.id, {["s_"+S.me]: top});
+      LOCAL.older[c.id]=merged;
+    }
+  } catch {} finally { SYNCING=false; if (SYNC_AGAIN) { SYNC_AGAIN=false; syncSoon(); } }
+}
+async function saveAttachments(r){
+  if (r.deleted) return;
+  if (r.kind==="voice" && r.voice && r.voice.id && r.voice.parts) {
+    const k=LOCAL.key("v:"+r.voice.id); if (await kvGet(k)) return;
+    let b64=""; for (let i=0;i<r.voice.parts;i++){ const p=await store.get(`voice/${r.voice.id}/parts/${i}`); if (!p) return; b64+=p.d; }
+    await kvSet(k, b64);
+  }
+  if (r.kind==="media") { const p=plainP(r); for (const it of (p&&p.items)||[]) { if (!it.path || (it.size||0)>60e6) continue; const k=LOCAL.key("f:"+it.path); if (await kvGet(k)) continue; const res=await fetch(blobUrl(it.path)); if (res.ok) await kvSet(k, await res.arrayBuffer()); } }
+}
+
+// ===================== chat backup to iCloud Drive / Google Drive =====================
+const BK_MAGIC="CNCPT1";
+async function bkKey(pw, salt){ const base=await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]); return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:250000, hash:"SHA-256"}, base, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]); }
+async function gz(bytes, dir){ if (!window.CompressionStream) return bytes; const s=new Blob([bytes]).stream().pipeThrough(dir==="d"? new DecompressionStream("gzip") : new CompressionStream("gzip")); return new Uint8Array(await new Response(s).arrayBuffer()); }
+const b64Of = buf => { const u=new Uint8Array(buf); let s=""; for (let i=0;i<u.length;i+=32768) s+=String.fromCharCode(...u.subarray(i,i+32768)); return btoa(s); };
+async function buildBackup(pw, withMedia, onp){
+  const out={v:1, app:"concept", at:now(), me:S.me, chats:[], msgs:{}, voice:{}, files:{}};
+  const chans=S.channels.filter(c=>!(S.nt.cleared||{})[c.id] || ((c.last&&c.last.at)||0)>(S.nt.cleared||{})[c.id]);
+  let i=0;
+  for (const c of chans) {
+    onp && onp(`Chats ${++i}/${chans.length}`);
+    out.chats.push({id:c.id, kind:c.kind, title:chanTitle(c), members:c.members||[]});
+    const rows=mergeById((await LOCAL.load("m:"+c.id))||[], S.msgCache[c.id]||[]);
+    await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
+    const list=[];
+    for (const m of rows) {
+      const r={...m}; const t=plain(m); delete r.enc; delete r.penc; delete r.pending;
+      if (t===null || t===false) { if (m.enc) continue; } else r.text=t;
+      if (m.penc) { const p=plainP(m); if (!p) continue; r.payload=p; }
+      if (m.kind==="voice" && m.voice) { try { const url=await voiceUrl(m.voice, m.enc); const buf=await (await fetch(url)).arrayBuffer(); out.voice[m.voice.id]=b64Of(buf); r.voice={...m.voice, eiv:""}; } catch {} }
+      if (withMedia && m.kind==="media" && r.payload) { for (const it of r.payload.items||[]) { if (!it.path || out.files[it.path]) continue; try { const u=await ensureMedia(it); out.files[it.path]=b64Of(await (await fetch(u)).arrayBuffer()); } catch {} } }
+      list.push(r);
+    }
+    out.msgs[c.id]=list;
+  }
+  onp && onp("Locking your backup…");
+  const raw=await gz(new TextEncoder().encode(JSON.stringify(out)));
+  const salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, await bkKey(pw, salt), raw));
+  const file=new Uint8Array(6+16+12+ct.length); file.set(new TextEncoder().encode(BK_MAGIC),0); file.set(salt,6); file.set(iv,22); file.set(ct,34);
+  const d=new Date(); const name=`TaskMessage-backup-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}.taskmessage`;
+  return {file:new File([file], name, {type:"application/octet-stream"}), count:Object.values(out.msgs).reduce((a,l)=>a+l.length,0)};
+}
+async function readBackup(f, pw){
+  const u=new Uint8Array(await f.arrayBuffer());
+  if (new TextDecoder().decode(u.slice(0,6))!==BK_MAGIC) throw new Error("notbackup");
+  let raw; try { raw=await crypto.subtle.decrypt({name:"AES-GCM", iv:u.slice(22,34)}, await bkKey(pw, u.slice(6,22)), u.slice(34)); } catch { throw new Error("password"); }
+  return JSON.parse(new TextDecoder().decode(await gz(new Uint8Array(raw), "d")));
+}
+async function restoreBackup(data){
+  let n=0;
+  for (const [cid, list] of Object.entries(data.msgs||{})) { const merged=mergeById(list, (await LOCAL.load("m:"+cid))||[]); await kvSet(LOCAL.key("m:"+cid), merged.slice(-5000)); LOCAL.older[cid]=merged; n+=list.length; }
+  for (const [vid, b64] of Object.entries(data.voice||{})) await kvSet(LOCAL.key("vd:"+vid), b64);
+  for (const [path, b64] of Object.entries(data.files||{})) { const bin=atob(b64), u=new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); await kvSet(LOCAL.key("fd:"+path), u.buffer); }
+  S.msgsFor=null; openMsgs(); render(true);
+  return n;
+}
+function openBackup(){
+  const bk=S.prefs.backup||{};
+  let busy="", ready=null;
+  const close=sheet("Chat backup", (draw)=>{
+    const last=bk.last? new Date(bk.last).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : "Never";
+    return [
+      h("p",{class:"note", style:"margin:0"}, "Back up your chats to iCloud Drive or Google Drive. Messages are kept on your phone, so a backup is how you bring them to a new phone. The backup is locked with a password only you know."),
+      h("div",{class:"ulist sgroup"},
+        h("div",{class:"srow"}, h("span",{class:"sic"}, svg(CLOCK)), h("span",{class:"stx"}, h("b",{}, "Last backup")), h("span",{class:"sval"}, last)),
+        h("div",{class:"srow"}, h("span",{class:"sic"}, svg(ICF.image)), h("span",{class:"stx"}, h("b",{}, "Include photos and videos")), h("button",{class:"switch"+(bk.media!==false?" on":""), role:"switch", "aria-checked":String(bk.media!==false), onclick:()=>{ bk.media=bk.media===false; setPref("backup", {...bk}); draw(); }}, h("i"))),
+        h("div",{class:"srow col"}, h("span",{class:"sic"}, svg(ICF.cal)), h("span",{class:"stx"}, h("b",{}, "Backup reminder")),
+          h("div",{class:"segmini wide", role:"group", "aria-label":"Backup reminder"}, [["off","Off"],["day","Daily"],["week","Weekly"],["month","Monthly"]].map(([v,l])=>h("button",{"aria-pressed":String((bk.freq||"week")===v), onclick:()=>{ bk.freq=v; setPref("backup", {...bk}); draw(); }}, l))))),
+      busy? h("div",{class:"bkbusy"}, h("span",{class:"spin dark"}), busy) :
+      ready? h("button",{class:"primary wide", onclick:async()=>{ const f=ready.file; try { if (navigator.canShare && navigator.canShare({files:[f]})) await navigator.share({files:[f], title:"Task Message backup"}); else { const a=h("a",{href:URL.createObjectURL(f), download:f.name}); document.body.append(a); a.click(); a.remove(); } bk.last=now(); setPref("backup", {...bk}); ready=null; toast("Backup saved"); draw(); } catch (e) { if (e && e.name==="AbortError") return; toast("Couldn't save the backup."); } }}, svg(IC.send), "Save to iCloud Drive / Google Drive") :
+      h("button",{class:"primary wide", onclick:()=>askPassword(true, async pw=>{ busy="Preparing…"; draw(); try { ready=await buildBackup(pw, bk.media!==false, t=>{ busy=t; draw(); }); busy=""; draw(); toast(ready.count+" messages ready to save"); } catch { busy=""; draw(); toast("Couldn't make the backup."); } })}, svg(ICF.lock), "Back up now"),
+      ready? h("p",{class:"note", style:"margin:-4px 4px 0"}, PLAT==="android"? "Tap the button, then choose Drive." : "Tap the button, then Save to Files → iCloud Drive.") : "",
+      h("button",{class:"ghost", style:"align-self:center", onclick:()=>{
+        const inp=h("input",{type:"file", style:"position:fixed;left:-9999px;opacity:0", onchange:e=>{ const f=e.target.files&&e.target.files[0]; inp.remove(); if (!f) return;
+          askPassword(false, async pw=>{ busy="Restoring…"; draw(); try { const data=await readBackup(f, pw); const n=await restoreBackup(data); busy=""; draw(); toast(n+" messages restored"); } catch (err) { busy=""; draw(); toast(err && err.message==="password"? "Wrong password." : err && err.message==="notbackup"? "That isn't a Task Message backup file." : "Couldn't restore that backup."); } }); }});
+        document.body.append(inp); inp.click(); }}, svg(IC.arrow), "Restore from a backup")
+    ];
+  });
+}
+function askPassword(isNew, done){
+  let a="", b="";
+  sheet(isNew? "Backup password" : "Enter backup password", (draw, close)=>[
+    h("p",{class:"note", style:"margin:0"}, isNew? "Choose a password for this backup. You'll need it to restore — we can't recover it for you." : "Type the password you used when you made the backup."),
+    h("input",{class:"inp", id:"bk-p1", type:"password", autocomplete:isNew?"new-password":"current-password", placeholder:"Password (at least 6 characters)", oninput:e=>a=e.target.value}),
+    isNew? h("input",{class:"inp", id:"bk-p2", type:"password", autocomplete:"new-password", placeholder:"Type it again", oninput:e=>b=e.target.value}) : "",
+    h("button",{class:"primary wide", onclick:()=>{ if (a.length<6) { toast("Use at least 6 characters."); return; } if (isNew && a!==b) { toast("The passwords don't match."); return; } close(); done(a); }}, "Continue")]);
+  setTimeout(()=>{ const i=$("#bk-p1"); if (i) i.focus(); }, 60);
+}
+function backupReminder(){
+  const bk=S.prefs.backup||{}; const f=bk.freq||"week"; if (f==="off" || S.mode!=="live") return;
+  const span={day:864e5, week:7*864e5, month:30*864e5}[f]; if (bk.last && now()-bk.last<span) return;
+  if (!S.channels.some(c=>c.last)) return;
+  toast(bk.last? "Time to back up your chats" : "Back up your chats to iCloud or Google Drive", {label:"Back up", fn:openBackup});
+}
 
 // ===================== keep pop-up menus inside the screen =====================
 function fitMenu(m){
@@ -2323,7 +2446,7 @@ function listChildren(){
 function renderThread(){
   const c = S.channels.find(x=>x.id===S.active);
   const wrap = h("section",{class:"main chatmain","aria-label":"Conversation", "data-cid":String(S.active||"")});
-  if (!c) { wrap.append(h("div",{class:"empty"}, S.mode==="loading"? h("p",{},"Loading your team…") : [h("svg",{viewBox:"0 0 60 60",width:"60",height:"60",html:'<rect x="4" y="10" width="40" height="28" rx="14" fill="var(--bubble)"/><rect x="18" y="26" width="38" height="24" rx="12" fill="var(--cobalt)"/><path d="M29 38l4 4 9-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'}), h("h2",{},"Concept")])); return wrap; }
+  if (!c) { wrap.append(h("div",{class:"empty"}, S.mode==="loading"? h("p",{},"Loading your team…") : [h("svg",{viewBox:"0 0 60 60",width:"60",height:"60",html:'<rect x="4" y="10" width="40" height="28" rx="14" fill="var(--bubble)"/><rect x="18" y="26" width="38" height="24" rx="12" fill="var(--cobalt)"/><path d="M29 38l4 4 9-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'}), h("h2",{},"Task Message")])); return wrap; }
   const memberCount = (c.members||[]).length;
   const openTasks = visibleTasks().filter(t=>t.channel===c.id && t.status!=="done").length;
   if (S.selecting) wrap.append(h("header",{class:"thead selhead"},
@@ -2564,7 +2687,7 @@ function peoplePicker(title, candidates, onDone, opts={}){
     h("h3",{},title),
     opts.askName? h("input",{class:"inp", id:"pp-name", placeholder:"Team name", value:name, oninput:e=>name=e.target.value}) : "",
     candidates.length? h("div",{class:"picklist"}, candidates.map(id=>h("button",{class:"pick contact","aria-pressed":String(sel.has(id)), onclick:()=>{ sel.has(id)?sel.delete(id):sel.add(id); draw(); }}, h("span",{class:"cav"}, avatar(id), sel.has(id)? h("span",{class:"tick"}, svg(ICF.check)):""), fullName(id).replace(/^Example:\s*/,""))))
-      : h("p",{class:"note",style:"margin:0"},"Everyone on Concept is already here. Share Concept from the Share menu to invite more people."),
+      : h("p",{class:"note",style:"margin:0"},"Everyone on Task Message is already here. Share Task Message from the Share menu to invite more people."),
     h("div",{class:"modalacts"}, h("button",{class:"iconbtn","aria-label":"Cancel", title:"Cancel", onclick:()=>scrim.remove()}, svg(IC.x)), h("button",{class:"roundgo","aria-label":"Done", title:"Done", onclick:()=>{ if (opts.askName && !name.trim()) { toast("Give the team a name."); return; } scrim.remove(); onDone([...sel], name.trim()); }}, svg(ICF.check)))));
     const n=$("#pp-name"); if (n && document.activeElement!==n && opts.askName && !name) n.focus(); };
   draw(); document.body.append(scrim);
@@ -2655,9 +2778,9 @@ function renderFlow(){
     const go=id=>()=>{ S.newFlow=null; createChannel("", [S.me,id], "dm"); };
     const invites=(S.addr||[]).filter(c=>!c.on && (!q || c.n.toLowerCase().includes(q) || c.p.some(p=>p.includes(q)))).slice(0,80);
     if (!match.length && !invites.length) list.append(empty());
-    if (saved.length) list.append(h("div",{class:"seg-label"},"Contacts on Concept"), ...saved.map(id=>person(id,{onclick:go(id)})));
-    if (more.length) list.append(h("div",{class:"seg-label"},"Others on Concept"), ...more.map(id=>person(id,{onclick:go(id), add:true})));
-    if (invites.length) list.append(h("div",{class:"seg-label"},"Invite to Concept"), ...invites.map(inviteRow));
+    if (saved.length) list.append(h("div",{class:"seg-label"},"Contacts on Task Message"), ...saved.map(id=>person(id,{onclick:go(id)})));
+    if (more.length) list.append(h("div",{class:"seg-label"},"Others on Task Message"), ...more.map(id=>person(id,{onclick:go(id), add:true})));
+    if (invites.length) list.append(h("div",{class:"seg-label"},"Invite to Task Message"), ...invites.map(inviteRow));
     pane.append(list);
   }
   else if (F.step==="members") {
@@ -2690,6 +2813,6 @@ $("#meAv").addEventListener("click", ()=>openSettings());
 document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S.view=b.dataset.view; ls.set("view",S.view); if (S.view==="chats") S.inThread=false; else S.newFlow=null; if (S.view==="calls") ls.set("callsSeen", now()); if (S.view!=="calls") S.dial.on=false; if (S.view==="board" && S.filter.startsWith("chan:")) {} render(); }));
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
-if (/[?&]test=1/.test(location.search)) window.__concept={demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet};
+if (/[?&]test=1/.test(location.search)) window.__concept={demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById};
 boot();
 })();
