@@ -1758,3 +1758,4 @@ input.iname:focus{outline:none;background:var(--surface)}
 .flow.enter{animation:slide .25s var(--ease) both!important}
 .subgroup{animation:none!important}
 .subgroup.enter{animation:subin .18s var(--ease) both!important}
+.teamwrap{padding-bottom:calc(120px + env(safe-area-inset-bottom,0px))!important}
