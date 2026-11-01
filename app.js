@@ -1480,7 +1480,7 @@ function explainAuthError(e){
   if (/rate limit|too many/i.test(m)) return "Too many tries. Wait a minute and try again.";
   if (/expired|invalid.*(token|otp)|token.*invalid/i.test(m)) return "That code didn't work. Check the test number and code in Supabase (format 12125551234=123456), then try again.";
   if (/twilio|sms|send/i.test(m)) return "The text couldn't be sent: "+m;
-  if (/fetch|network|load failed/i.test(m)) return "Can't reach Supabase. Check the Project URL in config.js and your connection.";
+  if (/fetch|network|load failed/i.test(m)) return "Can't connect to Task Message. Check your internet connection. If this phone has an internet filter or VPN, it may be blocking the app.";
   return m || "Something went wrong. Try again.";
 }
 // Shared layout for the sign-in screens: app icon, title, text, content, one big button at the bottom.
