@@ -1632,3 +1632,30 @@ a.srow>svg.i{color:var(--muted);width:16px;height:16px}
 .inbanner span span,.inbanner .ibx > span{font-size:13.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @keyframes bannerin{from{transform:translate(-50%,-130%)}to{transform:translate(-50%,0)}}
 @keyframes bannerout{to{transform:translate(-50%,-130%);opacity:0}}
+
+/* ===== team invites ===== */
+.invrow{display:flex;gap:8px;align-items:center}
+.invrow .obcc{flex:none;height:40px;border-radius:10px;border:var(--hair,1px) solid var(--sep,var(--rule));background:var(--fill);color:var(--ink);padding:0 8px;font-size:15px}
+.invrow .inp{flex:1;min-width:0;height:40px;font-size:16px}
+.invrow .roundgo{flex:none}
+.invrow .roundgo:disabled{opacity:.35}
+.invtag{margin-left:auto;font-size:13px;font-weight:600;color:var(--cobalt)}
+.sic.gray{background:#8E8E93!important}
+.invpending{margin-top:14px}
+.invcards{display:flex;flex-direction:column;gap:8px;padding:2px 12px 8px}
+.invcard{display:flex;align-items:center;gap:10px;padding:10px 10px 10px 12px;border-radius:14px;background:var(--cobalt-soft)}
+.invcard .glyph{width:40px;height:40px;flex:none;color:#fff;display:grid;place-items:center;border-radius:50%}
+.invcard .glyph svg.i{width:22px;height:22px}
+.invcard .ivx{flex:1;min-width:0;display:flex;flex-direction:column}
+.invcard .ivx b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.invcard .ivx span{font-size:13px;color:var(--muted)}
+.invcard .ivno{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;padding:0;flex:none}
+.invcard .ivyes{height:34px;padding:0 16px;border-radius:17px;flex:none;font-weight:600}
+/* team page header: one tidy row of icons, team switcher underneath */
+.teamwrap > .bhead.toprow{flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:6px!important}
+.teamwrap > .bhead.toprow > .bt{flex:1 1 0;min-width:0;order:1}
+.teamwrap > .bhead.toprow > .iconbtn:first-child{order:0}
+.teamwrap > .bhead.toprow > .grow{display:none}
+.teamwrap > .bhead.toprow > .iconbtn:not(:first-child),.teamwrap > .bhead.toprow > .profbtn{order:2;flex:none}
+.teamwrap > .bhead.toprow > .teamsel{order:3;flex:1 0 100%;width:100%}
+.ntsheet .sheethead .grow,.sheethead .grow{flex:1}

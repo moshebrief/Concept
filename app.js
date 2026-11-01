@@ -48,7 +48,7 @@ const S = {
   people:{}, team:[], channels:[], tasks:[], msgs:[], msgsFor:null,
   view: (v=>v==="updates"||v==="calls"?"chats":v)(ls.get("view","chats")), active: ls.get("active", null), inThread:false,
   openTask:null, draftTask:null, replyTo:null, editing:null, actFor:null, emojiFor:null,
-  statuses:[], calls:[], teamDocs:{}, statusReply:null, teams:[], teamId:ls.get("teamId",null), prefs:ls.get("prefs",{}), pins:[], blocked:[], pushState:"", expanded:ls.get("expanded",{}), pend:[], msgCache:{}, msgLimit:120, vdraft:null, emojiOpen:false, emojiTab:null, dial:{on:false,q:""}, contacts:[], allContacts:{}, keys:{}, addr:[], addrNames:{}, onConcept:[], selecting:false, sel:[], addingStage:false, listMode:ls.get("listMode","chats"), taskView:ls.get("taskView","stage"),
+  statuses:[], calls:[], teamDocs:{}, statusReply:null, teams:[], teamId:ls.get("teamId",null), prefs:ls.get("prefs",{}), pins:[], blocked:[], invites:[], pushState:"", expanded:ls.get("expanded",{}), pend:[], msgCache:{}, msgLimit:120, vdraft:null, emojiOpen:false, emojiTab:null, dial:{on:false,q:""}, contacts:[], allContacts:{}, keys:{}, addr:[], addrNames:{}, onConcept:[], selecting:false, sel:[], addingStage:false, listMode:ls.get("listMode","chats"), taskView:ls.get("taskView","stage"),
   q:"", filter:"all", asTask:false, lastRead: ls.get("lastRead", {}), justTied:null,
   nt: {tone:"note", groupTone:"chime", tones:{}, mute:{}, cleared:{}, unr:[], ...ls.get("nt",{})}
 };
@@ -63,7 +63,7 @@ const store = {
   sub(col, cb){ if (DB) return DB.sub(col, cb); return demo.sub(col, cb); }
 };
 function onDbErr(e){ if (e && (e.code==="revoked")) { S.canWrite=false; render(); } }
-async function guarded(p){ try { return await p; } catch(e){ if (e && e.code==="denied") toast("You don't have access to change that."); else if (e && e.code==="quota_exceeded") toast("Storage is full. Delete some old tasks or messages."); else toast("That didn't save. Check your connection and try again."); throw e; } }
+async function guarded(p){ try { return await p; } catch(e){ if (e && e.code==="denied") toast("You don't have access to change that."); else if (e && e.code==="quota_exceeded") toast("Storage is full. Delete some old tasks or messages."); else toast(e && e.message && !/fetch|network|load failed/i.test(e.message)? "That didn't save: "+String(e.message).slice(0,120) : "That didn't save. Check your connection and try again."); throw e; } }
 
 // sample preview data (only when the live store isn't available)
 const demo = (() => {
@@ -102,7 +102,8 @@ const demo = (() => {
       data["channels/kthread1/messages"]={k1:{by:"noam", text:"Pushed a fix, can you check on your phone?", at:t0+60*26*60000}};
       data.contacts = {me:{ids:["ava","noam","lea"]}, ava:{ids:["me","noam"]}, noam:{ids:["me"]}, lea:{ids:["noam"]}};
       data.status = {s1:{by:"ava", kind:"text", text:"Launch week 🚀", bg:"#7B4DFF", at:now()-1000*60*90, views:[]}, s2:{by:"noam", kind:"text", text:"Heads down on mobile fixes", bg:"#0E8F9C", at:now()-1000*60*30, views:["me"]}};
-      data.teams = {core:{name:"Example team", owner:"me", members:["me","ava","noam","lea"], visibility:"all", at:t0}};
+      data.teams = {core:{name:"Example team", owner:"me", members:["me","ava","noam","lea"], visibility:"all", at:t0}, dz:{name:"Design crew", owner:"lea", members:["lea","ava"], visibility:"all", at:t0}};
+      data.invites = {ivdemo:{phone:"+12125550100", team:"dz", teamName:"Design crew", by:"lea", byName:"Lea", at:now()-36e5}};
       for (const k in data.tasks) data.tasks[k].team="core";
     },
     get(p){ const c=colOf(p), id=p.split("/").pop(); const v=(data[c]||{})[id]; return v? {...v}: null; },
@@ -156,6 +157,7 @@ function subscribeAll(){
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
   store.sub("team", async rows => { S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
+  store.sub("invites", rows => { S.invites=rows; scheduleRender(); });
   store.sub("contacts", async rows => { S.allContacts=Object.fromEntries(rows.map(r=>[r.id, r.ids||[]])); S.contacts=S.allContacts[S.me]||[]; await resolvePeople(Object.keys(S.allContacts)); scheduleRender(); });
   store.sub("channels", async rows => {
     S.channels = rows.filter(c => c.kind!=="dm" || (c.members||[]).includes(S.me)).sort((a,b)=>((b.last&&b.last.at)||b.at||0)-((a.last&&a.last.at)||a.at||0));
@@ -1842,6 +1844,83 @@ function swipeWrap(li, c){
   return row;
 }
 
+// ===================== team invites by phone number =====================
+const dgt = s => String(s||"").replace(/\D/g,"");
+function toE164(raw, cc){ const t=String(raw||"").trim(); if (!t) return ""; if (t.startsWith("+")) return "+"+dgt(t); if (t.startsWith("00")) return "+"+dgt(t).slice(2); const d=dgt(t); if (!d) return ""; const c=dgt(cc||"+1"); return "+"+(c==="1" && d.length===11 && d[0]==="1"? d : c+d.replace(/^0+/,"")); }
+function userByPhone(e164){ const d=dgt(e164); if (d.length<7) return null; for (const [id,doc] of Object.entries(S.teamDocs)) { const p=dgt(doc.phone); if (p && (p===d || (p.length>=10 && d.length>=10 && p.slice(-10)===d.slice(-10) && p.length===d.length))) return id; } return null; }
+const myName = () => ((S.teamDocs[S.me]||{}).name || (S.people[S.me]||{}).name || "A friend").replace(/^Example:\s*/,"");
+function inviteText(teamName){ const link=siteLink("").replace(/\/$/,"") || location.origin; return `${myName()} invited you to the team “${teamName}” on Concept. Sign up with this phone number to join: ${link}`; }
+function smsHref(phone, body){ const ios=/iP(hone|ad|od)/.test(navigator.userAgent) || PLAT==="ios"; return "sms:"+phone+(ios? "&" : "?")+"body="+encodeURIComponent(body); }
+function openSms(phone, body){ const a=h("a",{href:smsHref(phone, body), style:"display:none"}); document.body.append(a); a.click(); a.remove(); }
+const pendingInvites = tm => (S.invites||[]).filter(v=>v.team===tm.id && !v.status);
+const incomingInvites = () => (S.invites||[]).filter(v=>!v.status && v.by!==S.me && !myTeams().some(t=>t.id===v.team));
+
+async function inviteByPhone(tm, raw, cc, label){
+  const phone=toE164(raw, cc);
+  if (dgt(phone).length<8) { toast("That doesn't look like a phone number."); return false; }
+  const uid=userByPhone(phone);
+  if (uid===S.me) { toast("That's your own number."); return false; }
+  if (uid) {
+    if ((tm.members||[]).includes(uid)) { toast(nameOf(uid).replace(/^Example:\s*/,"")+" is already on the team."); return false; }
+    await guarded(store.update("teams/"+tm.id, {members:[...new Set([...(tm.members||[]), uid])]}));
+    toast(nameOf(uid).replace(/^Example:\s*/,"")+" added to the team"); return true;
+  }
+  if (pendingInvites(tm).some(v=>dgt(v.phone)===dgt(phone))) { openSms(phone, inviteText(tm.name)); return true; }
+  const id="iv"+now().toString(36)+uidShort().slice(0,4);
+  await guarded(store.set("invites/"+id, {phone, name:label||"", team:tm.id, teamName:tm.name, by:S.me, byName:myName(), at:now()}));
+  toast("Invite saved. Send the text to let them know.", {label:"Text", fn:()=>openSms(phone, inviteText(tm.name))});
+  openSms(phone, inviteText(tm.name));
+  return true;
+}
+function openAddMembers(){
+  const tm=curTeam(); if (!tm) return;
+  let cc=ls.get("cc","+1"), num="", sel=new Set(), q="";
+  sheet("Add to "+tm.name, (draw, close)=>{
+    const cands=S.team.filter(id=>id!==S.me && !(tm.members||[]).includes(id) && (!q || fullName(id).toLowerCase().includes(q)));
+    const addr=(S.addr||[]).filter(c=>!c.on && c.p && c.p.length && (!q || c.n.toLowerCase().includes(q) || c.p.some(p=>dgt(p).includes(dgt(q)||"~")))).slice(0,40);
+    const go=async()=>{ const ok=await inviteByPhone(tm, num, cc); if (ok) { num=""; draw(); const i=$("#inv-num"); if (i) i.focus(); } };
+    return [
+      h("div",{class:"seg-label"}, "Invite by phone number"),
+      h("div",{class:"invrow"},
+        h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c))),
+        h("input",{class:"inp", id:"inv-num", type:"tel", inputmode:"tel", autocomplete:"tel", placeholder:"Phone number", value:num, oninput:e=>{ num=e.target.value; const b=$("#inv-go"); if (b) b.disabled=dgt(num).length<6; }, onkeydown:e=>{ if (e.key==="Enter") go(); }}),
+        h("button",{class:"roundgo", id:"inv-go", "aria-label":"Invite", title:"Invite", disabled:dgt(num).length<6, onclick:go}, svg(IC.send))),
+      h("p",{class:"note", style:"margin:-4px 4px 0"}, "If they're on Concept they're added right away. If not, they get a text, and they join when they sign up with that number."),
+      (cands.length || addr.length || q)? h("label",{class:"search"}, svg(IC.search), h("input",{id:"inv-q", placeholder:"Search people", value:q, oninput:e=>{ q=e.target.value.toLowerCase(); draw(); const n=$("#inv-q"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }})) : "",
+      cands.length? [h("div",{class:"seg-label"}, "On Concept"), h("div",{class:"picklist"}, cands.map(id=>h("button",{class:"pick contact","aria-pressed":String(sel.has(id)), onclick:()=>{ sel.has(id)?sel.delete(id):sel.add(id); draw(); }}, h("span",{class:"cav"}, avatar(id), sel.has(id)? h("span",{class:"tick"}, svg(ICF.check)):""), fullName(id).replace(/^Example:\s*/,""))))] : "",
+      sel.size? h("button",{class:"primary wide", onclick:async()=>{ const ids=[...sel]; close(); await guarded(store.update("teams/"+tm.id, {members:[...new Set([...(tm.members||[]), ...ids])]})); toast(ids.length===1? "Added to the team" : ids.length+" people added"); }}, "Add "+sel.size) : "",
+      addr.length? [h("div",{class:"seg-label"}, "From your phone contacts"), h("div",{class:"ulist sgroup"}, addr.map(c=>h("button",{class:"srow pick1", onclick:async()=>{ await inviteByPhone(tm, c.p[0], cc, c.n); draw(); }}, h("span",{class:"stx"}, h("b",{}, c.n||c.p[0]), h("span",{}, c.p[0])), h("span",{class:"invtag"}, "Invite"))))] : "",
+    ];
+  });
+  setTimeout(()=>{ const i=$("#inv-num"); if (i) i.focus(); }, 60);
+}
+function invitesSection(tm){
+  const inv=pendingInvites(tm); if (!inv.length) return "";
+  const own=tm.owner===S.me;
+  return h("div",{class:"invpending"}, h("div",{class:"seg-label"}, "Invited · waiting to join"), h("div",{class:"ulist sgroup"}, inv.map(v=>h("div",{class:"srow"},
+    h("span",{class:"sic gray"}, svg(ICF.personplus)),
+    h("span",{class:"stx"}, h("b",{}, v.name || v.phone), h("span",{}, (v.name? v.phone+" · " : "")+"invited "+fmtShort(v.at))),
+    h("button",{class:"iconbtn", title:"Text again", "aria-label":"Text the invite again", onclick:()=>openSms(v.phone, inviteText(tm.name))}, svg(IC.send)),
+    own || v.by===S.me? h("button",{class:"iconbtn", title:"Cancel invite", "aria-label":"Cancel invite", onclick:async()=>{ try { await guarded(store.del("invites/"+v.id)); toast("Invite canceled"); } catch {} }}, svg(IC.x)) : ""))));
+}
+async function answerInvite(v, accept){
+  try {
+    if (SB) { const {error}=await SB.rpc("respond_invite", {p_path:"invites/"+v.id, p_accept:accept}); if (error) throw error; }
+    else { if (accept) { const t=S.teams.find(x=>x.id===v.team); if (t) await store.update("teams/"+v.team, {members:[...new Set([...(t.members||[]), S.me])]}); } await store.update("invites/"+v.id, {status: accept? "accepted" : "declined"}); }
+    if (accept) { S.teamId=v.team; ls.set("teamId", v.team); toast("You joined "+(v.teamName||"the team"), {label:"Open", fn:()=>{ S.view="team"; ls.set("view","team"); render(); }}); }
+    else toast("Invite declined");
+    S.invites=(S.invites||[]).map(x=>x.id===v.id? {...x, status: accept? "accepted":"declined"} : x); render(true);
+  } catch (e) { toast("Couldn't answer the invite. Try again."); }
+}
+function inviteCards(){
+  const inc=incomingInvites(); if (!inc.length) return "";
+  return h("div",{class:"invcards"}, inc.map(v=>h("div",{class:"invcard"},
+    h("span",{class:"glyph", style:"background:var(--cobalt)"}, svg(ICF.all)),
+    h("span",{class:"ivx"}, h("b",{}, v.teamName||"A team"), h("span",{}, (v.byName||"Someone")+" invited you to join")),
+    h("button",{class:"ghost ivno", "aria-label":"Decline", title:"Decline", onclick:()=>answerInvite(v,false)}, svg(IC.x)),
+    h("button",{class:"primary ivyes", onclick:()=>answerInvite(v,true)}, "Join"))));
+}
+
 // ===================== native app (iPhone / Android) =====================
 const CAP = window.Capacitor;
 const NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
@@ -2007,6 +2086,7 @@ function renderLines(){
   return h("section",{class:"lines","aria-label":"Conversations"}, fab,
     h("div",{class:"lines-head toprow"}, h("h1",{class:"h1"},"Chats"), h("span",{class:"grow"}), profBtn()),
     h("label",{class:"search"}, svg(IC.search), h("input",{id:"q", placeholder:"Search", value:S.q, oninput:e=>{S.q=e.target.value; patchList(); updateTypingUI(); }})),
+    inviteCards(),
     h("div",{class:"list", id:"list"}, ...listChildren()));
 }
 function listChildren(){
@@ -2292,8 +2372,8 @@ function renderTeam(){
         tm.owner===S.me && id!==S.me? h("button",{class:"ib danger", title:"Remove from team", "aria-label":"Remove from team", onclick:()=>removeMember(id)}, svg(IC.x)):"")
     ));
   }
-  w.append(g);
-  if (S.canWrite && tm.owner===S.me) w.append(h("button",{class:"fab vfab", "aria-label":"Add people to the team", title:"Add people", onclick:openAddMembers}, svg(ICF.personplus)));
+  w.append(g, invitesSection(tm));
+  if (S.canWrite && (tm.members||[]).includes(S.me)) w.append(h("button",{class:"fab vfab", "aria-label":"Add people to the team", title:"Add people", onclick:openAddMembers}, svg(ICF.personplus)));
   return w;
 }
 function peoplePicker(title, candidates, onDone, opts={}){
@@ -2309,7 +2389,6 @@ function peoplePicker(title, candidates, onDone, opts={}){
   draw(); document.body.append(scrim);
 }
 function openTeamCreate(){ peoplePicker("New team", S.team.filter(id=>id!==S.me), async (ids, name)=>{ const id="tm"+now().toString(36)+uidShort().slice(0,3); await guarded(store.set("teams/"+id, {name, owner:S.me, members:[S.me, ...ids], visibility:"all", at:now()})); S.teamId=id; ls.set("teamId",id); toast("Team created"); render(); }, {askName:true}); }
-function openAddMembers(){ const tm=curTeam(); peoplePicker("Add to "+tm.name, S.team.filter(id=>!(tm.members||[]).includes(id)), async ids=>{ if (!ids.length) return; await guarded(store.update("teams/"+tm.id, {members:[...new Set([...(tm.members||[]), ...ids])]})); toast(ids.length===1? "Added to the team" : ids.length+" people added"); }); }
 async function removeMember(id){ const tm=curTeam(); await guarded(store.update("teams/"+tm.id, {members:(tm.members||[]).filter(x=>x!==id)})); toast(nameOf(id).replace(/^Example:\s*/,"")+" removed"); }
 function openTeamSettings(){
   const tm=curTeam(); let name=tm.name, vis=tm.visibility||"all";
