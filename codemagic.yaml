@@ -43,7 +43,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - YOUR_EMAIL
+          - moshebriefme@gmail.com
         notify:
           success: true
           failure: true
@@ -89,7 +89,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - YOUR_EMAIL
+          - moshebriefme@gmail.com
         notify:
           success: true
           failure: true
