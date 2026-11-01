@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "191897052367",
+    "project_id": "task-message-ccca5",
+    "storage_bucket": "task-message-ccca5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:191897052367:android:f0017e0c1d0df030d7c3ba",
+        "android_client_info": {
+          "package_name": "com.moshebrief.taskmessage"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdnySvbzyE5xao5o6xaHwG5AjuuPFkBP4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
