@@ -373,7 +373,7 @@ async function sendVoice(blob, dur, peaks, target, vextra={}, caption=""){
     if (E2E.ready) { const sealed=await seal(caption||"", chv.members||[S.me]); venv=sealed.env; const iv=crypto.getRandomValues(new Uint8Array(12)); eiv=b64e(iv); b64=b64e(await crypto.subtle.encrypt({name:"AES-GCM",iv}, sealed.mk, await blob.arrayBuffer())); }
     else b64=await blobToB64(blob);
     const parts=Math.ceil(b64.length/CHUNK);
-    for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK)}));
+    for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me}));
     const msg={by:S.me, text: venv? "" : caption, at:now(), kind:"voice", voice:{id:vid, parts, mime:blob.type||"audio/webm", dur:Math.round(dur*10)/10, peaks, eiv}, ...vextra}; if (venv) msg.enc=venv;
     if (S.replyTo && !target) { msg.replyTo=S.replyTo; S.replyTo=null; }
     msg.at=S.pend.find(p=>p.id===mid)?.at||msg.at;
@@ -1231,7 +1231,7 @@ function addTaskPhotos(){
 async function storeTaskVoice(blob, dur, peaks){
   if (blob.size>3.5*1024*1024) { toast("That recording is too long."); return; }
   const set=taskFilesSetter(); const vid="v"+now().toString(36)+uidShort().slice(0,4);
-  try { const b64=await blobToB64(blob); const parts=Math.ceil(b64.length/CHUNK); for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK)}));
+  try { const b64=await blobToB64(blob); const parts=Math.ceil(b64.length/CHUNK); for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me}));
     VOICE_URLS[vid]=URL.createObjectURL(blob);
     set([...((S.draftTask&&S.draftTask.files)||[]), {id:vid, kind:"voice", by:S.me, at:now(), voice:{id:vid, parts, mime:blob.type||"audio/webm", dur:Math.round(dur*10)/10, peaks}}]); toast("Voice memo added");
   } catch { toast("The voice memo didn't save."); }
@@ -2365,7 +2365,7 @@ function render(keepComposer){
   else if (S.view==="calls") app.append(renderCalls());
   else if (S.view==="settings") app.append(renderSettings());
   else app.append(renderTeam());
-  if (S.openTask) app.append(renderDrawer());
+  if (S.openTask) app.append(renderDrawer()); else LAST_DRAWER=null;
 
   const nta=$("#composer"); if (nta){ nta.value = S.editing? (plain(S.msgs.find(m=>m.id===S.editing))||"") : draft; autoGrow(nta); nta.closest(".crow").classList.toggle("has-text", !!nta.value.trim() || !!S.editing || !!(S.vdraft && S.vdraft.cid===S.active)); if (hadFocus||S.editing||S.replyTo) nta.focus(); }
   const ns=$("#stream"); if (ns){ if (scrollDown||atBottom) ns.scrollTop=ns.scrollHeight; else ns.scrollTop=prevScroll; scrollDown=false; }
@@ -2411,11 +2411,11 @@ function listChildren(){
     if (!subs.length) return el;
     const open = !!S.expanded[c.id] || (q && subMatch.has(c.id));
     const su=subs.filter(unread).length;
-    const tog=h("button",{class:"subtoggle"+(open?" open":"")+(su?" has":""), "aria-expanded":String(open), "aria-label":(open?"Hide":"Show")+" task conversations", title:"Task conversations", onclick:e=>{ e.stopPropagation(); S.expanded[c.id]=!open; ls.set("expanded",S.expanded); patchList(); updateTypingUI(); }}, svg(IC.thread), h("b",{}, subs.length), su? h("i",{class:"tdot"}) : "", svg(ICF.chev));
+    const tog=h("button",{class:"subtoggle"+(open?" open":"")+(su?" has":""), "aria-expanded":String(open), "aria-label":(open?"Hide":"Show")+" task conversations", title:"Task conversations", onclick:e=>{ e.stopPropagation(); S.expanded[c.id]=!open; S.justOpened=open? null : c.id; ls.set("expanded",S.expanded); patchList(); S.justOpened=null; updateTypingUI(); }}, svg(IC.thread), h("b",{}, subs.length), su? h("i",{class:"tdot"}) : "", svg(ICF.chev));
     li.querySelector(".metaicons").prepend(tog);
     if (!open) return el;
     subs.sort((a,b)=>((b.last&&b.last.at)||b.at||0)-((a.last&&a.last.at)||a.at||0));
-    return [el, h("div",{class:"subgroup"}, subs.map(x=>{ const t=S.tasks.find(z=>z.id===x.taskId); const st=t? STATUSES.find(z=>z.id===stOf(t)) : null;
+    return [el, h("div",{class:"subgroup"+(S.justOpened===c.id?" enter":"")}, subs.map(x=>{ const t=S.tasks.find(z=>z.id===x.taskId); const st=t? STATUSES.find(z=>z.id===stOf(t)) : null;
       const row=h("button",{class:"lineitem subitem", "aria-current":String(x.id===S.active && (S.inThread || window.innerWidth>860)), onclick:()=>selectChannel(x.id)},
         h("span",{class:"glyph tglyph sm", style:`--st:${st? st.c : "var(--muted)"}`}, svg(IC.knot)),
         h("span",{style:"min-width:0"}, h("div",{class:"nm"}, t? h("span",{class:"tidmini", style:`--c:${st.c}`},"CN-"+t.num) : "", " ", t? t.title : chanTitle(x)), h("div",{class:"pv"}, h("span",{class:"pvt", "data-cid":x.id}, x.last? (x.last.by!==S.me? nameOf(x.last.by).replace(/^Example:\s*/,"").split(" ")[0]+": ":"")+lastPreview(x.last) : (st? st.name : "")))),
@@ -2478,8 +2478,11 @@ function theadSub(c){
   if (c.kind==="dm") return (S.teamDocs[(c.members||[]).find(x=>x!==S.me)]||{}).about||"";
   return (c.members||[]).map(id=>nameOf(id).replace(/^Example:\s*/,"").split(" ")[0]).join(", ");
 }
+// Only messages that just arrived animate in; re-drawing the screen never replays animations (no blinking).
+const SEEN_MSG=new Set(); let SPINE_CHAT=null;
 function buildSpine(c){
   const spine=h("div",{class:"spine"});
+  const sameChat=SPINE_CHAT===c.id; SPINE_CHAT=c.id;
   if (E2E.ready) spine.append(h("div",{class:"e2enote"}, svg(ICF.lock), "End-to-end encrypted"));
   const all=msgsFor(c.id); const from=Math.max(0, all.length-S.msgLimit);
   if (from>0) spine.append(h("button",{class:"loadmore", onclick:e=>{ e.stopPropagation(); const st=$("#stream"); const h0=st.scrollHeight; S.msgLimit+=150; patchThread($(".chatmain")); st.scrollTop=st.scrollHeight-h0; }}, "Load earlier messages"));
@@ -2487,7 +2490,9 @@ function buildSpine(c){
   for (let i=from; i<all.length; i++) { const m=all[i];
     const dk=dayKey(m.at); if (dk!==lastDay){ spine.append(h("div",{class:"day"}, fmtDay(m.at))); lastDay=dk; lastBy=null; }
     const cont = lastBy===m.by && m.at-lastAt<5*60000 && !m.taskId; lastBy=m.by; lastAt=m.at;
-    spine.append(renderMsg(m, cont, c));
+    const el=renderMsg(m, cont, c);
+    if (sameChat && !SEEN_MSG.has(m.id)) el.classList.add("fresh");
+    SEEN_MSG.add(m.id); spine.append(el);
   }
   spine.append(h("div",{class:"msg typingrow", id:"typingrow", hidden:true}, h("div",{class:"who tyname"}), h("div",{class:"brow"}, h("div",{class:"strip tybub"}, h("span",{class:"dots"}, h("i"), h("i"), h("i")), h("span",{class:"tymic"}, svg(IC.mic))))));
   return spine;
@@ -2713,12 +2718,14 @@ function openTask(id){
   S.openTask=id; S.draftTask={files:(t.files||[]).slice(), subtasks:(t.subtasks||[]).map(x=>({...x})), title:t.title, notes:t.notes||"", status:t.status||"todo", assignee:t.assignee||"", due:t.due||"", priority:t.priority||"normal", channel:t.channel, fromMsg:t.fromMsg, fromText:t.fromText, fromBy:t.fromBy};
   S.actFor=null; S.confirmDel=false; render();
 }
+let LAST_DRAWER=null;
 function renderDrawer(){
   const isNew = S.openTask==="new"; const t = isNew? null : S.tasks.find(x=>x.id===S.openTask);
   if (!isNew && !t) { S.openTask=null; return h("span"); }
   const d=S.draftTask; const ro=!S.canWrite; if (!STATUSES.some(s=>s.id===d.status)) d.status=STATUSES[0].id; const stc=(STATUSES.find(s=>s.id===d.status)||STATUSES[0]).c;
   const close=()=>{ S.openTask=null; S.draftTask=null; render(); };
-  const dr=h("aside",{class:"drawer", id:"drawer", style:`--c:${stc}`, "aria-label":"Task", onkeydown:e=>{ if (e.key==="Escape") close(); }});
+  const opening=LAST_DRAWER!==S.openTask; LAST_DRAWER=S.openTask;
+  const dr=h("aside",{class:"drawer"+(opening?" enter":""), id:"drawer", style:`--c:${stc}`, "aria-label":"Task", onkeydown:e=>{ if (e.key==="Escape") close(); }});
   const has = t && t.thread && S.channels.find(c=>c.id===t.thread);
   dr.append(h("div",{class:"dhead"}, h("span",{class:"tidbig"}, isNew? "New task" : "CN-"+t.num), h("span",{class:"grow"}),
     t && (has || (S.canWrite && canThread(t)))? h("button",{class:"iconbtn", title: has? "Open conversation":"Start a conversation about this task", "aria-label": has? "Open conversation":"Start conversation", onclick:()=>openTaskChat(t)}, svg(IC.thread)) : "",
@@ -2757,7 +2764,8 @@ const GROUP_ICONS=["💬","🚀","📣","🛠️","🎯","📦","🎨","📈","�
 function renderFlow(){
   const F=S.newFlow; const others=S.team.filter(id=>id!==S.me).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
   const q=F.q.toLowerCase(); const match=others.filter(id=>!q || nameOf(id).toLowerCase().includes(q));
-  const pane=h("section",{class:"lines flow","aria-label":"New chat", onkeydown:e=>{ if (e.key!=="Escape") return; if (F.step==="pick") closeFlow(); else { F.step = F.step==="members"? "pick" : "members"; render(); } }});
+  const firstFlow=!F._shown; F._shown=true;
+  const pane=h("section",{class:"lines flow"+(firstFlow?" enter":""),"aria-label":"New chat", onkeydown:e=>{ if (e.key!=="Escape") return; if (F.step==="pick") closeFlow(); else { F.step = F.step==="members"? "pick" : "members"; render(); } }});
   const head=(title, sub, back)=>h("div",{class:"flowhead"}, h("button",{class:"iconbtn","aria-label":"Back", onclick:back}, svg(IC.back)), h("div",{class:"fht"}, h("b",{},title), sub? h("span",{},sub):""));
   const searchBox=()=>h("label",{class:"search"}, svg(IC.search), h("input",{id:"nf-q", placeholder:"Search name", value:F.q, oninput:e=>{F.q=e.target.value; const pos=e.target.selectionStart; render(); const n=$("#nf-q"); n.focus(); n.setSelectionRange(pos,pos);}}));
   const person=(id, opts={})=>h("div",{class:"contact", role:"button", tabindex:"0", "aria-pressed":opts.sel==null?null:String(opts.sel), onclick:opts.onclick, onkeydown:e=>{ if (e.key==="Enter") opts.onclick(); }},

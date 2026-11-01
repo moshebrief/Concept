@@ -103,6 +103,8 @@ function label(msg: Record<string, any>, chan: Record<string, any>): string {
 
 Deno.serve(async (req) => {
   try {
+    const { data: cfg } = await sb.from("push_settings").select("cron_secret").eq("id", 1).maybeSingle();
+    if (!cfg?.cron_secret || req.headers.get("x-cron-secret") !== cfg.cron_secret) return new Response("forbidden", { status: 403 });
     if (!SA.private_key) return new Response("FCM_SERVICE_ACCOUNT secret is missing", { status: 500 });
     const { path } = await req.json().catch(() => ({}));
     const m = /^channels\/([^/]+)\/messages\/([^/]+)$/.exec(path ?? "");

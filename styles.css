@@ -1748,3 +1748,13 @@ input.iname:focus{outline:none;background:var(--surface)}
 .scrim{overscroll-behavior:contain}
 .modal .picklist{max-height:min(52vh,460px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 .scrim{z-index:70!important}.infoview ~ .scrim{z-index:90!important}
+
+/* no blinking: entrance animations only play for things that are actually new */
+.msg{animation:none!important}
+.msg.fresh{animation:in .22s var(--ease) both!important}
+.drawer{animation:none!important}
+.drawer.enter{animation:slide .25s var(--ease) both!important}
+.flow{animation:none!important}
+.flow.enter{animation:slide .25s var(--ease) both!important}
+.subgroup{animation:none!important}
+.subgroup.enter{animation:subin .18s var(--ease) both!important}
