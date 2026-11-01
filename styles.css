@@ -1798,3 +1798,106 @@ input.iname:focus{outline:none;background:var(--surface)}
 .obperks > div > span:last-child{display:flex;flex-direction:column;gap:2px}
 .obperks b{font-size:15px;color:var(--ink)}
 .obperks span span{font-size:13px;color:var(--muted)}
+
+/* ---- task screen fits the phone exactly ---- */
+html,body{overflow-x:hidden;max-width:100%}
+.drawer{max-width:100vw;overflow-x:hidden}
+.drawer .dbody{overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.drawer .dbody > *{min-width:0;max-width:100%}
+.drawer textarea{resize:none;max-width:100%}
+.drawer input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;width:100%;max-width:100%;background:none}
+.drawer input[type=date]::-webkit-date-and-time-value{text-align:left}
+@media (max-width:640px){
+  .drawer .dhead{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(10px,env(safe-area-inset-right,0px))}
+}
+/* iPhone zooms the whole page in when a text box has small text: keep typing text at 16px on phones */
+@media (pointer:coarse){
+  input:not([type=range]):not([type=checkbox]):not([type=radio]),textarea,select{font-size:max(16px,1em)!important}
+  .search input,.metabox input{font-size:16px!important}
+}
+
+/* ---- iPhone-style monogram avatars (gray gradient, two initials) ---- */
+.av.mgav:not(:has(img)),.glyph.mgav{background:linear-gradient(180deg,#A6ABB8 0%,#868A96 100%)!important;color:#fff;font-family:-apple-system,"SF Pro Rounded","SF Pro Text",system-ui,sans-serif;font-weight:600;letter-spacing:.2px;text-shadow:0 .5px 0 rgba(0,0,0,.08)}
+.av.mgav svg.i,.glyph.mgav svg.i{width:72%;height:72%;fill:rgba(255,255,255,.95);stroke:none;margin-top:18%}
+.av.mgav:has(svg),.glyph.mgav:has(svg){overflow:hidden;place-items:end center}
+.glyph.g44{width:44px!important;height:44px!important;font-size:16px!important}
+.glyph.g32{width:32px!important;height:32px!important;font-size:12.5px!important}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .av.mgav:not(:has(img)),:root:not([data-theme="light"]) .glyph.mgav{background:linear-gradient(180deg,#76797F 0%,#56585E 100%)!important}
+}
+:root[data-theme="dark"] .av.mgav:not(:has(img)),:root[data-theme="dark"] .glyph.mgav{background:linear-gradient(180deg,#76797F 0%,#56585E 100%)!important}
+
+/* ---- voice notes (WhatsApp / iMessage feel) ---- */
+.msg .voice{display:flex;align-items:center;gap:8px;width:min(270px,70vw);padding:2px 0}
+.msg .vplay{width:34px;height:34px;background:none!important;color:var(--muted)!important;border-radius:50%}
+.msg.mine .vplay,.mine .vplay{color:#fff!important}
+.msg .vplay svg.i{width:26px;height:26px}
+.msg .vplay svg.i path{fill:currentColor;stroke:currentColor;stroke-linejoin:round;stroke-width:1.2}
+.msg .vmid{gap:2px}
+.msg .vbars{position:relative;height:30px;gap:2px;color:var(--muted)}
+.msg .vbars i{flex:1;min-width:2px;max-width:3px;border-radius:3px;background:currentColor;opacity:.4;transition:opacity .15s,background .15s}
+.msg .vbars i.on{opacity:1;background:var(--cobalt)}
+.mine .vbars{color:rgba(255,255,255,.55)!important}
+.mine .vbars i.on{background:#fff}
+.vknob{position:absolute;top:50%;left:calc(var(--p,0) * (100% - 12px));width:12px;height:12px;margin-top:-6px;border-radius:50%;background:var(--cobalt);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .12s linear}
+.mine .vknob{background:#fff}
+.msg .vmeta{font-size:11.5px;opacity:.75}
+.vside{position:relative;width:44px;height:44px;flex:none;display:grid;place-items:center}
+.vwho{position:relative;display:block}
+.vwho .vav{width:44px;height:44px;font-size:15px}
+.vmic{position:absolute;left:-5px;bottom:-2px;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;background:var(--surface);color:var(--cobalt)}
+.mine .vmic{background:var(--cobalt);color:#fff}
+.vmic svg.i{width:13px;height:13px;stroke-width:2.2}
+.vside .vspeed{display:none;min-width:40px;height:26px;border-radius:13px;font:700 12.5px var(--f-body);background:rgba(120,120,128,.18)!important;color:inherit;padding:0 8px}
+.mine .vside .vspeed{background:rgba(255,255,255,.25)!important}
+.voice.playing .vwho{display:none}
+.voice.playing .vside .vspeed{display:block}
+.tvoice .vside{display:none}
+.tvoice .vknob{display:none}
+
+/* ---- location card (iMessage feel) ---- */
+.msg.k-location .strip{padding:3px!important;width:262px}
+.msg.k-location .lmap{height:150px;border-radius:15px 15px 4px 4px;background-color:#ECE9E2}
+.lmap{position:relative}
+.lpin2{position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-38px 0 0 -20px;display:block}
+.lpin2 svg.i{width:40px;height:40px;fill:#FF3B30;stroke:#fff;stroke-width:1.6;filter:drop-shadow(0 3px 4px rgba(0,0,0,.3));position:relative}
+.lpin2 i{position:absolute;left:50%;bottom:-3px;width:14px;height:5px;margin-left:-7px;border-radius:50%;background:rgba(0,0,0,.22);filter:blur(1px)}
+.losm{position:absolute;right:6px;bottom:4px;font-size:9px;color:rgba(0,0,0,.55);background:rgba(255,255,255,.7);padding:0 4px;border-radius:4px}
+.lmeta2{display:flex;align-items:center;gap:10px;padding:9px 8px 5px 6px}
+.lmeta2 > svg.i{width:16px;height:16px;opacity:.45;flex:none}
+.lic{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#FF3B30;color:#fff;flex:none}
+.lic svg.i{width:18px;height:18px;fill:#fff;stroke:none}
+.lic svg.i circle{fill:#FF3B30}
+.ltx{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.ltx b{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ltx span{font-size:13px;opacity:.65}
+.mine .lic{background:#fff}
+.mine .lic svg.i{fill:var(--cobalt)}
+.mine .lic svg.i circle{fill:#fff}
+/* initials scale with the circle, whatever its size */
+.mgav .mgi{line-height:1;white-space:nowrap}
+.mgav.mg2 .mgi{font-size:.88em;letter-spacing:.3px}
+
+/* ---- Settings → Storage and data ---- */
+.stwait{display:flex;align-items:center;gap:10px;padding:24px 8px;color:var(--muted)}
+.stsum{background:var(--surface);border-radius:14px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px}
+.sttop{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.sttop b{font-size:26px;font-weight:700;letter-spacing:-.4px}
+.sttop span{color:var(--muted);font-size:13px}
+.stbar{display:flex;gap:2px;height:12px;border-radius:6px;overflow:hidden;background:var(--fill)}
+.stbar i{display:block;min-width:4px}
+.stlegend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted)}
+.stlegend span{display:inline-flex;align-items:center;gap:6px}
+.stlegend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.stlegend em{font-style:normal;color:var(--ink);font-weight:600}
+.stchat .cav .glyph,.stchat .cav .av{width:36px!important;height:36px!important}
+.stchat .stx span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow b.red{color:#FF3B30;font-weight:500}
+.srow b.blue{color:var(--cobalt);font-weight:500}
+.srow[disabled]{opacity:.45}
+.primary.danger{background:#FF3B30!important;color:#fff!important}
+.ghost.wide,.primary.wide{width:100%;justify-content:center}
+.contactsnote{margin:10px 16px 18px;font-size:12.5px}
+.lazymore{height:1px}
+.av.mgav:not(:has(svg)),.glyph.mgav:not(:has(svg)){display:grid!important;place-items:center!important;padding:0!important}
+.mgav .mgi{display:block}

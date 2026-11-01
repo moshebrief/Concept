@@ -217,6 +217,22 @@ function ios() {
     ad = ad.slice(0, i) + hooks + ad.slice(i);
     write(adP, ad);
   }
+  // The window behind the app shows around the keyboard's rounded top while it slides in.
+  // It's black by default; make it the app's own colour (white, or dark grey in dark mode).
+  ad = read(adP);
+  if (!ad.includes("TM_WINDOW_BG")) {
+    const bg = `
+        // TM_WINDOW_BG
+        let tmBg = UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : UIColor.white }
+        window?.backgroundColor = tmBg
+        window?.rootViewController?.view.backgroundColor = tmBg
+`;
+    ad = ad.replace(/(didFinishLaunchingWithOptions[^{]*\{)/, `$1${bg}`);
+    if (!ad.includes("applicationDidBecomeActive(_ application: UIApplication) {\n        // TM_BG2")) {
+      ad = ad.replace(/(func applicationDidBecomeActive\(_ application: UIApplication\) \{)/, `$1\n        // TM_BG2\n        window?.backgroundColor = UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : UIColor.white }`);
+    }
+    write(adP, ad);
+  }
   log(`iOS ready — ${APP_ID} version ${VERSION} (${BUILD})`);
 }
 

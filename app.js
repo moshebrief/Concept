@@ -124,10 +124,23 @@ async function resolvePeople(ids){
 const nameOf = id => id===S.me ? "You" : ((S.addrNames&&S.addrNames[id]) || (S.people[id]&&S.people[id].name) || "Someone");
 const fullName = id => (S.addrNames&&S.addrNames[id]) ? S.addrNames[id] : fullName0(id);
 const fullName0 = id => ((S.people[id]&&S.people[id].name)||"Someone") + (id===S.me?" (you)":"");
+// Two letters like iPhone Contacts: "Ava Cohen" → "AC". Emoji or no letters → a person outline.
+function initials(name){
+  const w=String(name||"").replace(/^Example:\s*/,"").replace(/[^\p{L}\p{N}\s'-]/gu," ").trim().split(/\s+/).filter(Boolean);
+  if (!w.length) return "";
+  return ((w[0][0]||"")+(w.length>1? w[w.length-1][0] : "")).toUpperCase();
+}
+const PERSON_SIL='<circle cx="12" cy="9" r="4.2"/><path d="M3.8 21.5c.9-4.3 4.2-6.6 8.2-6.6s7.3 2.3 8.2 6.6z"/>';
+function monogram(name, cls){
+  const t=initials(name); const el=h("span",{class:cls+" mgav"+(t.length>1?" mg2":"")});
+  if (t) el.append(h("span",{class:"mgi"}, t)); else el.append(svg(PERSON_SIL));
+  return el;
+}
 function avatar(id, cls=""){
-  const p = S.people[id]||{}; const nm=(p.name||"?").replace(/^Example:\s*/,"");
-  const el = h("span",{class:"av "+cls, style:`background:${p.color||colorFor(id||"x")}`, title:fullName(id)});
-  if (p.avatarUrl) el.append(h("img",{src:p.avatarUrl, alt:""})); else el.textContent = nm.trim().slice(0,1).toUpperCase();
+  const p = S.people[id]||{}; const nm=(p.name||"").replace(/^Example:\s*/,"");
+  const el = h("span",{class:"av mgav "+cls, title:fullName(id)});
+  if (p.avatarUrl) el.append(h("img",{src:p.avatarUrl, alt:""}));
+  else { const t=initials(nm); if (t) { el.append(h("span",{class:"mgi"}, t)); if (t.length>1) el.classList.add("mg2"); } else el.append(svg(PERSON_SIL)); }
   return el;
 }
 function chanTitle(c){ if (!c) return ""; if (c.kind==="task"){ const t=S.tasks.find(x=>x.id===c.taskId); return t? `CN-${t.num} · ${t.title}` : (c.name||"Task conversation"); } if (c.kind==="dm"){ const o=(c.members||[]).find(m=>m!==S.me)||S.me; return fullName(o).replace(/^Example:\s*/,""); } return c.name||"Untitled"; }
@@ -137,7 +150,7 @@ function chanGlyph(c){
     const par=S.channels.find(x=>x.id===(c.parent || (t&&t.channel))); if (!par || par.kind==="task") return g;
     return h("span",{class:"tgwrap", title:"From "+chanTitle(par)}, g, h("span",{class:"tgpar"}, chanGlyph(par))); }
   if (c.icon) return h("span",{class:"glyph eglyph"}, c.icon);
-  return h("span",{class:"glyph", style:`background:${colorFor(c.id)}`}, (c.name||"#").trim().slice(0,1).toUpperCase());
+  return monogram(c.name||"", "glyph");
 }
 
 // ---------- boot ----------
@@ -411,6 +424,8 @@ function syncPlayer(loading){
     const dur = (me && isFinite(PLAYER.duration) && PLAYER.duration) || +el.dataset.dur || 0;
     const frac = me && dur ? PLAYER.currentTime/dur : 0;
     el.querySelectorAll(".vbars i").forEach((b,i,all)=>b.classList.toggle("on", i/all.length < frac));
+    const vb=el.querySelector(".vbars"); if (vb) vb.style.setProperty("--p", String(frac));
+    el.classList.toggle("playing", !!(me && (!PLAYER.paused || PLAYER.currentTime>0)));
     el.querySelector(".vdur").textContent = fmtDur(me && PLAYER.currentTime>0 ? PLAYER.currentTime : dur);
     const sp=el.querySelector(".vspeed"); if (sp) sp.textContent=(S.speed||1)+"×";
   });
@@ -420,9 +435,18 @@ PLAYER.addEventListener("ended", ()=>{ playing=null; syncPlayer(); });
 function renderVoice(m){
   const v=m.voice; const el=h("div",{class:"voice", "data-mid":m.id, "data-dur":v.dur||0, onclick:e=>e.stopPropagation()});
   el.append(h("button",{class:"vplay", "aria-label":"Play voice note", onclick:()=>togglePlay(m)}, svg(IC.play)));
+  // Waveform: always 30 bars so every note looks even; a dot shows where you are.
+  const src=v.peaks&&v.peaks.length? v.peaks : Array.from({length:30},(_,i)=>.25+.2*Math.abs(Math.sin(i*1.3)));
+  const N=30, pk=Array.from({length:N},(_,i)=>{ const a=Math.floor(i*src.length/N), b=Math.max(a+1, Math.floor((i+1)*src.length/N)); let mx=0; for (let j=a;j<b;j++) mx=Math.max(mx, src[j]||0); return mx; });
+  const top=Math.max(.05, ...pk);
   const bars=h("div",{class:"vbars", onclick:e=>{ if (playing!==m.id || !isFinite(PLAYER.duration)) return; const r=e.currentTarget.getBoundingClientRect(); PLAYER.currentTime=PLAYER.duration*Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)); }});
-  (v.peaks||[]).forEach(p=>bars.append(h("i",{style:`height:${Math.round(10+p*90)}%`})));
-  el.append(h("div",{class:"vmid"}, bars, h("div",{class:"vmeta"}, h("span",{class:"vdur"}, fmtDur(v.dur)), h("button",{class:"vspeed", "aria-label":"Playback speed", onclick:()=>{ S.speed = S.speed===1.5?2 : S.speed===2?1 : 1.5; PLAYER.playbackRate=S.speed; syncPlayer(); }}, (S.speed||1)+"×"))));
+  pk.forEach(p=>bars.append(h("i",{style:`height:${Math.round(14+Math.pow(p/top,.8)*86)}%`})));
+  bars.append(h("b",{class:"vknob"}));
+  el.append(h("div",{class:"vmid"}, bars, h("div",{class:"vmeta"}, h("span",{class:"vdur"}, fmtDur(v.dur)))));
+  // Right side: who recorded it (with a little mic), or the speed button while it plays — like WhatsApp.
+  el.append(h("div",{class:"vside"},
+    h("span",{class:"vwho"}, avatar(m.by||m.voice.by||"", "vav"), h("span",{class:"vmic"}, svg(ICF.micf||'<rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>'))),
+    h("button",{class:"vspeed", "aria-label":"Playback speed", onclick:()=>{ S.speed = S.speed===1.5?2 : S.speed===2?1 : 1.5; PLAYER.playbackRate=S.speed; syncPlayer(); }}, (S.speed||1)+"×")));
   return el;
 }
 function openVoiceFallback(cb){
@@ -463,6 +487,44 @@ async function openTaskChat(t){
 
 // ---------- shared overlay helper ----------
 function overlay(cls, label){ const o=h("div",{class:"overlay "+cls, role:"dialog", "aria-label":label}); document.body.append(o); return o; }
+// Rebuilds a screen while you type in it, without replacing the box you're typing in
+// (replacing it closes the phone keyboard).
+function swapKids(parent, kids){
+  kids=[kids].flat(Infinity).filter(k=>k!=null && k!=="" && k!==false).map(k=>typeof k==="string"? document.createTextNode(k) : k);
+  const a=document.activeElement, id=a && a.id;
+  if (!id || !parent.contains(a) || !/^(INPUT|TEXTAREA)$/.test(a.tagName)) { parent.replaceChildren(...kids); return; }
+  const holder=document.createElement("div"); holder.append(...kids);
+  const nk=holder.querySelector("#"+CSS.escape(id));
+  if (!nk) { parent.replaceChildren(...holder.childNodes); return; }
+  (function place(oldP, newP){
+    let to=a; while (to.parentNode!==oldP) to=to.parentNode;
+    let tn=nk; while (tn.parentNode!==newP) tn=tn.parentNode;
+    if (to!==a) {
+      if (to.tagName!==tn.tagName) { oldP.replaceChildren(...newP.childNodes); const n2=oldP.querySelector("#"+CSS.escape(id)); if (n2) { n2.focus(); } return; }
+      for (const at of [...to.attributes]) if (!tn.hasAttribute(at.name)) to.removeAttribute(at.name);
+      for (const at of [...tn.attributes]) if (to.getAttribute(at.name)!==at.value) to.setAttribute(at.name, at.value);
+      place(to, tn);
+    } else {
+      for (const at of ["placeholder","class","aria-label"]) { const v=tn.getAttribute(at); if (v!=null && a.getAttribute(at)!==v) a.setAttribute(at, v); }
+    }
+    const nks=[...newP.childNodes], i=nks.indexOf(tn);
+    [...oldP.childNodes].forEach(n=>{ if (n!==to) n.remove(); });
+    nks.slice(0,i).forEach(n=>oldP.insertBefore(n, to));
+    let after=to; nks.slice(i+1).forEach(n=>{ after.after(n); after=n; });
+  })(parent, holder);
+}
+// Long lists (phone contacts) show 150 rows first and add more as you scroll down.
+function lazyRows(items, rowFn, step=150){
+  const box=document.createDocumentFragment(); let shown=0;
+  const more=h("div",{class:"lazymore", "aria-hidden":"true"});
+  const add=()=>{ const next=items.slice(shown, shown+step); shown+=next.length; more.before(...next.map(rowFn)); if (shown>=items.length) { more.remove(); io && io.disconnect(); } };
+  const io = items.length>step && "IntersectionObserver" in window ? new IntersectionObserver(es=>{ if (es.some(e=>e.isIntersecting)) add(); }, {rootMargin:"600px"}) : null;
+  box.append(more); const first=items.slice(0,step); shown=first.length; more.before(...first.map(rowFn));
+  if (shown>=items.length) more.remove(); else if (io) io.observe(more); else { while (shown<items.length) add(); }
+  return box;
+}
+// Wraps lazy rows in a container element (needed where the list sits inside another element).
+const lazyList = (cls, items, rowFn) => { const d=h("div",{class:cls}); d.append(lazyRows(items, rowFn)); return d; };
 
 // ---------- status (Updates) ----------
 const STATUS_BG=["#0A6CFF","#7B4DFF","#E5383B","#1FA855","#E08A00","#111114","#D6337A","#0E8F9C"];
@@ -677,7 +739,7 @@ function renderCalls(){
     const out=c.from===S.me; const missed=!out && (c.status==="missed"||c.status==="ringing"&&now()-c.at>RING_MS);
     const peer=callPeer(c);
     return h("div",{class:"urow callrow"},
-      c.title? h("span",{class:"glyph", style:`background:${colorFor(c.channel)};width:48px;height:48px`}, c.title[0].toUpperCase()) : avatar(peer,"lg"),
+      c.title? monogram(c.title, "glyph") : avatar(peer,"lg"),
       h("span",{class:"ctx"}, h("b",{class:missed?"missed":""}, callTitle(c)), h("span",{class:"cdir"}, svg(out? '<path d="M7 17L17 7M9 7h8v8"/>' : '<path d="M17 7L7 17M15 17H7V9"/>'), out? (c.status==="answered"?"Outgoing":"Outgoing · "+(c.status==="declined"?"declined":"not answered")) : missed? "Missed" : c.status==="declined"? "Declined" : "Incoming", " · ", fmtShort(c.at))),
       h("button",{class:"iconbtn callback", "aria-label":"Call again", onclick:()=>{ const ch=S.channels.find(x=>x.id===c.channel); if (ch) startCall(ch, c.kind); else callPerson(peer, c.kind); }}, svg(c.kind==="video"? IC.video : IC.phone)));
   })));
@@ -745,12 +807,14 @@ function renderSettings(){
     row(TICK2, "Read receipts", toggle("readReceipts", true), "If you turn this off, you won't send or see blue ticks"),
     row(ICF.lock, "End-to-end encryption", h("span",{class:"sval mono", id:"fp"}, E2E.ready? "On" : "Off"))));
   fingerprint().then(f=>{ const el=$("#fp"); if (el && f) el.textContent=f; });
+  appUsage().then(b=>{ const el=$("#s-store"); if (el && b) el.textContent=fmtSize(b); });
   w.append(...group("Appearance",
     row(ICF.moon, "Theme", h("div",{class:"segmini", role:"group", "aria-label":"Theme"}, [["system","Auto"],["light","Light"],["dark","Dark"]].map(([v,l])=>h("button",{"aria-pressed":String((p.theme||"system")===v), onclick:()=>setPref("theme",v)}, l)))),
     row(ICF.drop, "Accent color", h("div",{class:"swatches"}, ACCENTS.map(([n,c])=>h("button",{class:"sw"+((p.accent||"#0A6CFF")===c?" on":""), style:`--sw:${c}`, title:n, "aria-label":n+" accent", onclick:()=>setPref("accent", c==="#0A6CFF"? "" : c)}))))));
   w.append(...group("Chats",
     row(ICF.image, "Chat wallpaper", h("button",{class:"iconbtn", title:"Change wallpaper", "aria-label":"Change wallpaper", onclick:openWallpaper}, svg(IC.arrow)), wpMode()==="photo"? "Your photo" : wpMode()==="plain"? "Plain" : "Tools"),
     h("button",{class:"srow pick", onclick:openBackup}, h("span",{class:"sic"}, svg(ICF.lock)), h("span",{class:"stx"}, h("b",{},"Chat backup"), h("span",{}, "iCloud Drive or Google Drive")), h("span",{class:"sval"}, (S.prefs.backup||{}).last? fmtShort(S.prefs.backup.last) : "Never"), svg(IC.arrow)),
+    h("button",{class:"srow pick", onclick:openStorage}, h("span",{class:"sic", style:"background:#34C759"}, svg(STORAGE_IC)), h("span",{class:"stx"}, h("b",{},"Storage and data"), h("span",{}, "Manage what's saved on this phone")), h("span",{class:"sval", id:"s-store"}, ""), svg(IC.arrow)),
     row(IC.send, "Enter key sends", toggle("enterSends", true)),
     row(IC.knot, "Swipe left to make task", h("div",{class:"segmini", role:"group", "aria-label":"Swipe left"}, [["open","Open task"],["silent","Just add"]].map(([v,l])=>h("button",{"aria-pressed":String((p.swipeTask||"open")===v), onclick:()=>setPref("swipeTask",v)}, l)))),
     row(IC.pin, "Pinned chats", h("span",{class:"sval"}, S.pins.length+"/5"))));
@@ -1055,7 +1119,7 @@ function openPhoneSetup(){
 }
 function inviteRow(c){
   const ph=c.p[0];
-  return h("div",{class:"contact"}, h("span",{class:"glyph", style:`background:${colorFor(c.n)};width:44px;height:44px;font-size:16px`}, (c.n||"?").trim()[0].toUpperCase()),
+  return h("div",{class:"contact"}, monogram(c.n, "glyph g44"),
     h("span",{class:"ctx"}, h("b",{}, c.n), h("span",{}, ph)),
     h("a",{class:"invbtn", href:"sms:"+normPhone(ph)+"?&body="+encodeURIComponent("Join me on Task Message"), title:"Invite", "aria-label":"Invite "+c.n}, "Invite"));
 }
@@ -1070,7 +1134,7 @@ function dialMatches(q){
   return out.slice(0,6);
 }
 function dialRow(m){
-  return h("div",{class:"drow"}, m.id? avatar(m.id) : h("span",{class:"glyph", style:`background:${colorFor(m.n)};width:32px;height:32px;font-size:13px`}, (m.n||"?")[0].toUpperCase()),
+  return h("div",{class:"drow"}, m.id? avatar(m.id) : monogram(m.n, "glyph g32"),
     h("span",{class:"ctx"}, h("b",{}, m.n), h("span",{}, m.ph||"")),
     m.id && S.canWrite? h("button",{class:"ib", title:"Task Message voice call", "aria-label":"Voice call "+m.n, onclick:()=>callPerson(m.id,"voice")}, svg(IC.phone)) : "",
     m.id && S.canWrite? h("button",{class:"ib", title:"Task Message video call", "aria-label":"Video call "+m.n, onclick:()=>callPerson(m.id,"video")}, svg(IC.video)) : "",
@@ -1152,10 +1216,10 @@ function forwardMenu(msgs){
     const people=[...new Set([...S.contacts, ...S.onConcept])].filter(id=>id!==S.me && !dmPeers.has(id) && match(nameOf(id))).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
     const sub=c=> c.kind==="dm"? ((S.teamDocs[(c.members||[]).find(x=>x!==S.me)]||{}).about||"") : c.kind==="task"? "Task conversation" : (c.members||[]).map(id=>nameOf(id).replace(/^Example:\s*/,"").split(" ")[0]).join(", ");
     const chanRow=c=>row({type:"chan",id:c.id}, chanGlyph(c), chanTitle(c), sub(c));
-    o.replaceChildren(
+    swapKids(o, [
       h("header",{class:"fhead"},
         h("button",{class:"iconbtn","aria-label":"Close", title:"Close", onclick:close}, svg(IC.back)),
-        searching? h("input",{id:"fwd-q", class:"fsearch", placeholder:"Search…", value:q, oninput:e=>{ q=e.target.value; draw(); const n=$("#fwd-q"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }})
+        searching? h("input",{id:"fwd-q", class:"fsearch", placeholder:"Search…", value:q, oninput:e=>{ q=e.target.value; draw(); }})
           : h("div",{class:"ftitle"}, h("b",{},"Forward to…"), sel.length? h("span",{}, sel.length+" selected") : ""),
         h("button",{class:"iconbtn","aria-label":searching?"Close search":"Search", title:"Search", onclick:()=>{ searching=!searching; if (!searching) q=""; draw(); if (searching) setTimeout(()=>{ const n=$("#fwd-q"); if (n) n.focus(); }); }}, svg(searching? IC.x : IC.search))),
       h("div",{class:"flist"},
@@ -1163,7 +1227,7 @@ function forwardMenu(msgs){
         recent.length? [h("div",{class:"seg-label"},"Recent chats"), ...recent.filter(c=>!freq.includes(c)).map(chanRow)] : "",
         people.length? [h("div",{class:"seg-label"},"Contacts on Task Message"), ...people.map(id=>row({type:"person",id}, avatar(id,"lg"), nameOf(id).replace(/^Example:\s*/,""), (S.teamDocs[id]||{}).about||""))] : "",
         !recent.length && !people.length? h("p",{class:"note center"},"No results") : ""),
-      sel.length? h("div",{class:"fbar"}, h("span",{class:"fnames"}, sel.map(labelOf).join(", ")), h("button",{class:"fsend","aria-label":"Send", title:"Send", onclick:send}, svg(IC.send))) : "");
+      sel.length? h("div",{class:"fbar"}, h("span",{class:"fnames"}, sel.map(labelOf).join(", ")), h("button",{class:"fsend","aria-label":"Send", title:"Send", onclick:send}, svg(IC.send))) : ""]);
   }
   async function send(){
     const targets=[...sel]; close();
@@ -1279,10 +1343,17 @@ function renderTaskFiles(d, ro, box){
 let WP_FADED=false;
 const wpMode = () => S.prefs.wp || "tools";
 // The wallpaper photo is kept in the browser's database (IndexedDB): localStorage is too small on iPhones.
-let WP_IMG=null, WP_LOADING=false;
+let WP_IMG=null, WP_LOADING=false, WP_URL=["",""];
+// Turns the saved photo into a short link once, so each screen update doesn't copy megabytes of text.
+function wpURL(d){ if (WP_URL[0]===d) return WP_URL[1]; try { const [h0,b]=d.split(","); const bin=atob(b); const u=new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+  if (WP_URL[1]) URL.revokeObjectURL(WP_URL[1]); WP_URL=[d, URL.createObjectURL(new Blob([u],{type:(h0.match(/:(.*?);/)||[])[1]||"image/jpeg"}))]; return WP_URL[1]; } catch { return d; } }
 const wpKey = () => "wpimg:"+S.me;
 function idbOpen(){ return new Promise((res,rej)=>{ try { const r=indexedDB.open("concept",1); r.onupgradeneeded=()=>r.result.createObjectStore("kv"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); } catch(e){ rej(e); } }); }
 async function kvGet(k){ try { const db=await idbOpen(); return await new Promise(res=>{ const q=db.transaction("kv").objectStore("kv").get(k); q.onsuccess=()=>res(q.result??null); q.onerror=()=>res(null); }); } catch { return null; } }
+async function kvDel(keys){ keys=[keys].flat().filter(Boolean); if (!keys.length) return true; try { const db=await idbOpen(); await new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite"); const st=t.objectStore("kv"); keys.forEach(k=>st.delete(k)); t.oncomplete=res; t.onerror=()=>rej(t.error); }); return true; } catch { return false; } }
+const sizeOf = v => v==null? 0 : typeof v==="string"? v.length : v instanceof ArrayBuffer? v.byteLength : ArrayBuffer.isView(v)? v.byteLength : (typeof Blob!=="undefined" && v instanceof Blob)? v.size : (()=>{ try { return JSON.stringify(v).length; } catch { return 0; } })();
+// Walks every saved item once and reports its key and size (doesn't keep the data in memory).
+async function kvSizes(prefix){ const out=new Map(); try { const db=await idbOpen(); await new Promise(res=>{ const q=db.transaction("kv").objectStore("kv").openCursor(); q.onsuccess=()=>{ const c=q.result; if (!c) return res(); const k=String(c.key); if (!prefix || k.startsWith(prefix)) out.set(k, sizeOf(c.value)); c.continue(); }; q.onerror=()=>res(); }); } catch {} return out; }
 async function kvSet(k,v){ try { const db=await idbOpen(); await new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite"); t.objectStore("kv").put(v,k); t.oncomplete=res; t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error); }); return true; } catch { return false; } }
 function wpData(){
   if (WP_IMG!==null) return WP_IMG;
@@ -1294,9 +1365,9 @@ async function setWallpaperPhoto(){
   const inp=h("input",{type:"file", accept:"image/*", style:"position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0", onchange:async e=>{ const f=e.target.files&&e.target.files[0]; inp.remove(); if (!f) return;
     toast("Setting wallpaper…");
     try { const url=URL.createObjectURL(f); const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
-      const max=1280, k=Math.min(1, max/Math.max(img.naturalWidth,img.naturalHeight)); const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*k); c.height=Math.round(img.naturalHeight*k);
-      c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
-      let q=.8, data=c.toDataURL("image/jpeg",q); while (data.length>700e3 && q>.4) { q-=.1; data=c.toDataURL("image/jpeg",q); }
+      const sc=Math.min(3, window.devicePixelRatio||2), max=Math.max(1800, Math.round(Math.max(screen.width, screen.height)*sc)), k=Math.min(1, max/Math.max(img.naturalWidth,img.naturalHeight)); const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*k); c.height=Math.round(img.naturalHeight*k);
+      
+      const cx=c.getContext("2d"); cx.imageSmoothingEnabled=true; cx.imageSmoothingQuality="high"; cx.drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); let q=.92, data=c.toDataURL("image/jpeg",q); while (data.length>6e6 && q>.6) { q-=.08; data=c.toDataURL("image/jpeg",q); }
       if (!data || data.length<100) throw new Error("empty");
       WP_IMG=data; WP_LOADING=true;
       const saved=await kvSet(wpKey(), data);
@@ -1308,7 +1379,7 @@ async function setWallpaperPhoto(){
 }
 function wallpaperLayer(main){
   const mode=wpMode(); main.classList.add("wp-"+(mode==="photo" && wpData()? "photo" : mode==="photo"? "tools" : mode));
-  if (mode==="photo") { const d=wpData(); if (!d) return; const l=h("div",{class:"wplayer"+(WP_FADED?"":" fade"), style:`background-image:url("${d}");--wpdim:${S.prefs.wpDim??.25}`}); WP_FADED=true; main.prepend(l); }
+  if (mode==="photo") { const d=wpData(); if (!d) return; const l=h("div",{class:"wplayer"+(WP_FADED?"":" fade"), style:`background-image:url("${wpURL(d)}");--wpdim:${S.prefs.wpDim??0}`}); WP_FADED=true; main.prepend(l); }
 }
 function openWallpaper(){
   const scrim=h("div",{class:"scrim", id:"wpsheet", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
@@ -1320,7 +1391,7 @@ function openWallpaper(){
       opt("tools","Tools", h("span",{class:"wpv tools"})),
       opt("plain","Plain", h("span",{class:"wpv"})),
       opt("photo","Photo", d? h("span",{class:"wpv photo", style:`background-image:url("${d}")`}) : h("span",{class:"wpv"}, svg(ICF.image)))),
-    m==="photo" && d? h("div",{class:"wpdimrow"}, svg(ICF.moon), h("input",{type:"range", min:"0", max:"0.7", step:"0.05", value:String(S.prefs.wpDim??.25), "aria-label":"Dim photo", oninput:e=>{ S.prefs={...S.prefs, wpDim:+e.target.value}; ls.set("prefs",S.prefs); document.querySelectorAll(".wplayer").forEach(x=>x.style.setProperty("--wpdim", e.target.value)); }})) : "",
+    m==="photo" && d? h("div",{class:"wpdimrow"}, svg(ICF.moon), h("input",{type:"range", min:"0", max:"0.7", step:"0.05", value:String(S.prefs.wpDim??0), "aria-label":"Dim photo", oninput:e=>{ S.prefs={...S.prefs, wpDim:+e.target.value}; ls.set("prefs",S.prefs); document.querySelectorAll(".wplayer").forEach(x=>x.style.setProperty("--wpdim", e.target.value)); }})) : "",
     m==="photo"? h("button",{class:"ghost", style:"align-self:center", onclick:setWallpaperPhoto}, svg(ICF.image), "Choose another photo") : ""));
   document.body.append(scrim);
 }
@@ -1716,14 +1787,20 @@ function mapStyle(lat, lng, W, H, z=15){
   const n=2**z, xt=(lng+180)/360*n, lr=lat*Math.PI/180, yt=(1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n;
   const tx=Math.floor(xt), ty=Math.floor(yt), fx=(xt-tx)*256, fy=(yt-ty)*256; const imgs=[], pos=[];
   for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) { imgs.push(`url("https://tile.openstreetmap.org/${z}/${tx+dx}/${ty+dy}.png")`); pos.push(`${Math.round(W/2-fx+dx*256)}px ${Math.round(H/2-fy+dy*256)}px`); }
-  return `background-image:${imgs.join(",")};background-position:${pos.join(",")};background-repeat:no-repeat`;
+  // Under the map tiles: soft streets so the card still looks like a map while tiles load (or offline).
+  imgs.push("linear-gradient(118deg,transparent 46%,rgba(255,255,255,.95) 46.5%,rgba(255,255,255,.95) 49%,transparent 49.5%)","linear-gradient(28deg,transparent 60%,rgba(255,255,255,.9) 60.5%,rgba(255,255,255,.9) 62%,transparent 62.5%)","linear-gradient(-14deg,transparent 30%,rgba(255,255,255,.8) 30.5%,rgba(255,255,255,.8) 31.5%,transparent 32%)","radial-gradient(circle at 78% 22%,rgba(200,226,190,.55) 0 12%,transparent 12.5%)","radial-gradient(circle at 12% 80%,rgba(196,220,240,.6) 0 14%,transparent 14.5%)");
+  pos.push("0 0","0 0","0 0","0 0","0 0");
+  return `background-image:${imgs.join(",")};background-position:${pos.join(",")};background-repeat:no-repeat;background-size:${imgs.map((x,i)=>i<9?"auto":"100% 100%").join(",")}`;
 }
 const mapsLink = (lat,lng) => /iPhone|iPad|Macintosh/.test(navigator.userAgent)? `https://maps.apple.com/?q=${lat},${lng}&ll=${lat},${lng}` : `https://www.google.com/maps?q=${lat},${lng}`;
 function renderLocation(p){
   if (!p || p.lat==null) return h("span",{class:"tx"},"📍 Location");
   return h("a",{class:"lcard", href:mapsLink(p.lat,p.lng), target:"_blank", rel:"noopener", onclick:e=>e.stopPropagation()},
-    h("div",{class:"lmap", style:mapStyle(p.lat,p.lng,242,140)}, h("span",{class:"lpin"}, svg(ICF.pin2))),
-    h("div",{class:"lmeta"}, h("b",{}, p.label||"Location"), h("span",{}, p.lat.toFixed(5)+", "+p.lng.toFixed(5)), h("i",{}, "© OpenStreetMap")));
+    h("div",{class:"lmap", style:mapStyle(p.lat,p.lng,250,150)}, h("span",{class:"lpin2"}, h("i"), svg('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4" fill="#fff" stroke="none"/>')), h("span",{class:"losm"}, "© OpenStreetMap")),
+    h("div",{class:"lmeta2", title:p.lat.toFixed(5)+", "+p.lng.toFixed(5)},
+      h("span",{class:"lic"}, svg('<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>')),
+      h("span",{class:"ltx"}, h("b",{}, p.label||p.name||"Shared location"), h("span",{}, "Open in Maps")),
+      svg('<path d="M9.5 6l6 6-6 6"/>')));
 }
 function openLocationPicker(){
   const cid=S.active; if (!cid) return;
@@ -1742,7 +1819,7 @@ function renderContactCard(p){
   if (!p) return h("span",{class:"tx"},"👤 Contact");
   const ph=(p.p||[])[0]||""; const uid=p.uid && p.uid!==S.me? p.uid : null;
   return h("div",{class:"ccard", onclick:e=>e.stopPropagation()},
-    h("div",{class:"cchead"}, uid && S.people[uid]? avatar(uid,"lg") : h("span",{class:"glyph", style:`background:${colorFor(p.n||ph)};width:44px;height:44px;font-size:16px`}, (p.n||"?").trim()[0].toUpperCase()), h("div",{class:"ccx"}, h("b",{}, p.n||ph), h("span",{}, ph))),
+    h("div",{class:"cchead"}, uid && S.people[uid]? avatar(uid,"lg") : monogram(p.n, "glyph g44"), h("div",{class:"ccx"}, h("b",{}, p.n||ph), h("span",{}, ph))),
     h("div",{class:"ccacts"},
       uid? h("button",{onclick:async()=>{ const id=await ensureDM(uid); if (id) selectChannel(id); }}, "Message") : ph? h("a",{href:"sms:"+normPhone(ph)+"?&body="+encodeURIComponent("Join me on Task Message")}, "Invite") : "",
       uid && !S.contacts.includes(uid)? h("button",{onclick:()=>setContact(uid,true)}, "Save") : ph? h("a",{href:"tel:"+normPhone(ph)}, "Call") : ""));
@@ -1753,14 +1830,14 @@ function openContactPicker(){
   const draw=()=>{
     const ql=q.trim().toLowerCase(); const match=s=>!ql || String(s||"").toLowerCase().includes(ql);
     const onC=[...new Set([...S.contacts, ...S.onConcept])].filter(id=>id!==S.me && (match(nameOf(id)) || match((S.teamDocs[id]||{}).phone))).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
-    const book=(S.addr||[]).filter(c=>!c.on && (match(c.n) || c.p.some(x=>x.includes(ql)))).slice(0,150);
+    const book=(S.addr||[]).filter(c=>!c.on && (match(c.n) || c.p.some(x=>x.includes(ql))));
     const send=async (payload)=>{ o.remove(); const id=newMsgId(); addPending({id, cid, by:S.me, at:now(), kind:"contact", local:payload, pending:true}); try { await sendRich(cid, "contact", payload, "", {}, id); if (!SB) { const m=S.pend.find(x=>x.id===id); if (m) m.pending=false; scheduleRender(); } } catch { dropPending(id); } };
-    o.replaceChildren(
-      h("header",{class:"fhead"}, h("button",{class:"iconbtn","aria-label":"Close", title:"Close", onclick:()=>o.remove()}, svg(IC.back)), h("input",{id:"cp-q", class:"fsearch", placeholder:"Search contacts", value:q, oninput:e=>{ q=e.target.value; draw(); const n=$("#cp-q"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }})),
+    swapKids(o, [
+      h("header",{class:"fhead"}, h("button",{class:"iconbtn","aria-label":"Close", title:"Close", onclick:()=>o.remove()}, svg(IC.back)), h("input",{id:"cp-q", class:"fsearch", placeholder:"Search contacts", value:q, oninput:e=>{ q=e.target.value; draw(); }})),
       h("div",{class:"flist"},
         onC.length? [h("div",{class:"seg-label"},"On Task Message"), ...onC.map(id=>h("button",{class:"frow", onclick:()=>send({n:nameOf(id).replace(/^Example:\s*/,""), p:[(S.teamDocs[id]||{}).phone].filter(Boolean), uid:id})}, h("span",{class:"cav"}, avatar(id,"lg")), h("span",{class:"ctx"}, h("b",{}, nameOf(id).replace(/^Example:\s*/,"")), h("span",{}, (S.teamDocs[id]||{}).phone||""))))] : "",
-        book.length? [h("div",{class:"seg-label"},"Phone contacts"), ...book.map(c=>h("button",{class:"frow", onclick:()=>send({n:c.n, p:c.p})}, h("span",{class:"glyph", style:`background:${colorFor(c.n)};width:44px;height:44px;font-size:16px`}, (c.n||"?")[0].toUpperCase()), h("span",{class:"ctx"}, h("b",{}, c.n), h("span",{}, c.p[0]))))] : "",
-        !onC.length && !book.length? h("div",{class:"flowempty"}, h("p",{}, ql? "No results" : "No contacts yet"), ql? "" : h("button",{class:"ghost", onclick:()=>{ o.remove(); importContacts(); }}, svg(ICF.book), "Import phone contacts")) : ""));
+        book.length? [h("div",{class:"seg-label"},"Phone contacts"), lazyRows(book, c=>h("button",{class:"frow", onclick:()=>send({n:c.n, p:c.p})}, monogram(c.n, "glyph g44"), h("span",{class:"ctx"}, h("b",{}, c.n), h("span",{}, c.p[0]))))] : "",
+        !onC.length && !book.length? h("div",{class:"flowempty"}, h("p",{}, ql? "No results" : "No contacts yet"), ql? "" : h("button",{class:"ghost", onclick:()=>{ o.remove(); importContacts(); }}, svg(ICF.book), "Import phone contacts")) : "")]);
   };
   draw(); setTimeout(()=>{ const n=$("#cp-q"); if (n) n.focus(); }, 50);
 }
@@ -1859,9 +1936,10 @@ function msgBanner(c){
 // --- sheets ---
 function sheet(title, build, opts={}){
   const scrim=h("div",{class:"scrim", onclick:e=>{ if (e.target===scrim) close(); }}); const close=()=>{ scrim.remove(); opts.onClose&&opts.onClose(); };
-  const draw=()=>scrim.replaceChildren(h("div",{class:"modal ntsheet", role:"dialog", "aria-label":title},
+  const draw=()=>{ const old=scrim.firstChild; const m=h("div",{class:"modal ntsheet", role:"dialog", "aria-label":title},
     h("div",{class:"sheethead"}, h("b",{class:"sheettitle"}, title), h("span",{class:"grow"}), h("button",{class:"iconbtn", title:"Close", "aria-label":"Close", onclick:close}, svg(IC.x))),
-    ...[build(draw, close)].flat()));
+    ...[build(draw, close)].flat());
+    if (old && old.contains(document.activeElement) && document.activeElement.id) { const st=old.scrollTop; swapKids(old, [...m.childNodes]); old.scrollTop=st; old.__draw=draw; } else { const st=old? old.scrollTop : 0; scrim.replaceChildren(m); m.__draw=draw; if (st) m.scrollTop=st; } };
   draw(); document.body.append(scrim); return close;
 }
 const pickList = (items, cur, pick) => h("div",{class:"ulist sgroup"}, items.map(([v,l,sub])=>h("button",{class:"srow pick1"+(v===cur?" on":""), onclick:()=>pick(v)}, h("span",{class:"stx"}, h("b",{}, l), sub? h("span",{}, sub):""), v===cur? svg(ICF.check) : "")));
@@ -1985,7 +2063,7 @@ function openAddMembers(){
   let cc=ls.get("cc","+1"), num="", sel=new Set(), q="";
   sheet("Add to "+tm.name, (draw, close)=>{
     const cands=S.team.filter(id=>id!==S.me && !(tm.members||[]).includes(id) && (!q || fullName(id).toLowerCase().includes(q)));
-    const addr=(S.addr||[]).filter(c=>!c.on && c.p && c.p.length && (!q || c.n.toLowerCase().includes(q) || c.p.some(p=>dgt(p).includes(dgt(q)||"~")))).slice(0,40);
+    const addr=(S.addr||[]).filter(c=>!c.on && c.p && c.p.length && (!q || c.n.toLowerCase().includes(q) || c.p.some(p=>dgt(p).includes(dgt(q)||"~"))));
     const go=async()=>{ const ok=await inviteByPhone(tm, num, cc); if (ok) { num=""; draw(); const i=$("#inv-num"); if (i) i.focus(); } };
     return [
       h("div",{class:"seg-label"}, "Invite by phone number"),
@@ -1994,10 +2072,10 @@ function openAddMembers(){
         h("input",{class:"inp", id:"inv-num", type:"tel", inputmode:"tel", autocomplete:"tel", placeholder:"Phone number", value:num, oninput:e=>{ num=e.target.value; const b=$("#inv-go"); if (b) b.disabled=dgt(num).length<6; }, onkeydown:e=>{ if (e.key==="Enter") go(); }}),
         h("button",{class:"roundgo", id:"inv-go", "aria-label":"Invite", title:"Invite", disabled:dgt(num).length<6, onclick:go}, svg(IC.send))),
       h("p",{class:"note", style:"margin:-4px 4px 0"}, "If they're on Task Message they're added right away. If not, they get a text, and they join when they sign up with that number."),
-      (cands.length || addr.length || q)? h("label",{class:"search"}, svg(IC.search), h("input",{id:"inv-q", placeholder:"Search people", value:q, oninput:e=>{ q=e.target.value.toLowerCase(); draw(); const n=$("#inv-q"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }})) : "",
+      (cands.length || addr.length || q)? h("label",{class:"search"}, svg(IC.search), h("input",{id:"inv-q", placeholder:"Search people", value:q, oninput:e=>{ q=e.target.value.toLowerCase(); draw(); }})) : "",
       cands.length? [h("div",{class:"seg-label"}, "On Task Message"), h("div",{class:"picklist"}, cands.map(id=>h("button",{class:"pick contact","aria-pressed":String(sel.has(id)), onclick:()=>{ sel.has(id)?sel.delete(id):sel.add(id); draw(); }}, h("span",{class:"cav"}, avatar(id), sel.has(id)? h("span",{class:"tick"}, svg(ICF.check)):""), fullName(id).replace(/^Example:\s*/,""))))] : "",
       sel.size? h("button",{class:"primary wide", onclick:async()=>{ const ids=[...sel]; close(); await guarded(store.update("teams/"+tm.id, {members:[...new Set([...(tm.members||[]), ...ids])]})); toast(ids.length===1? "Added to the team" : ids.length+" people added"); }}, "Add "+sel.size) : "",
-      addr.length? [h("div",{class:"seg-label"}, "From your phone contacts"), h("div",{class:"ulist sgroup"}, addr.map(c=>h("button",{class:"srow pick1", onclick:async()=>{ await inviteByPhone(tm, c.p[0], cc, c.n); draw(); }}, h("span",{class:"stx"}, h("b",{}, c.n||c.p[0]), h("span",{}, c.p[0])), h("span",{class:"invtag"}, "Invite"))))] : "",
+      addr.length? [h("div",{class:"seg-label"}, "From your phone contacts"), h("div",{class:"ulist sgroup"}, lazyRows(addr, c=>h("button",{class:"srow pick1", onclick:async()=>{ await inviteByPhone(tm, c.p[0], cc, c.n); draw(); }}, h("span",{class:"stx"}, h("b",{}, c.n||c.p[0]), h("span",{}, c.p[0])), h("span",{class:"invtag"}, "Invite"))))] : "",
     ];
   });
   setTimeout(()=>{ const i=$("#inv-num"); if (i) i.focus(); }, 60);
@@ -2092,12 +2170,94 @@ async function syncAll(){
 }
 async function saveAttachments(r){
   if (r.deleted) return;
+  const pf=S.prefs||{};
+  if (r.kind==="voice" && pf.autoVoice===false) return;
+  if (r.kind==="media" && pf.autoMedia===false) return;
   if (r.kind==="voice" && r.voice && r.voice.id && r.voice.parts) {
     const k=LOCAL.key("v:"+r.voice.id); if (await kvGet(k)) return;
     let b64=""; for (let i=0;i<r.voice.parts;i++){ const p=await store.get(`voice/${r.voice.id}/parts/${i}`); if (!p) return; b64+=p.d; }
     await kvSet(k, b64);
   }
   if (r.kind==="media") { const p=plainP(r); for (const it of (p&&p.items)||[]) { if (!it.path || (it.size||0)>60e6) continue; const k=LOCAL.key("f:"+it.path); if (await kvGet(k)) continue; const res=await fetch(blobUrl(it.path)); if (res.ok) await kvSet(k, await res.arrayBuffer()); } }
+}
+
+// ===================== Settings → Storage and data =====================
+const STORAGE_IC='<ellipse cx="12" cy="6" rx="7" ry="2.7"/><path d="M5 6v12c0 1.5 3.1 2.7 7 2.7s7-1.2 7-2.7V6"/><path d="M5 12c0 1.5 3.1 2.7 7 2.7s7-1.2 7-2.7"/>';
+async function appUsage(){ try { if (navigator.storage && navigator.storage.estimate) { const e=await navigator.storage.estimate(); if (e && e.usage) return e.usage; } } catch {} let t=0; (await kvSizes()).forEach(v=>t+=v); return t; }
+// What's saved on this phone, split by type and by chat.
+async function storageReport(){
+  const sizes=await kvSizes(), P="u:"+S.me+":";
+  const get=k=>sizes.get(P+k)||0;
+  const kinds={msgs:0, media:0, voice:0, cache:0, other:0};
+  for (const [k,v] of sizes) {
+    if (!k.startsWith(P)) { kinds.other+=v; continue; }
+    const r=k.slice(P.length);
+    if (r.startsWith("m:")) kinds.msgs+=v; else if (r.startsWith("f:")) kinds.media+=v; else if (r.startsWith("v:")) kinds.voice+=v;
+    else if (r.startsWith("fd:")||r.startsWith("vd:")) kinds.cache+=v; else kinds.other+=v;
+  }
+  const chats=[];
+  for (const c of S.channels) {
+    const rows=(await kvGet(P+"m:"+c.id))||[]; if (!Array.isArray(rows)) continue;
+    await decryptMany(rows.flatMap(m=>[m.penc]));
+    const vids=[], paths=[];
+    for (const m of rows) { if (m.kind==="voice" && m.voice && m.voice.id) vids.push(m.voice.id); if (m.kind==="media") { const p=plainP(m); for (const it of (p&&p.items)||[]) if (it.path) paths.push(it.path); } }
+    const voice=vids.reduce((a,v)=>a+get("v:"+v)+get("vd:"+v),0), media=paths.reduce((a,p)=>a+get("f:"+p)+get("fd:"+p),0), msgs=get("m:"+c.id);
+    chats.push({c, msgs, voice, media, vids, paths, n:rows.length, total:msgs+voice+media});
+  }
+  chats.sort((a,b)=>b.total-a.total);
+  const kvTotal=Object.values(kinds).reduce((x,y)=>x+y,0);
+  return {kinds, chats, total:Math.max(kvTotal, await appUsage()), quota:await (async()=>{ try { return (await navigator.storage.estimate()).quota||0; } catch { return 0; } })()};
+}
+async function clearChatMedia(x, what){
+  const P="u:"+S.me+":"; const keys=[];
+  if (what!=="voice") x.paths.forEach(p=>{ keys.push(P+"f:"+p, P+"fd:"+p); if (MEDIA_CACHE[p]) { try { URL.revokeObjectURL(MEDIA_CACHE[p]); } catch {} delete MEDIA_CACHE[p]; } });
+  if (what!=="media") x.vids.forEach(v=>{ keys.push(P+"v:"+v, P+"vd:"+v); if (VOICE_URLS[v]) { try { URL.revokeObjectURL(VOICE_URLS[v]); } catch {} delete VOICE_URLS[v]; } });
+  await kvDel(keys);
+}
+function openStorage(){
+  let rep=null, busy=false;
+  const KC=[["msgs","Messages","#007AFF"],["media","Photos & files","#FF9500"],["voice","Voice notes","#AF52DE"],["cache","Cache","#8E8E93"],["other","Other","#C7C7CC"]];
+  const close=sheet("Storage and data", (draw)=>{
+    if (!rep) return [h("div",{class:"stwait"}, h("span",{class:"spin dark"}), "Checking storage…")];
+    const k=rep.kinds, sum=Object.values(k).reduce((a,b)=>a+b,0)||1;
+    const swt=(key, def, title, sub)=>{ const on=S.prefs[key]===undefined? def : !!S.prefs[key]; return h("div",{class:"srow"}, h("span",{class:"stx"}, h("b",{},title), sub? h("span",{},sub):""), h("button",{class:"switch"+(on?" on":""), role:"switch", "aria-checked":String(on), "aria-label":title, onclick:()=>{ S.prefs={...S.prefs,[key]:!on}; ls.set("prefs",S.prefs); draw(); }}, h("i"))); };
+    return [
+      h("div",{class:"stsum"},
+        h("div",{class:"sttop"}, h("b",{}, fmtSize(rep.total)), h("span",{}, "used by Task Message on this phone")),
+        h("div",{class:"stbar", role:"img", "aria-label":"Storage use by type"}, KC.filter(([key])=>k[key]>0).map(([key,,col])=>h("i",{style:`flex:${Math.max(k[key]/sum, .012)};background:${col}`}))),
+        h("div",{class:"stlegend"}, KC.filter(([key])=>k[key]>0 || key==="msgs").map(([key,l,col])=>h("span",{}, h("i",{style:`background:${col}`}), l+" ", h("em",{}, fmtSize(k[key])))))),
+      h("div",{class:"seg-label"}, "Save automatically"),
+      h("div",{class:"ulist sgroup"},
+        swt("autoMedia", true, "Photos, videos & documents", "Keep a copy on this phone when they arrive"),
+        swt("autoVoice", true, "Voice notes", "Keep a copy on this phone when they arrive")),
+      h("p",{class:"note", style:"margin:-2px 4px 0"}, "When this is off, items open from the internet when you tap them, while they're still available there."),
+      h("div",{class:"seg-label"}, "Chats"),
+      rep.chats.filter(x=>x.total>0).length? h("div",{class:"ulist sgroup"}, rep.chats.filter(x=>x.total>0).map(x=>h("button",{class:"srow pick stchat", onclick:()=>openChatStorage(x, async()=>{ rep=await storageReport(); draw(); })},
+        h("span",{class:"cav"}, chanGlyph(x.c)), h("span",{class:"stx"}, h("b",{}, chanTitle(x.c)), h("span",{}, [x.media? "Photos & files "+fmtSize(x.media) : "", x.voice? "Voice "+fmtSize(x.voice) : "", x.n+" messages"].filter(Boolean).join(" · "))),
+        h("span",{class:"sval"}, fmtSize(x.total)), svg(IC.arrow)))) : h("p",{class:"note", style:"margin:0 4px"}, "Nothing saved yet."),
+      h("div",{class:"seg-label"}, "Cache"),
+      h("div",{class:"ulist sgroup"}, h("button",{class:"srow pick", disabled:busy || !k.cache, onclick:async()=>{ busy=true; draw(); const sz=await kvSizes("u:"+S.me+":"); await kvDel([...sz.keys()].filter(x=>/^u:[^:]+:(fd|vd):/.test(x))); for (const p in MEDIA_CACHE) { try { URL.revokeObjectURL(MEDIA_CACHE[p]); } catch {} delete MEDIA_CACHE[p]; } busy=false; rep=await storageReport(); draw(); toast("Cache cleared"); }},
+        h("span",{class:"stx"}, h("b",{class:"blue"}, "Clear cache"), h("span",{}, "Ready-to-open copies. Safe to clear: nothing is lost.")), h("span",{class:"sval"}, fmtSize(k.cache))))
+    ];
+  });
+  storageReport().then(r=>{ rep=r; const s=document.querySelector(".ntsheet"); if (s) { /* redraw via the sheet's own button-less path */ } drawStorage(); }).catch(()=>{ rep={kinds:{msgs:0,media:0,voice:0,cache:0,other:0}, chats:[], total:0}; drawStorage(); });
+  function drawStorage(){ const m=document.querySelector(".ntsheet[aria-label='Storage and data']"); if (m && m.__draw) m.__draw(); }
+  return close;
+}
+function openChatStorage(x, after){
+  const ask=(title, text, what)=>sheet(title, (draw, close)=>[
+    h("p",{class:"note", style:"margin:0 4px"}, text),
+    h("button",{class:"primary wide danger", onclick:async()=>{ close(); await clearChatMedia(x, what); toast("Deleted from this phone"); after&&after(); }}, "Delete from this phone"),
+    h("button",{class:"ghost wide", onclick:close}, "Cancel")]);
+  sheet(chanTitle(x.c), (draw, close)=>[
+    h("div",{class:"ulist sgroup"},
+      h("div",{class:"srow"}, h("span",{class:"stx"}, h("b",{},"Messages"), h("span",{}, x.n+" saved")), h("span",{class:"sval"}, fmtSize(x.msgs))),
+      h("div",{class:"srow"}, h("span",{class:"stx"}, h("b",{},"Photos, videos & files")), h("span",{class:"sval"}, fmtSize(x.media))),
+      h("div",{class:"srow"}, h("span",{class:"stx"}, h("b",{},"Voice notes")), h("span",{class:"sval"}, fmtSize(x.voice)))),
+    h("div",{class:"ulist sgroup"},
+      h("button",{class:"srow pick", disabled:!x.media, onclick:()=>{ close(); ask("Delete photos & files?", "Photos, videos and documents in this chat will be removed from this phone. The messages stay. Once the server copy has expired they can't be opened again unless you have a backup.", "media"); }}, h("span",{class:"stx"}, h("b",{class:"red"}, "Delete photos & files")), h("span",{class:"sval"}, fmtSize(x.media))),
+      h("button",{class:"srow pick", disabled:!x.voice, onclick:()=>{ close(); ask("Delete voice notes?", "Voice notes in this chat will be removed from this phone. Once the server copy has expired they can't be played again unless you have a backup.", "voice"); }}, h("span",{class:"stx"}, h("b",{class:"red"}, "Delete voice notes")), h("span",{class:"sval"}, fmtSize(x.voice))))
+  ]);
 }
 
 // ===================== chat backup to iCloud Drive / Google Drive =====================
@@ -2271,6 +2431,7 @@ function exitGroup(c, close){
 // ===================== native app (iPhone / Android) =====================
 const CAP = window.Capacitor;
 const NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
+const IOS = NATIVE ? (CAP.getPlatform && CAP.getPlatform()==="ios") : /iPhone|iPad|iPod/.test(navigator.userAgent);
 const PLAT = NATIVE ? CAP.getPlatform() : "web";
 const NP = name => (NATIVE && CAP.Plugins && CAP.Plugins[name]) || null;
 const siteLink = file => (NATIVE || CFG.siteUrl? (CFG.siteUrl||"https://concept-rnmb.onrender.com").replace(/\/$/,"")+"/" : "") + file;
@@ -2317,10 +2478,13 @@ async function saveDeviceToken(token){
 async function nativeContacts(){
   const c=NP("Contacts"); if (!c) return false;
   try {
-    let p=await c.checkPermissions(); if (p.contacts!=="granted") p=await c.requestPermissions();
-    if (p.contacts!=="granted") { toast("Allow Contacts in Settings to find people you know."); return true; }
-    const r=await c.getContacts({projection:{name:true, phones:true}});
-    saveAddr((r.contacts||[]).map(x=>({n:(x.name&&(x.name.display||[x.name.given,x.name.family].filter(Boolean).join(" ")))||"", p:(x.phones||[]).map(ph=>ph.number).filter(Boolean)})));
+    let p=await c.checkPermissions(); const ok=v=>v==="granted"||v==="limited";
+    if (!ok(p.contacts)) p=await c.requestPermissions();
+    if (!ok(p.contacts)) { toast("Allow Contacts in Settings to find people you know."); return true; }
+    const r=await c.getContacts({projection:{name:true, phones:true, organization:true}});
+    S.addr=[]; // read fresh from the phone each time
+    saveAddr((r.contacts||[]).map(x=>{ const p=(x.phones||[]).map(ph=>ph.number).filter(Boolean); return {n:(x.name&&(x.name.display||[x.name.given,x.name.middle,x.name.family].filter(Boolean).join(" ")))||(x.organization&&x.organization.company)||p[0]||"", p}; }));
+    if (p.contacts==="limited") toast("You shared only some contacts. To see everyone: iPhone Settings → Apps → Task Message → Contacts → Full Access.", {ms:7000});
   } catch { toast("Couldn't read your contacts."); }
   return true;
 }
@@ -2374,7 +2538,7 @@ function openDeleteAccount(){
 }
 
 // ---------- toast ----------
-let toastT; function toast(t, act){ let el=$("#toast"); if (!el){ el=h("div",{class:"toast",id:"toast",role:"status"}); document.body.append(el);} el.replaceChildren(h("span",{},t), act? h("button",{class:"toastbtn", onclick:()=>{ el.hidden=true; act.fn(); }}, act.label):""); el.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>el.hidden=true, act?4500:2400); }
+let toastT; function toast(t, act){ let el=$("#toast"); if (!el){ el=h("div",{class:"toast",id:"toast",role:"status"}); document.body.append(el);} el.replaceChildren(h("span",{},t), act&&act.label? h("button",{class:"toastbtn", onclick:()=>{ el.hidden=true; act.fn(); }}, act.label):""); el.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>el.hidden=true, (act&&act.ms)||(act?4500:2400)); }
 
 // ---------- render ----------
 let scrollDown=true;
@@ -2804,13 +2968,14 @@ function renderDrawer(){
 function openNewChat(){ S.newFlow={step:"pick", sel:[], name:"", icon:"", q:""}; S.inThread=false; S.view="chats"; render(); setTimeout(()=>{ const i=$("#nf-q"); if (i) i.focus(); },30); }
 function closeFlow(){ S.newFlow=null; render(); }
 const GROUP_ICONS=["💬","🚀","📣","🛠️","🎯","📦","🎨","📈","☕","🏠","⚽","🎉"];
+function flowRedraw(){ const old=document.querySelector("section.flow"); if (!old) { render(); return; } const nw=renderFlow(); const l=old.querySelector(".list"), st=l? l.scrollTop : 0; old.className=nw.className.replace(" enter",""); swapKids(old, [...nw.childNodes]); }
 function renderFlow(){
   const F=S.newFlow; const others=S.team.filter(id=>id!==S.me).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
   const q=F.q.toLowerCase(); const match=others.filter(id=>!q || nameOf(id).toLowerCase().includes(q));
   const firstFlow=!F._shown; F._shown=true;
   const pane=h("section",{class:"lines flow"+(firstFlow?" enter":""),"aria-label":"New chat", onkeydown:e=>{ if (e.key!=="Escape") return; if (F.step==="pick") closeFlow(); else { F.step = F.step==="members"? "pick" : "members"; render(); } }});
   const head=(title, sub, back)=>h("div",{class:"flowhead"}, h("button",{class:"iconbtn","aria-label":"Back", onclick:back}, svg(IC.back)), h("div",{class:"fht"}, h("b",{},title), sub? h("span",{},sub):""));
-  const searchBox=()=>h("label",{class:"search"}, svg(IC.search), h("input",{id:"nf-q", placeholder:"Search name", value:F.q, oninput:e=>{F.q=e.target.value; const pos=e.target.selectionStart; render(); const n=$("#nf-q"); n.focus(); n.setSelectionRange(pos,pos);}}));
+  const searchBox=()=>h("label",{class:"search"}, svg(IC.search), h("input",{id:"nf-q", placeholder:"Search name", value:F.q, oninput:e=>{F.q=e.target.value; flowRedraw(); }}));
   const person=(id, opts={})=>h("div",{class:"contact", role:"button", tabindex:"0", "aria-pressed":opts.sel==null?null:String(opts.sel), onclick:opts.onclick, onkeydown:e=>{ if (e.key==="Enter") opts.onclick(); }},
     h("span",{class:"cav"}, avatar(id,"lg"), opts.sel? h("span",{class:"tick"}, svg('<path d="M6 12.5l4 4 8-9"/>')):""),
     h("span",{class:"ctx"}, h("b",{}, fullName(id).replace(/^Example:\s*/,"")), h("span",{}, (S.teamDocs[id]||{}).about || (S.addrNames[id]? (S.teamDocs[id]||{}).phone||"" : ""))),
@@ -2827,11 +2992,12 @@ function renderFlow(){
     if (!q) list.append(h("button",{class:"action", onclick:importContacts}, h("span",{class:"actic"}, svg(ICF.book)), h("b",{}, S.addr.length? "Update phone contacts" : "Import phone contacts")));
     const saved=match.filter(id=>S.contacts.includes(id)).sort((a,b)=>nameOf(a).localeCompare(nameOf(b))), more=match.filter(id=>!S.contacts.includes(id));
     const go=id=>()=>{ S.newFlow=null; createChannel("", [S.me,id], "dm"); };
-    const invites=(S.addr||[]).filter(c=>!c.on && (!q || c.n.toLowerCase().includes(q) || c.p.some(p=>p.includes(q)))).slice(0,80);
+    const invites=(S.addr||[]).filter(c=>!c.on && (!q || c.n.toLowerCase().includes(q) || c.p.some(p=>p.includes(q))));
     if (!match.length && !invites.length) list.append(empty());
     if (saved.length) list.append(h("div",{class:"seg-label"},"Contacts on Task Message"), ...saved.map(id=>person(id,{onclick:go(id)})));
     if (more.length) list.append(h("div",{class:"seg-label"},"Others on Task Message"), ...more.map(id=>person(id,{onclick:go(id), add:true})));
-    if (invites.length) list.append(h("div",{class:"seg-label"},"Invite to Task Message"), ...invites.map(inviteRow));
+    if (invites.length) list.append(h("div",{class:"seg-label"},"Invite to Task Message"), lazyRows(invites, inviteRow));
+    if (NATIVE && !q && S.addr && S.addr.length) list.append(h("p",{class:"note contactsnote"}, IOS? "Missing someone? On your iPhone open Settings, tap Apps, tap Task Message, tap Contacts and choose Full Access. Then tap Update phone contacts." : "Missing someone? Tap Update phone contacts."));
     pane.append(list);
   }
   else if (F.step==="members") {
@@ -2849,7 +3015,7 @@ function renderFlow(){
     const body=h("div",{class:"namestep"});
     body.append(h("div",{class:"gicon", style:`background:${F.icon? "var(--fill)" : colorFor(F.name||"g")}`}, F.icon || (F.name.trim()? F.name.trim()[0].toUpperCase() : svg(IC.group))));
     body.append(h("div",{class:"iconpick"}, GROUP_ICONS.map(e=>h("button",{"aria-pressed":String(F.icon===e), "aria-label":"Group icon "+e, onclick:()=>{F.icon=F.icon===e?"":e; render();}}, e))));
-    body.append(h("label",{class:"gname"}, h("input",{id:"nf-name", maxlength:"60", placeholder:"Group name (required)", value:F.name, oninput:e=>{F.name=e.target.value; const pos=e.target.selectionStart; render(); const n=$("#nf-name"); n.focus(); n.setSelectionRange(pos,pos);}, onkeydown:e=>{ if (e.key==="Enter") finishGroup(); }}), h("span",{class:"count mono"}, 60-F.name.length)));
+    body.append(h("label",{class:"gname"}, h("input",{id:"nf-name", maxlength:"60", placeholder:"Group name (required)", value:F.name, oninput:e=>{F.name=e.target.value; flowRedraw(); }, onkeydown:e=>{ if (e.key==="Enter") finishGroup(); }}), h("span",{class:"count mono"}, 60-F.name.length)));
     body.append(h("div",{class:"seg-label",style:"padding-left:0"}, `Members: ${F.sel.length+1}`));
     body.append(h("div",{class:"memgrid"}, [S.me, ...F.sel].map(id=>h("span",{class:"mem"}, avatar(id,"lg"), h("span",{}, id===S.me? "You" : nameOf(id).replace(/^Example:\s*/,"").split(" ")[0])))));
     pane.append(body);
