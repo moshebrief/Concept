@@ -1740,3 +1740,11 @@ input.iname:focus{outline:none;background:var(--surface)}
 .srow.col{flex-wrap:wrap}
 .srow.col .segmini{flex:1 0 100%;margin-top:8px}
 .bkbusy{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;color:var(--muted);font-size:14px}
+
+/* sheets scroll when the list is long (invite people, tones, backup…) */
+.ntsheet{max-height:min(86vh,720px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.ntsheet > *{flex-shrink:0}
+.ntsheet .picklist{max-height:none!important;overflow:visible!important}
+.scrim{overscroll-behavior:contain}
+.modal .picklist{max-height:min(52vh,460px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.scrim{z-index:70!important}.infoview ~ .scrim{z-index:90!important}
