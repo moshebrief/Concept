@@ -977,14 +977,37 @@ async function fingerprint(){ if (!E2E.pub) return ""; const h=new Uint8Array(aw
 const COUNTRIES=[["+1","US/CA"],["+44","UK"],["+972","IL"],["+49","DE"],["+33","FR"],["+39","IT"],["+34","ES"],["+61","AU"],["+91","IN"],["+55","BR"],["+52","MX"],["+7","RU"],["+27","ZA"],["+971","AE"],["+32","BE"],["+31","NL"],["+41","CH"],["+43","AT"],["+46","SE"],["+48","PL"],["+380","UA"],["+81","JP"],["+82","KR"],["+86","CN"]];
 const normPhone = p => { let d=String(p||"").replace(/[^\d+]/g,""); if (d.startsWith("00")) d="+"+d.slice(2); return d; };
 const phoneKey = p => normPhone(p).replace(/\D/g,"").slice(-9);
-function loadAddr(){ S.addr = ls.get("addr:"+S.me, []); matchAddr(); }
+function loadAddr(){ S.addr = ls.get("addr:"+S.me, []); S.matchByKey=ls.get("match:"+S.me, {}); matchAddr(); findOnApp(); }
+// Ask the server which of the numbers already in your phone use the app. Nobody can browse other users.
+let MATCH_T=0;
+function findOnApp(){ clearTimeout(MATCH_T); MATCH_T=setTimeout(async()=>{
+  if (!SB || S.mode!=="live" || !(S.addr||[]).length) return;
+  const keys=[...new Set(S.addr.flatMap(c=>(c.p||[]).map(phoneKey)).filter(k=>k.length>=7))].slice(0,3000);
+  try { const {data, error}=await SB.rpc("match_contacts", {p_keys:keys}); if (error) return;
+    S.matchByKey=Object.fromEntries((data||[]).map(r=>[r.k, r.id])); ls.set("match:"+S.me, S.matchByKey); matchAddr(); scheduleRender(); } catch {}
+}, 400); }
+async function lookupPhone(phone){
+  const k=phoneKey(phone); if (k.length<7) return null;
+  if (S.matchByKey && S.matchByKey[k]) return S.matchByKey[k];
+  if (!SB || S.mode!=="live") return null;
+  try { const {data}=await SB.rpc("match_contacts", {p_keys:[k]}); return (data&&data[0]&&data[0].id)||null; } catch { return null; }
+}
+// Profiles you're newly allowed to see (a contact who uses the app) are fetched once.
+const PROF_ASKED=new Set();
+async function loadProfiles(ids){
+  const need=ids.filter(id=>id && !S.teamDocs[id] && !PROF_ASKED.has(id)); if (!need.length) return;
+  need.forEach(id=>PROF_ASKED.add(id));
+  for (const id of need) { try { const d=await store.get("team/"+id); if (!d) continue; S.teamDocs[id]={id, ...d}; if (!S.team.includes(id)) S.team.push(id); S.people[id]={id, name:d.name||d.phone||"Someone", avatarUrl:d.photo||"", color:colorFor(id)}; } catch {} }
+  scheduleRender();
+}
 function matchAddr(){
-  const byKey={}; for (const id of S.team) { const ph=(S.teamDocs[id]||{}).phone; if (ph && phoneKey(ph).length>=7) byKey[phoneKey(ph)]=id; }
+  const byKey={...(S.matchByKey||{})}; for (const id of S.team) { const ph=(S.teamDocs[id]||{}).phone; if (ph && phoneKey(ph).length>=7) byKey[phoneKey(ph)]=id; }
   const names={}, matched=new Set();
   for (const c of S.addr||[]) for (const p of c.p||[]) { const id=byKey[phoneKey(p)]; if (id && id!==S.me) { names[id]=c.n; matched.add(id); c.on=id; } }
   S.addrNames=names; S.onConcept=[...matched];
   const missing=S.onConcept.filter(id=>!S.contacts.includes(id));
-  if (missing.length && S.canWrite && S.mode==="live") { S.contacts=[...new Set([...S.contacts, ...missing])]; store.set("contacts/"+S.me,{ids:S.contacts}).catch(()=>{}); }
+  if (missing.length && S.canWrite && S.mode==="live") { S.contacts=[...new Set([...S.contacts, ...missing])]; store.set("contacts/"+S.me,{ids:S.contacts}).then(()=>loadProfiles(missing)).catch(()=>{}); }
+  const unknown=S.onConcept.filter(id=>!S.teamDocs[id]); if (unknown.length && S.mode==="live") loadProfiles(unknown);
 }
 function parseVCF(text){
   const out=[]; const lines=text.replace(/\r/g,"").replace(/\n[ \t]/g,"").split("\n"); let cur=null;
@@ -1000,7 +1023,7 @@ function parseVCF(text){
 function saveAddr(list){
   const seen=new Set(); const clean=[]; for (const c of list) { const ps=[...new Set((c.p||[]).map(normPhone))].filter(p=>p.replace(/\D/g,"").length>=6); const key=ps.map(phoneKey).join(","); if (!ps.length || seen.has(key)) continue; seen.add(key); clean.push({n:String(c.n||ps[0]).slice(0,60), p:ps}); }
   const merged=[...(S.addr||[])]; for (const c of clean) if (!merged.some(m=>m.p.some(p=>c.p.map(phoneKey).includes(phoneKey(p))))) merged.push(c);
-  S.addr=merged.sort((a,b)=>a.n.localeCompare(b.n)); ls.set("addr:"+S.me, S.addr); matchAddr(); render();
+  S.addr=merged.sort((a,b)=>a.n.localeCompare(b.n)); ls.set("addr:"+S.me, S.addr); matchAddr(); findOnApp(); render();
   toast(`${clean.length} contacts · ${S.onConcept.length} on Task Message`);
 }
 async function importContacts(){
@@ -1923,7 +1946,7 @@ const incomingInvites = () => (S.invites||[]).filter(v=>!v.status && v.by!==S.me
 async function inviteByPhone(tm, raw, cc, label){
   const phone=toE164(raw, cc);
   if (dgt(phone).length<8) { toast("That doesn't look like a phone number."); return false; }
-  const uid=userByPhone(phone);
+  const uid=userByPhone(phone) || await lookupPhone(phone);
   if (uid===S.me) { toast("That's your own number."); return false; }
   if (uid) {
     if ((tm.members||[]).includes(uid)) { toast(nameOf(uid).replace(/^Example:\s*/,"")+" is already on the team."); return false; }
