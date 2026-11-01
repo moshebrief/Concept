@@ -1705,3 +1705,35 @@ a.srow>svg.i{color:var(--muted);width:16px;height:16px}
 .msg.rich .mbox.n1 .mcell{max-height:min(420px,60vh)}
 .msg.rich .mcell img,.msg.rich .mcell video{max-width:100%}
 .sc-send{background:var(--cobalt)!important}.mp-th.on{border-color:var(--cobalt)!important}
+
+/* ===== chat header opens info ===== */
+.thead .tinfo{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto;background:none;border:0;padding:0;text-align:left;color:inherit;cursor:pointer}
+.thead .tinfo .t{min-width:0}
+.thead .tinfo + .grow{flex:0 0 0}
+
+/* ===== group / contact info ===== */
+.infoview{position:fixed;inset:0;z-index:85;background:var(--paper);color:var(--ink);display:flex;flex-direction:column;animation:slide .22s var(--ease,ease) both}
+.ihead{display:flex;align-items:center;gap:6px;padding:calc(6px + env(safe-area-inset-top,0px)) 8px 6px;background:var(--glass);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:var(--hair,.5px) solid var(--sep,var(--rule))}
+.ihead b{font-size:17px;font-weight:600;position:absolute;left:50%;transform:translateX(-50%)}
+.ibody{flex:1;overflow:auto;padding:0 16px calc(28px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px}
+.ihero{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px 0 4px;text-align:center}
+.ihero .ibig{width:96px!important;height:96px!important;font-size:38px!important;border-radius:50%;margin-bottom:8px}
+.ihero .ibig svg.i{width:44px;height:44px}
+.iname{font:600 22px/1.2 var(--f-body,inherit);margin:0;text-align:center;border:0;background:transparent;color:var(--ink);width:100%;max-width:320px;padding:2px 6px;border-radius:8px}
+input.iname:focus{outline:none;background:var(--surface)}
+.isub{font-size:15px;color:var(--muted)}
+.iabout{font-size:14px;color:var(--ink);opacity:.8}
+.iacts{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px}
+.iact{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px 8px;border-radius:12px;background:var(--surface);color:var(--cobalt);font-size:12.5px;font-weight:500;text-decoration:none;border:0}
+.iact svg.i{width:22px;height:22px;color:var(--cobalt)}
+.infoview .seg-label{margin:6px 4px -6px}
+.imembers .srow{width:100%;text-align:left;background:none;border:0;color:var(--ink);gap:12px}
+.imembers .av{width:40px;height:40px;flex:none}
+.iadd .sic{background:var(--cobalt)!important}
+.iadmin{margin-left:auto;font-size:12px;font-weight:600;color:#1FA855;background:color-mix(in srgb,#1FA855 14%,transparent);padding:2px 8px;border-radius:8px;flex:none}
+.idanger .srow,.idanger .srow b{color:#FF3B30}
+.idanger .sic{background:#FF3B30!important}
+.ibody > *{flex-shrink:0}
+.infoview ~ .scrim{z-index:90}
+.toast{z-index:95}
+.infoview .ulist{overflow:visible}

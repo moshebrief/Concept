@@ -1209,6 +1209,7 @@ function chatMenu(c, x, y){
       : h("div",{class:"pmempty"}, "—"),
     h("div",{class:"pmsep"}),
     h("button",{onclick:()=>{ scrim.remove(); togglePin(c.id); }}, svg(IC.pin), pinned? "Unpin chat" : "Pin chat"),
+    h("button",{onclick:()=>{ scrim.remove(); openChatInfo(c); }}, svg(c.kind==="dm"? ICF.contact : ICF.all), c.kind==="dm"? "Contact info" : "Group info"),
     h("button",{onclick:()=>{ scrim.remove(); openChatNotif(c); }}, svg(isMuted(c)? ICF.bellx : ICF.bell), "Notifications", h("span",{class:"pmval"}, isMuted(c)? muteText(c) : toneName(toneFor(c)))),
     h("button",{onclick:()=>{ scrim.remove(); S.view="board"; S.filter="chan:"+c.id; ls.set("view","board"); render(); }}, svg(ICF.stage), "Show on task board"),
     h("button",{onclick:()=>{ scrim.remove(); openWallpaper(); }}, svg(ICF.image), "Wallpaper"),
@@ -2032,6 +2033,75 @@ function fitMenu(m){
 }
 new MutationObserver(list=>{ for (const mu of list) for (const n of mu.addedNodes) { if (n.nodeType!==1) continue; const ms=n.matches && n.matches(".popmenu")? [n] : [...n.querySelectorAll? n.querySelectorAll(".popmenu") : []]; ms.forEach(m=>{ fitMenu(m); requestAnimationFrame(()=>fitMenu(m)); }); } }).observe(document.body, {childList:true, subtree:true});
 
+// ===================== chat / group info (tap the chat header) =====================
+function openChatInfo(c){
+  if (!c) return;
+  const prev=document.getElementById("chatinfo"); if (prev) prev.remove();
+  const o=h("div",{class:"infoview", id:"chatinfo", role:"dialog", "aria-label":"Chat info"});
+  const close=()=>o.remove();
+  const isGroup=c.kind!=="dm";
+  const peer=dmPeer(c);
+  const admin=c.createdBy||(c.members||[])[0];
+  const clean=s=>String(s||"").replace(/^Example:\s*/,"");
+  const draw=()=>{
+    const cc=S.channels.find(x=>x.id===c.id)||c; const mem=[...new Set(cc.members||[])];
+    const sorted=[S.me, ...mem.filter(x=>x!==S.me).sort((a,b)=>(a===admin?-1:b===admin?1:0) || clean(fullName(a)).localeCompare(clean(fullName(b))))].filter(x=>mem.includes(x));
+    const doc=peer? (S.teamDocs[peer]||{}) : {};
+    const act=(icon,label,fn,cls="")=>h("button",{class:"iact "+cls, onclick:fn}, svg(icon), h("span",{}, label));
+    const row=(icon,title,val,fn,cls="")=>h("button",{class:"srow pick "+cls, onclick:fn}, h("span",{class:"sic"}, svg(icon)), h("span",{class:"stx"}, h("b",{},title)), val? h("span",{class:"sval"}, val):"", svg(IC.arrow));
+    o.replaceChildren(
+      h("header",{class:"ihead"}, h("button",{class:"iconbtn", "aria-label":"Back", onclick:close}, svg(IC.back)), h("b",{}, isGroup? (cc.kind==="task"? "Task conversation" : "Group info") : "Contact info"), h("span",{class:"grow"})),
+      h("div",{class:"ibody"},
+        h("div",{class:"ihero"}, (()=>{ const g=peer? avatar(peer,"xl") : chanGlyph(cc); g.classList.add("ibig"); return g; })(),
+          isGroup && cc.kind!=="task"? h("input",{class:"iname", value:chanTitle(cc), "aria-label":"Group name", maxlength:"60", onchange:e=>{ const v=e.target.value.trim(); if (v) guarded(store.update("channels/"+cc.id,{name:v})).then(()=>toast("Group name saved")).catch(()=>{}); }}) : h("h2",{class:"iname"}, chanTitle(cc)),
+          h("span",{class:"isub"}, isGroup? (cc.kind==="task"? "Task conversation · " : "Group · ")+mem.length+" member"+(mem.length===1?"":"s") : (doc.phone||"")),
+          peer && doc.about? h("span",{class:"iabout"}, doc.about) : ""),
+        h("div",{class:"iacts"},
+          peer && doc.phone? h("a",{class:"iact", href:telHref(doc.phone)}, svg(IC.phone), h("span",{}, "Call")) : "",
+          act(IC.chat, "Message", close),
+          act(isMuted(cc)? ICF.bellx : ICF.bell, isMuted(cc)? "Muted" : "Mute", ()=>{ if (isMuted(cc)) { setMute(cc.id, null); draw(); } else openMute(cc); }),
+          act(IC.search, "Search", ()=>{ close(); toast("Scroll up to see earlier messages"); })),
+        h("div",{class:"ulist sgroup"},
+          row(ICF.music, "Notifications", isMuted(cc)? muteText(cc) : toneName(toneFor(cc)), ()=>openChatNotif(cc)),
+          row(ICF.image, "Wallpaper", "", openWallpaper),
+          row(ICF.stage, "Tasks from this chat", String(visibleTasks().filter(t=>t.channel===cc.id).length), ()=>{ close(); S.view="board"; S.filter="chan:"+cc.id; ls.set("view","board"); render(); })),
+        isGroup? h("div",{class:"seg-label"}, mem.length+" member"+(mem.length===1?"":"s")) : "",
+        isGroup? h("div",{class:"ulist sgroup imembers"},
+          cc.kind!=="task" && S.canWrite? h("button",{class:"srow pick iadd", onclick:()=>addGroupMembers(cc, draw)}, h("span",{class:"sic"}, svg(ICF.personplus)), h("span",{class:"stx"}, h("b",{}, "Add members"))) : "",
+          sorted.map(id=>{ const d=S.teamDocs[id]||{};
+            return h("button",{class:"srow imem", onclick:e=>{ if (id===S.me) return; memberMenu(cc, id, e.clientX, e.clientY, draw); }},
+              avatar(id), h("span",{class:"stx"}, h("b",{}, id===S.me? "You" : clean(fullName(id))), h("span",{}, d.about || d.phone || "")),
+              id===admin? h("span",{class:"iadmin"}, "Admin") : ""); })) : "",
+        h("div",{class:"ulist sgroup idanger"},
+          isGroup && cc.kind!=="task"? h("button",{class:"srow pick dangerrow", onclick:()=>exitGroup(cc, close)}, h("span",{class:"sic"}, svg(IC.back)), h("span",{class:"stx"}, h("b",{}, "Exit group"))) : "",
+          peer? h("button",{class:"srow pick dangerrow", onclick:()=>{ setBlocked(peer, !isBlocked(peer)); draw(); }}, h("span",{class:"sic"}, svg(ICF.block)), h("span",{class:"stx"}, h("b",{}, (isBlocked(peer)? "Unblock " : "Block ")+clean(nameOf(peer))))) : "",
+          h("button",{class:"srow pick dangerrow", onclick:()=>openReport({title: peer? "Report "+clean(nameOf(peer)) : "Report group", user:peer||"", channel:cc.id})}, h("span",{class:"sic"}, svg(ICF.flag2)), h("span",{class:"stx"}, h("b",{}, peer? "Report contact" : "Report group"))),
+          h("button",{class:"srow pick dangerrow", onclick:()=>{ close(); confirmDeleteChat(cc); }}, h("span",{class:"sic"}, svg(IC.trash)), h("span",{class:"stx"}, h("b",{}, "Delete chat"))))));
+  };
+  draw(); document.body.append(o);
+}
+function memberMenu(c, id, x, y, redraw){
+  const admin=c.createdBy||(c.members||[])[0]; const d=S.teamDocs[id]||{}; const nm=fullName(id).replace(/^Example:\s*/,"");
+  const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
+  const go=fn=>()=>{ scrim.remove(); fn(); };
+  scrim.append(h("div",{class:"popmenu", role:"menu", style:`left:${x}px;top:${y}px`},
+    h("button",{onclick:go(()=>{ const ci=document.getElementById("chatinfo"); if (ci) ci.remove(); createChannel("", [S.me,id], "dm"); })}, svg(IC.chat), "Message "+nm.split(" ")[0]),
+    d.phone? h("button",{onclick:go(()=>{ location.href=telHref(d.phone); })}, svg(IC.phone), "Call "+d.phone) : "",
+    admin===S.me && c.kind!=="task"? h("button",{class:"dangerrow", onclick:go(async()=>{ await guarded(store.update("channels/"+c.id, {members:(c.members||[]).filter(x=>x!==id)})).catch(()=>{}); toast(nm+" removed"); setTimeout(redraw, 300); })}, svg(IC.x), "Remove "+nm.split(" ")[0]) : ""));
+  document.body.append(scrim);
+}
+function addGroupMembers(c, redraw){
+  const cand=[...new Set([...S.contacts, ...S.onConcept, ...teamMembers()])].filter(id=>id && id!==S.me && !(c.members||[]).includes(id));
+  peoplePicker("Add to "+chanTitle(c), cand, async ids=>{ if (!ids.length) return; await guarded(store.update("channels/"+c.id, {members:[...new Set([...(c.members||[]), ...ids])]})); toast(ids.length===1? "Member added" : ids.length+" members added"); setTimeout(redraw, 300); });
+}
+function exitGroup(c, close){
+  sheet("Exit “"+chanTitle(c)+"”?", (draw, done)=>[h("p",{class:"note", style:"margin:0"}, "You won't get messages from this group anymore."),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:done}, "Cancel"), h("button",{class:"primary danger-bg", onclick:async()=>{ done(); close();
+      try { if (SB) { const {error}=await SB.rpc("leave_channel", {p_cid:c.id}); if (error) throw error; } else await store.update("channels/"+c.id, {members:(c.members||[]).filter(x=>x!==S.me)}); }
+      catch { toast("Couldn't exit the group. Try again."); return; }
+      S.inThread=false; if (S.active===c.id) S.active=null; render(); toast("You left the group"); }}, "Exit"))]);
+}
+
 // ===================== native app (iPhone / Android) =====================
 const CAP = window.Capacitor;
 const NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
@@ -2263,8 +2333,8 @@ function renderThread(){
     h("button",{class:"iconbtn accent", "aria-label":"Make one task from the selected messages", title:"Make task", disabled:!S.sel.length, onclick:()=>quickTask(S.msgs.filter(m=>S.sel.includes(m.id)))}, svg(IC.knot))));
   else wrap.append(h("header",{class:"thead"},
     h("button",{class:"iconbtn back","aria-label":"Back to conversations", onclick:()=>{S.inThread=false; render();}}, svg(IC.back)),
-    chanGlyph(c),
-    h("div",{class:"t"}, h("b",{},chanTitle(c)), h("span",{id:"thead-sub", "data-orig":theadSub(c)}, theadSub(c))),
+    h("button",{class:"tinfo", "aria-label":"Chat info", onclick:()=>openChatInfo(c)}, chanGlyph(c),
+      h("div",{class:"t"}, h("b",{},chanTitle(c)), h("span",{id:"thead-sub", "data-orig":theadSub(c)}, theadSub(c)))),
     h("span",{class:"grow"}),
     c.kind!=="dm" && c.kind!=="task" && subsOf(c.id).length? h("button",{class:"iconbtn subsbtn", title:"Task conversations", "aria-label":"Task conversations in this group", onclick:e=>{ const r=e.currentTarget.getBoundingClientRect(); subsMenu(c, r.right, r.bottom); }}, svg(IC.thread), h("b",{}, subsOf(c.id).length), subsOf(c.id).some(unread)? h("i",{class:"tdot"}) : "") : "",
     c.kind==="task" && S.channels.find(z=>z.id===c.parent)? h("button",{class:"iconbtn", title:"Back to the group", "aria-label":"Open the group", onclick:()=>selectChannel(c.parent)}, (()=>{ const g=chanGlyph(S.channels.find(z=>z.id===c.parent)); g.classList.add("mini"); return g; })()) : "",
