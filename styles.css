@@ -1659,3 +1659,17 @@ a.srow>svg.i{color:var(--muted);width:16px;height:16px}
 .teamwrap > .bhead.toprow > .iconbtn:not(:first-child),.teamwrap > .bhead.toprow > .profbtn{order:2;flex:none}
 .teamwrap > .bhead.toprow > .teamsel{order:3;flex:1 0 100%;width:100%}
 .ntsheet .sheethead .grow,.sheethead .grow{flex:1}
+/* status picker: dot + name on the left, check on the right */
+.popmenu>button.stpick{flex-direction:row!important;justify-content:flex-start;gap:12px}
+.popmenu>button.stpick .stn{flex:1;text-align:left}
+.popmenu>button.stpick svg.i{color:var(--cobalt)!important}
+.popmenu>button.stpick.on .stn{font-weight:600}
+/* attachments inside the subtasks box: symbols only */
+.subs .subhead .attbtns{display:inline-flex;gap:2px;margin-left:6px}
+.subs .subhead .attb{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--cobalt);background:transparent;border:0;padding:0}
+.subs .subhead .attb:active{background:var(--fill)}
+.subs .subhead .attb svg.i{width:20px;height:20px;color:var(--cobalt)}
+.subs.withfiles .tthumbs{margin-top:8px}
+.subs.withfiles .tvoice{margin-top:8px}
+.subs.withfiles .recbar{margin-top:8px}
+.popmenu{background:color-mix(in srgb,var(--surface) 97%,transparent)!important}

@@ -849,7 +849,7 @@ function stageMenu(s, x, y){
 function stagePicker(t, x, y){
   const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
   scrim.append(h("div",{class:"popmenu", style:`left:${Math.min(x-100, innerWidth-208)}px;top:${Math.min(y+6, innerHeight-STATUSES.length*42-20)}px`},
-    STATUSES.map(s=>h("button",{onclick:()=>{ scrim.remove(); moveTask(t.id, s.id); }}, h("span",{class:"sdot2", style:`--c:${s.c}`}), s.name, stOf(t)===s.id? h("span",{class:"grow"}):"", stOf(t)===s.id? svg(ICF.check):""))));
+    STATUSES.map(s=>h("button",{class:"stpick"+(stOf(t)===s.id?" on":""), onclick:()=>{ scrim.remove(); moveTask(t.id, s.id); }}, h("span",{class:"sdot2", style:`--c:${s.c}`}), h("span",{class:"stn"}, s.name), stOf(t)===s.id? svg(ICF.check):""))));
   document.body.append(scrim);
 }
 
@@ -1195,12 +1195,14 @@ async function storeTaskVoice(blob, dur, peaks){
   } catch { toast("The voice memo didn't save."); }
 }
 function viewPhoto(src){ const o=overlay("photoview","Photo"); o.append(h("button",{class:"sc-ic pvclose","aria-label":"Close", onclick:()=>o.remove()}, svg(IC.x)), h("img",{src, alt:"Task photo"})); o.addEventListener("click", e=>{ if (e.target===o) o.remove(); }); }
-function renderTaskFiles(d, ro){
+// Photos and voice memos live inside the subtasks box: two small symbols in its header, items underneath.
+function renderTaskFiles(d, ro, box){
   d.files=d.files||[]; const set=taskFilesSetter();
-  const box=h("div",{class:"tfiles"});
-  box.append(h("div",{class:"subhead"}, svg(ICF.clip), h("b",{},"Attachments"), d.files.length? h("span",{class:"subcount"}, d.files.length):"", h("span",{class:"grow"}),
-    ro? "" : h("button",{class:"iconbtn sm accent", title:"Add photo", "aria-label":"Add photo", onclick:addTaskPhotos}, svg(ICF.image)),
-    ro? "" : h("button",{class:"iconbtn sm accent", title:"Record voice memo", "aria-label":"Record voice memo", onclick:()=>startRec(storeTaskVoice)}, svg(IC.mic))));
+  box.classList.add("withfiles");
+  const head=box.querySelector(".subhead");
+  if (head && !ro) head.append(h("span",{class:"attbtns"},
+    h("button",{class:"attb", title:"Add photo", "aria-label":"Add photo", onclick:addTaskPhotos}, svg(ICF.image)),
+    h("button",{class:"attb", title:"Record voice memo", "aria-label":"Record voice memo", onclick:()=>startRec(storeTaskVoice)}, svg(IC.mic))));
   if (S.rec && S.recFor==="task") box.append(h("div",{class:"recbar small"}, h("button",{class:"rectrash","aria-label":"Cancel recording", onclick:()=>stopRec(true)}, svg(IC.trash)), h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, fmtDur(REC? (now()-REC.t0)/1000:0)), h("div",{class:"recbars", id:"recBars"}, Array.from({length:24},()=>h("i"))), h("button",{class:"micbtn sending","aria-label":"Save voice memo", onclick:()=>stopRec(false)}, svg(ICF.check))));
   const imgs=d.files.filter(f=>f.kind==="image"), voices=d.files.filter(f=>f.kind==="voice");
   if (imgs.length) box.append(h("div",{class:"tthumbs"}, imgs.map(f=>{ const src=f.localUrl||blobUrl(f.asset); return h("div",{class:"tthumb"}, h("img",{src, alt:"", onclick:()=>viewPhoto(src)}), ro? "" : h("button",{class:"tdel","aria-label":"Remove photo", onclick:()=>set(d.files.filter(x=>x.id!==f.id))}, svg(IC.x))); })));
@@ -1211,14 +1213,31 @@ function renderTaskFiles(d, ro){
 // ---------- chat wallpaper ----------
 let WP_FADED=false;
 const wpMode = () => S.prefs.wp || "tools";
-function wpData(){ try { return ls.get("wpimg:"+S.me, ""); } catch { return ""; } }
+// The wallpaper photo is kept in the browser's database (IndexedDB): localStorage is too small on iPhones.
+let WP_IMG=null, WP_LOADING=false;
+const wpKey = () => "wpimg:"+S.me;
+function idbOpen(){ return new Promise((res,rej)=>{ try { const r=indexedDB.open("concept",1); r.onupgradeneeded=()=>r.result.createObjectStore("kv"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); } catch(e){ rej(e); } }); }
+async function kvGet(k){ try { const db=await idbOpen(); return await new Promise(res=>{ const q=db.transaction("kv").objectStore("kv").get(k); q.onsuccess=()=>res(q.result??null); q.onerror=()=>res(null); }); } catch { return null; } }
+async function kvSet(k,v){ try { const db=await idbOpen(); await new Promise((res,rej)=>{ const t=db.transaction("kv","readwrite"); t.objectStore("kv").put(v,k); t.oncomplete=res; t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error); }); return true; } catch { return false; } }
+function wpData(){
+  if (WP_IMG!==null) return WP_IMG;
+  const old=ls.get(wpKey(), "");
+  if (!WP_LOADING) { WP_LOADING=true; kvGet(wpKey()).then(v=>{ WP_IMG=v||old||""; if (v && wpMode()==="photo") render(true); }); }
+  return old;
+}
 async function setWallpaperPhoto(){
-  const inp=h("input",{type:"file", accept:"image/*", hidden:true, onchange:async e=>{ const f=e.target.files&&e.target.files[0]; inp.remove(); if (!f) return;
+  const inp=h("input",{type:"file", accept:"image/*", style:"position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0", onchange:async e=>{ const f=e.target.files&&e.target.files[0]; inp.remove(); if (!f) return;
+    toast("Setting wallpaper…");
     try { const url=URL.createObjectURL(f); const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
-      const max=1400, k=Math.min(1, max/Math.max(img.naturalWidth,img.naturalHeight)); const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*k); c.height=Math.round(img.naturalHeight*k);
+      const max=1280, k=Math.min(1, max/Math.max(img.naturalWidth,img.naturalHeight)); const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*k); c.height=Math.round(img.naturalHeight*k);
       c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
-      let q=.82, data=c.toDataURL("image/jpeg",q); while (data.length>1.6e6 && q>.4) { q-=.12; data=c.toDataURL("image/jpeg",q); }
-      ls.set("wpimg:"+S.me, data); WP_FADED=false; setPref("wp","photo"); const s=$("#wpsheet"); if (s) s.remove(); openWallpaper();
+      let q=.8, data=c.toDataURL("image/jpeg",q); while (data.length>700e3 && q>.4) { q-=.1; data=c.toDataURL("image/jpeg",q); }
+      if (!data || data.length<100) throw new Error("empty");
+      WP_IMG=data; WP_LOADING=true;
+      const saved=await kvSet(wpKey(), data);
+      if (saved) { try { localStorage.removeItem("concept:"+wpKey()); } catch {} } else ls.set(wpKey(), data);
+      WP_FADED=false; setPref("wp","photo"); const s=$("#wpsheet"); if (s) s.remove(); openWallpaper();
+      toast(saved? "Wallpaper set" : "Wallpaper set for now — this browser can't save it");
     } catch { toast("That photo couldn't be used."); } }});
   document.body.append(inp); inp.click();
 }
@@ -1921,6 +1940,19 @@ function inviteCards(){
     h("button",{class:"primary ivyes", onclick:()=>answerInvite(v,true)}, "Join"))));
 }
 
+// ===================== keep pop-up menus inside the screen =====================
+function fitMenu(m){
+  const pad=10, vw=innerWidth, vh=innerHeight;
+  m.style.maxWidth=(vw-pad*2)+"px"; m.style.maxHeight=(vh-pad*2)+"px"; m.style.overflowY="auto";
+  const r=m.getBoundingClientRect();
+  if (r.right>vw-pad) { m.style.left=Math.max(pad, vw-pad-r.width)+"px"; m.style.right="auto"; }
+  if (r.left<pad) { m.style.left=pad+"px"; m.style.right="auto"; }
+  const r2=m.getBoundingClientRect();
+  if (r2.bottom>vh-pad) { m.style.top=Math.max(pad, vh-pad-r2.height)+"px"; m.style.bottom="auto"; }
+  if (r2.top<pad) { m.style.top=pad+"px"; m.style.bottom="auto"; }
+}
+new MutationObserver(list=>{ for (const mu of list) for (const n of mu.addedNodes) { if (n.nodeType!==1) continue; const ms=n.matches && n.matches(".popmenu")? [n] : [...n.querySelectorAll? n.querySelectorAll(".popmenu") : []]; ms.forEach(m=>{ fitMenu(m); requestAnimationFrame(()=>fitMenu(m)); }); } }).observe(document.body, {childList:true, subtree:true});
+
 // ===================== native app (iPhone / Android) =====================
 const CAP = window.Capacitor;
 const NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
@@ -2423,8 +2455,7 @@ function renderDrawer(){
   const body=h("div",{class:"dbody"});
   body.append(h("textarea",{class:"inp ttlinp", id:"t-title", rows:"1", placeholder:"Task title", disabled:ro, oninput:e=>{ d.title=e.target.value; e.target.style.height="auto"; e.target.style.height=e.target.scrollHeight+"px"; }, onkeydown:e=>{ if(e.key==="Enter"){ e.preventDefault(); saveTask(); } }}, d.title));
   body.append(h("div",{class:"statusrow"}, STATUSES.map(s=>h("button",{class:"stbtn","aria-pressed":String(d.status===s.id), style:`--c:${s.c}`, disabled:ro, onclick:()=>{ d.status=s.id; render(); }}, s.name))));
-  body.append(renderSubtasks(d, t, isNew, ro));
-  body.append(renderTaskFiles(d, ro));
+  body.append(renderTaskFiles(d, ro, renderSubtasks(d, t, isNew, ro)));
   const members=peopleForTasks();
   body.append(h("div",{class:"lbl"}, svg(ICF.personplus)), h("div",{class:"assignrow"},
     h("button",{class:"apick"+(d.assignee===""?" on":""), title:"Unassigned", "aria-label":"Unassigned", disabled:ro, onclick:()=>{ d.assignee=""; render(); }}, svg(ICF.none)),
