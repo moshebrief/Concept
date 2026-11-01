@@ -1759,3 +1759,42 @@ input.iname:focus{outline:none;background:var(--surface)}
 .subgroup{animation:none!important}
 .subgroup.enter{animation:subin .18s var(--ease) both!important}
 .teamwrap{padding-bottom:calc(120px + env(safe-area-inset-bottom,0px))!important}
+
+/* ===== sign-in screens (welcome, code, name, contacts) ===== */
+#onboard,#profsetup,#findc{background:var(--paper)!important;color:var(--ink)!important}
+.ob2{min-height:100%;width:100%;max-width:440px;margin:0 auto;display:flex;flex-direction:column;padding:0 24px calc(16px + env(safe-area-inset-bottom,0px));box-sizing:border-box}
+.ob2top{height:52px;display:flex;align-items:center;margin-left:-10px}
+.ob2top .obback svg.i{width:24px;height:24px;color:var(--cobalt)}
+.ob2main{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:4vh}
+.ob2icon{width:84px;height:84px;border-radius:20px;box-shadow:0 10px 28px rgba(10,85,224,.28),0 2px 6px rgba(0,0,0,.08);margin-bottom:22px}
+.ob2title{font:700 28px/1.15 var(--f-body,-apple-system,system-ui);letter-spacing:-.02em;margin:0 0 10px;color:var(--ink)}
+.ob2sub{font-size:16px;line-height:1.4;color:var(--muted);margin:0 0 26px;max-width:340px}
+.ob2sub b{color:var(--ink);font-weight:600}
+.ob2body{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
+.obfield{width:100%;display:flex;align-items:center;height:56px;background:var(--surface);border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.06),0 0 0 .5px var(--sep,rgba(0,0,0,.1));overflow:hidden}
+.obfield .obnum{flex:1;min-width:0;height:100%;border:0!important;background:transparent!important;box-shadow:none!important;font:500 18px/1 var(--f-body,inherit)!important;color:var(--ink);padding:0 16px!important;outline:none;text-align:left;letter-spacing:.01em;width:auto!important}
+.obccwrap{position:relative;display:flex;align-items:center;gap:4px;height:100%;padding:0 10px 0 16px;color:var(--ink);font:600 17px/1 var(--f-body,inherit);flex:none;cursor:pointer}
+.obccwrap svg.i{width:16px;height:16px;color:var(--muted)}
+.obccwrap .obcc{position:absolute;inset:0;opacity:0;width:100%;height:100%;font-size:16px;cursor:pointer}
+.obsep{width:.5px;height:28px;background:var(--sep,rgba(0,0,0,.15));flex:none}
+.obhint{margin:2px 0 0;font-size:13.5px;color:var(--muted)}
+.obotp{width:100%;max-width:300px;height:64px;border:0;border-radius:14px;background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.06),0 0 0 .5px var(--sep,rgba(0,0,0,.1));text-align:center;font:600 32px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.45em;padding-left:.45em;color:var(--ink);outline:none;caret-color:var(--cobalt)}
+.obotp::placeholder{color:color-mix(in srgb,var(--muted) 45%,transparent)}
+.obotp:focus,.obfield:focus-within{box-shadow:0 0 0 2px var(--cobalt),0 4px 14px rgba(0,122,255,.15)}
+.ob2 .oblink{background:none;border:0;color:var(--cobalt);font:500 15px/1 var(--f-body,inherit);padding:10px;cursor:pointer}
+.ob2 .oblink:disabled{color:var(--muted)}
+.ob2 .oblink.center{display:block;margin:4px auto 0}
+.ob2 .oberr{margin:14px 0 0;width:100%;box-sizing:border-box;padding:11px 14px;border-radius:12px;background:color-mix(in srgb,#FF3B30 10%,transparent);color:#D70015;font-size:14px;line-height:1.35;text-align:left;word-break:break-word}
+.ob2foot{padding-top:16px}
+.ob2btn{width:100%;height:54px;border:0;border-radius:14px;background:var(--cobalt);color:#fff;font:600 17px/1 var(--f-body,inherit);display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,122,255,.28);cursor:pointer;transition:transform .12s,opacity .12s}
+.ob2btn:active{transform:scale(.98)}
+.ob2btn.busy{opacity:.85}
+.ob2 .obterms{margin:14px 6px 0;font-size:12.5px;line-height:1.45;color:var(--muted);text-align:center}
+.ob2 .obterms a{color:var(--cobalt);text-decoration:none}
+.obperks{width:100%;display:flex;flex-direction:column;gap:10px;text-align:left}
+.obperks > div{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:14px;padding:12px 14px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.obperks .obpk{width:38px;height:38px;border-radius:10px;background:var(--cobalt);display:grid;place-items:center;flex:none}
+.obperks .obpk svg.i{width:20px;height:20px;color:#fff}
+.obperks > div > span:last-child{display:flex;flex-direction:column;gap:2px}
+.obperks b{font-size:15px;color:var(--ink)}
+.obperks span span{font-size:13px;color:var(--muted)}

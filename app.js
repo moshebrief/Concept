@@ -1364,21 +1364,22 @@ function openLogin(){
   let cc=ls.get("cc","+1"), num="", step="phone", phone="", busy=false, wait=0, timer=null, err="";
   const o=overlay("onboard","Sign in"); o.id="onboard";
   const draw=()=>{
-    if (step==="phone") o.replaceChildren(h("div",{class:"ob"},
-      h("div",{class:"oblogo"}, svg('<path d="M4 6.5h16v9.5H11l-5 4v-4H4z"/><path d="M8.5 11l2.2 2.2L15.5 8.6"/>')),
-      h("h2",{},"Your phone number"),
-      h("div",{class:"obrow"}, h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c))),
-        h("input",{class:"obnum", id:"ob-num", type:"tel", inputmode:"tel", autocomplete:"tel-national", placeholder:"Phone number", value:num, oninput:e=>num=e.target.value, onkeydown:e=>{ if (e.key==="Enter") sendCode(); }})),
-      err? h("p",{class:"oberr", role:"alert"}, err) : "",
-      h("p",{class:"obterms"}, "By continuing you agree to the ", h("a",{href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, "Terms"), " and ", h("a",{href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, "Privacy Policy"), ". Task Message has no tolerance for abusive or objectionable content."),
-      h("div",{class:"obacts end"}, h("button",{class:"fab obgo"+(busy?" busy":""), "aria-label":"Send code", disabled:busy, onclick:sendCode}, busy? h("span",{class:"spin"}) : svg(IC.arrow)))));
-    else o.replaceChildren(h("div",{class:"ob"},
-      h("div",{class:"oblogo"}, svg(ICF.lock)),
-      h("h2",{},"Enter the code"), h("p",{class:"obsub"}, phone),
-      err? h("p",{class:"oberr", role:"alert"}, err) : "",
-      h("input",{class:"obnum otp", id:"ob-code", type:"text", inputmode:"numeric", autocomplete:"one-time-code", maxlength:"6", placeholder:"••••••", oninput:e=>{ const v=e.target.value.replace(/\D/g,""); e.target.value=v; if (v.length===6) verify(v); }}),
-      h("div",{class:"obacts"}, h("button",{class:"oblink", onclick:()=>{ step="phone"; draw(); }}, "Change number"), h("button",{class:"oblink", id:"ob-resend", disabled:wait>0, onclick:sendCode}, wait>0? "Resend in "+wait+"s" : "Resend code"))));
-    const f=$("#ob-num")||$("#ob-code"); if (f) f.focus();
+    if (step==="phone") o.replaceChildren(obScreen({
+      title:"Welcome to Task Message", sub:"Chat with anyone and turn any message into a task. Enter your phone number to begin.",
+      body:[h("div",{class:"obfield"},
+          h("label",{class:"obccwrap"}, h("span",{class:"obccv"}, cc), svg(ICF.chev), h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); draw(); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c)))),
+          h("span",{class:"obsep"}),
+          h("input",{class:"obnum", id:"ob-num", type:"tel", inputmode:"tel", autocomplete:"tel-national", placeholder:"Phone number", value:num, oninput:e=>num=e.target.value, onkeydown:e=>{ if (e.key==="Enter") sendCode(); }})),
+        h("p",{class:"obhint"}, "We'll text you a 6-digit code.")],
+      err, busy, label:"Continue", go:sendCode,
+      foot:h("p",{class:"obterms"}, "By continuing you agree to the ", h("a",{href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, "Terms"), " and ", h("a",{href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, "Privacy Policy"), ". No abusive or objectionable content is allowed.")}));
+    else o.replaceChildren(obScreen({
+      back:()=>{ step="phone"; err=""; draw(); },
+      title:"Enter the code", sub:h("span",{}, "Sent by text to ", h("b",{}, phone)),
+      body:[h("input",{class:"obotp", id:"ob-code", type:"text", inputmode:"numeric", autocomplete:"one-time-code", maxlength:"6", placeholder:"000000", "aria-label":"6-digit code", oninput:e=>{ const v=e.target.value.replace(/\D/g,"").slice(0,6); e.target.value=v; if (v.length===6) verify(v); }}),
+        h("button",{class:"oblink", id:"ob-resend", disabled:wait>0, onclick:sendCode}, wait>0? "Resend code in "+wait+"s" : "Resend code")],
+      err, busy, label:"Verify", go:()=>{ const v=($("#ob-code")||{}).value||""; if (v.length===6) verify(v); else { err="Enter the 6-digit code."; draw(); } }}));
+    const f=$("#ob-num")||$("#ob-code"); if (f) setTimeout(()=>f.focus(), 60);
   };
   async function sendCode(){
     const d=num.replace(/[^\d]/g,"").replace(/^0+/,""); if (d.length<6) { err="Enter your phone number."; draw(); return; }
@@ -1389,11 +1390,13 @@ function openLogin(){
     catch (e) { error=e; }
     busy=false;
     if (error) { err=explainAuthError(error); draw(); return; }
-    step="code"; wait=30; clearInterval(timer); timer=setInterval(()=>{ wait--; const r=$("#ob-resend"); if (r){ r.disabled=wait>0; r.textContent=wait>0? "Resend in "+wait+"s" : "Resend code"; } if (wait<=0) clearInterval(timer); },1000); draw();
+    step="code"; wait=30; clearInterval(timer); timer=setInterval(()=>{ wait--; const r=$("#ob-resend"); if (r){ r.disabled=wait>0; r.textContent=wait>0? "Resend code in "+wait+"s" : "Resend code"; } if (wait<=0) clearInterval(timer); },1000); draw();
   }
   async function verify(token){
+    if (busy) return; busy=true; err=""; draw();
     let data=null, error=null;
     try { const r=await SB.auth.verifyOtp({phone, token, type:"sms"}); data=r.data; error=r.error; } catch (e) { error=e; }
+    busy=false;
     if (error || !data || !data.session) { err=error? explainAuthError(error) : "That code didn't work."; draw(); const c=$("#ob-code"); if (c){ c.value=""; c.focus(); } return; }
     clearInterval(timer); o.remove(); startLive(data.session.user);
   }
@@ -1409,6 +1412,19 @@ function explainAuthError(e){
   if (/fetch|network|load failed/i.test(m)) return "Can't reach Supabase. Check the Project URL in config.js and your connection.";
   return m || "Something went wrong. Try again.";
 }
+// Shared layout for the sign-in screens: app icon, title, text, content, one big button at the bottom.
+function obScreen({title, sub, body=[], err="", busy=false, label, go, foot, back}){
+  return h("div",{class:"ob2"},
+    h("div",{class:"ob2top"}, back? h("button",{class:"iconbtn obback", "aria-label":"Back", onclick:back}, svg(IC.back)) : ""),
+    h("div",{class:"ob2main"},
+      h("img",{class:"ob2icon", src:"icon.svg", alt:"", width:"84", height:"84"}),
+      h("h1",{class:"ob2title"}, title), sub? h("p",{class:"ob2sub"}, sub) : "",
+      h("div",{class:"ob2body"}, ...[body].flat()),
+      err? h("p",{class:"oberr", role:"alert"}, err) : ""),
+    h("div",{class:"ob2foot"},
+      h("button",{class:"ob2btn"+(busy?" busy":""), disabled:busy, onclick:go}, busy? h("span",{class:"spin"}) : label),
+      foot||""));
+}
 function openProfileSetup(u, existing){
   if (document.getElementById("profsetup")) return;
   let name=(existing&&existing.name)||"";
@@ -1416,18 +1432,22 @@ function openProfileSetup(u, existing){
   const save=async()=>{ if (!name.trim()) { toast("Enter your name."); return; }
     try { await guarded(store.set("team/"+S.me, {...(existing||{}), name:name.trim().slice(0,40), phone:fmtPhone(u.phone)||((existing||{}).phone||""), joinedAt:(existing&&existing.joinedAt)||now()})); } catch { return; }
     o.remove(); openFindContacts(); };
-  o.replaceChildren(h("div",{class:"ob"},
-    h("div",{class:"oblogo"}, svg('<circle cx="12" cy="8" r="3.6"/><path d="M5 20c.7-3.8 3.4-5.8 7-5.8s6.3 2 7 5.8"/>')),
-    h("h2",{},"Your name"),
-    h("input",{class:"obnum", id:"ob-name", maxlength:"40", autocomplete:"name", placeholder:"Name", value:name, oninput:e=>name=e.target.value, onkeydown:e=>{ if (e.key==="Enter") save(); }}),
-    h("div",{class:"obacts end"}, h("button",{class:"fab obgo", "aria-label":"Continue", onclick:save}, svg(IC.arrow)))));
+  o.replaceChildren(obScreen({
+    title:"What's your name?", sub:"This is how people will see you in chats and tasks.",
+    body:[h("div",{class:"obfield"}, h("input",{class:"obnum", id:"ob-name", maxlength:"40", autocomplete:"name", autocapitalize:"words", placeholder:"Your name", value:name, oninput:e=>name=e.target.value, onkeydown:e=>{ if (e.key==="Enter") save(); }}))],
+    label:"Continue", go:save}));
   setTimeout(()=>{ const n=$("#ob-name"); if (n) n.focus(); });
 }
 function openFindContacts(){
   const o=overlay("onboard","Find your contacts"); o.id="findc";
-  o.replaceChildren(h("div",{class:"ob"},
-    h("div",{class:"oblogo"}, svg(ICF.all)), h("h2",{},"Find your contacts"),
-    h("div",{class:"obacts"}, h("button",{class:"oblink", onclick:()=>o.remove()}, "Skip"), h("button",{class:"fab obgo", "aria-label":"Import contacts", onclick:()=>{ o.remove(); importContacts(); }}, svg(ICF.personplus)))));
+  o.replaceChildren(obScreen({
+    title:"Find your friends", sub:"See which of your contacts already use Task Message. Only the numbers in your phone are checked, and your address book isn't uploaded.",
+    body:[h("div",{class:"obperks"},
+      h("div",{}, h("span",{class:"obpk"}, svg(IC.chat)), h("span",{}, h("b",{}, "Chat with anyone"), h("span",{}, "Private chats, groups, voice notes and photos"))),
+      h("div",{}, h("span",{class:"obpk"}, svg(IC.knot)), h("span",{}, h("b",{}, "Turn messages into tasks"), h("span",{}, "Swipe a message to make it a task"))),
+      h("div",{}, h("span",{class:"obpk"}, svg(ICF.lock)), h("span",{}, h("b",{}, "Private by design"), h("span",{}, "Messages are end-to-end encrypted"))))],
+    label:"Find my contacts", go:()=>{ o.remove(); importContacts(); },
+    foot:h("button",{class:"oblink center", onclick:()=>o.remove()}, "Not now")}));
 }
 async function startLive(u){
   DB=makeDocStore(SB); ASSETS=makeAssets(SB); S.mode="live"; S.me=u.id; S.canWrite=true;
@@ -2844,6 +2864,6 @@ $("#meAv").addEventListener("click", ()=>openSettings());
 document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S.view=b.dataset.view; ls.set("view",S.view); if (S.view==="chats") S.inThread=false; else S.newFlow=null; if (S.view==="calls") ls.set("callsSeen", now()); if (S.view!=="calls") S.dial.on=false; if (S.view==="board" && S.filter.startsWith("chan:")) {} render(); }));
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
-if (/[?&]test=1/.test(location.search)) window.__concept={demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById};
 boot();
 })();
