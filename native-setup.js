@@ -192,6 +192,7 @@ function ios() {
   add("NSLocationWhenInUseUsageDescription", "<string>Task Message uses your location only when you choose to share it in a chat.</string>");
   add("UIBackgroundModes", "<array>\n\t\t<string>remote-notification</string>\n\t</array>");
   add("UIRequiresFullScreen", "<true/>");
+  add("ITSAppUsesNonExemptEncryption", "<false/>"); // only the encryption built into iOS is used
   pl = pl.replace(/(<key>UISupportedInterfaceOrientations<\/key>\s*<array>)[\s\S]*?(<\/array>)/, "$1\n\t\t<string>UIInterfaceOrientationPortrait</string>\n\t$2");
   write(plP, pl);
 
