@@ -155,7 +155,7 @@ function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(
 function subscribeAll(){
   loadPins(); loadAddr(); initE2E().then(()=>render());
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
-  store.sub("team", async rows => { S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; matchAddr(); await resolvePeople(S.team); scheduleRender(); });
+  store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
   store.sub("invites", rows => { S.invites=rows; scheduleRender(); });
   store.sub("contacts", async rows => { S.allContacts=Object.fromEntries(rows.map(r=>[r.id, r.ids||[]])); S.contacts=S.allContacts[S.me]||[]; await resolvePeople(Object.keys(S.allContacts)); scheduleRender(); });
@@ -164,7 +164,7 @@ function subscribeAll(){
     await resolvePeople(rows.flatMap(c=>[...(c.members||[]), c.last&&c.last.by]).filter(Boolean));
     if (!S.active || !S.channels.find(c=>c.id===S.active)) S.active = S.channels[0] ? S.channels[0].id : null;
     decryptMany(S.channels.map(c=>c.last&&c.last.enc)).then(ch=>{ if (ch) scheduleRender(); });
-    noticeIncoming(S.channels); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
+    LOCAL.save("channels", S.channels); noticeIncoming(S.channels); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
     openMsgs(); scheduleRender();
   });
   store.sub("tasks", async rows => { S.tasks=rows.sort((a,b)=>(a.num||0)-(b.num||0)); await resolvePeople(rows.flatMap(t=>[t.assignee,t.createdBy]).filter(Boolean)); scheduleRender(); });
@@ -174,6 +174,7 @@ function openMsgs(){
   if (unsubMsgs) unsubMsgs(); S.msgs=S.msgCache[S.active]||[]; S.msgsFor=S.active; S.msgLimit=120;
   if (!S.active) return;
   const cid=S.active;
+  localMessages(cid);
   unsubMsgs = store.sub("channels/"+cid+"/messages", async rows => {
     if (S.msgsFor!==cid) return;
     rows.sort((a,b)=>a.at-b.at);
@@ -181,7 +182,11 @@ function openMsgs(){
     if (!E2E.ready) await initPromise();
     await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
     if (S.msgsFor!==cid) return;
-    S.msgs=rows; S.msgCache[cid]=rows;
+    S.msgCache[cid]=rows;
+    const first=(rows[0]||{}).at||Infinity, have=new Set(rows.map(m=>m.id));
+    const older=(LOCAL.older[cid]||[]).filter(m=>m.at<first && !have.has(m.id));
+    S.msgs=older.length? [...older, ...rows] : rows;
+    LOCAL.save("m:"+cid, S.msgs.slice(-2000), 800);
     const ids=new Set(rows.map(r=>r.id)); if (S.pend.some(p=>ids.has(p.id))) S.pend=S.pend.filter(p=>!ids.has(p.id));
     markRead(); scheduleRender();
   });
@@ -284,7 +289,7 @@ const VOICE_URLS = {}; const PLAYER = new Audio(); PLAYER.preload="auto"; let pl
 const fmtDur = s => { s=Math.max(0,Math.round(s||0)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); };
 let REC=null;
 function pickMime(){ if (!window.MediaRecorder) return null; for (const t of ["audio/webm;codecs=opus","audio/mp4","audio/webm","audio/ogg;codecs=opus"]) { try { if (MediaRecorder.isTypeSupported(t)) return t; } catch {} } return ""; }
-async function startRec(cb){
+async function startRec(cb, opts={}){
   if (typeof cb!=="function") cb=null;
   if (!S.canWrite || REC || (!cb && !S.active)) return;
   let stream=null;
@@ -292,11 +297,11 @@ async function startRec(cb){
   catch { openVoiceFallback(cb); return; }
   const mime = pickMime(); let mr;
   try { mr = new MediaRecorder(stream, mime? {mimeType:mime, audioBitsPerSecond:32000} : {audioBitsPerSecond:32000}); } catch { mr = new MediaRecorder(stream); }
-  const ac = new (window.AudioContext||window.webkitAudioContext)(); const an = ac.createAnalyser(); an.fftSize=256; ac.createMediaStreamSource(stream).connect(an);
-  REC = {mr, stream, ac, an, chunks:[], t0:now(), levels:[], cancel:false, cb}; S.recFor = cb? "task" : "chat";
+  const ac = audioCtx() || new (window.AudioContext||window.webkitAudioContext)(); const an = ac.createAnalyser(); an.fftSize=256; const srcNode=ac.createMediaStreamSource(stream); srcNode.connect(an);
+  REC = {mr, stream, ac, an, srcNode, chunks:[], t0:now(), levels:[], cancel:false, cb, hold:!!opts.hold}; S.recFor = cb? "task" : "chat";
   mr.ondataavailable = e => { if (e.data && e.data.size) REC.chunks.push(e.data); };
   mr.onstop = async () => {
-    const r=REC; REC=null; S.rec=false; r.stream.getTracks().forEach(t=>t.stop()); try{ r.ac.close(); }catch{}
+    const r=REC; REC=null; S.rec=false; holdUI(false); r.stream.getTracks().forEach(t=>t.stop()); try{ r.srcNode.disconnect(); if (r.ac!==AC) r.ac.close(); }catch{}
     clearInterval(r.timer); clearInterval(r.act); cancelAnimationFrame(r.raf); if (!r.cb) sendAct("stop", r.cid);
     if (r.cancel) { render(true); return; }
     const dur=(now()-r.t0)/1000; if (dur<0.6) { render(true); toast("Hold on a little longer to record"); return; }
@@ -312,7 +317,43 @@ async function startRec(cb){
   const loop=()=>{ if (!REC) return; an.getByteTimeDomainData(buf); let m=0; for (const v of buf) m=Math.max(m, Math.abs(v-128)); const lv=Math.min(1,m/64); REC.levels.push(lv);
     const bars=document.querySelectorAll("#recBars i"); if (bars.length){ const tail=REC.levels.slice(-bars.length); bars.forEach((b,i)=>b.style.transform=`scaleY(${Math.max(.12,tail[i]||0)})`); }
     REC.raf=requestAnimationFrame(loop); };
-  loop(); render(true);
+  loop();
+  if (REC.hold) holdUI(true); else render(true);
+}
+// ---- WhatsApp-style voice button: hold to record, release to send, slide left to cancel, slide up to lock ----
+let HOLD=null;
+function holdUI(on){
+  const row=document.querySelector(".crow"); if (!row) return;
+  row.classList.toggle("holding", !!on);
+  const old=row.querySelector(".holdbar"); if (old) old.remove();
+  if (on) row.prepend(h("div",{class:"holdbar"}, h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, "0:00"),
+    h("span",{class:"slidecancel", id:"slideCancel"}, svg(IC.back), "Slide to cancel"),
+    h("span",{class:"lockhint", id:"lockHint"}, svg(ICF.lock), svg('<path d="M7 14l5-5 5 5"/>'))));
+}
+function micDown(e){
+  if (e.button>0 || REC || HOLD) return;
+  e.preventDefault();
+  const btn=e.currentTarget, sx=e.clientX, sy=e.clientY, t0=Date.now(); let done=false;
+  HOLD={}; try { btn.setPointerCapture(e.pointerId); } catch {}
+  btn.classList.add("pressed");
+  const started=startRec(null, {hold:true});
+  const move=ev=>{ if (done) return; const dx=Math.min(0, ev.clientX-sx), dy=Math.min(0, ev.clientY-sy);
+    const sc=$("#slideCancel"); if (sc) { sc.style.transform=`translateX(${dx}px)`; sc.style.opacity=String(Math.max(0, 1+dx/140)); }
+    const lk=$("#lockHint"); if (lk) lk.style.transform=`translateY(${Math.max(-40, dy/2)}px)`;
+    if (dx<-120) finish("cancel"); else if (dy<-70) finish("lock"); };
+  const up=()=>finish(Date.now()-t0<300? "tap" : "send");
+  const cancel=()=>finish("cancel");
+  function finish(kind){
+    if (done) return; done=true; HOLD=null; btn.classList.remove("pressed");
+    for (const [t,f] of [["pointermove",move],["pointerup",up],["pointercancel",cancel]]) { btn.removeEventListener(t,f); removeEventListener(t,f); }
+    started.then(()=>{
+      if (!REC) { if (kind==="tap") toast("Hold to record, release to send"); return; }
+      if (kind==="lock") { REC.hold=false; holdUI(false); if (navigator.vibrate) try { navigator.vibrate(15); } catch {} render(true); }
+      else if (kind==="send") stopRec(false);
+      else { stopRec(true); if (kind==="tap") toast("Hold to record, release to send"); else if (navigator.vibrate) try { navigator.vibrate([10,40,10]); } catch {} }
+    });
+  }
+  for (const [t,f] of [["pointermove",move],["pointerup",up],["pointercancel",cancel]]) { btn.addEventListener(t,f); addEventListener(t,f); }
 }
 function stopRec(cancel, draft){ if (!REC) return; REC.cancel=!!cancel; REC.draft=!!draft; try { REC.mr.stop(); } catch { REC=null; S.rec=false; render(true); } }
 function peaksFromLevels(lv){ const n=36, out=[]; if (!lv.length) return Array(n).fill(.3); const step=lv.length/n; for (let i=0;i<n;i++){ const sl=lv.slice(Math.floor(i*step), Math.max(Math.floor(i*step)+1, Math.floor((i+1)*step))); out.push(+Math.max(.08, Math.min(1, Math.max(...sl)*1.3)).toFixed(2)); } return out; }
@@ -1369,12 +1410,13 @@ async function startLive(u){
   const b=$("#banner"); if (b) b.hidden=true;
   let mine=null; try { mine=await store.get("team/"+S.me); } catch {}
   S.people[S.me]={id:S.me, name:(mine&&mine.name)||"You", avatarUrl:(mine&&mine.photo)||"", color:colorFor(S.me)};
+  loadLocalCopy();
   if (!mine || !mine.name) openProfileSetup(u, mine);
   else if (u.phone && fmtPhone(u.phone)!==mine.phone) store.update("team/"+S.me, {phone:fmtPhone(u.phone)}).catch(()=>{});
   subscribeAll(); render();
   setTimeout(pushRegister, 1500);
 }
-async function signOut(){ try { await SB.auth.signOut(); } catch {} location.reload(); }
+async function signOut(){ try { await SB.auth.signOut(); } catch {} clearLocalCopy(); setTimeout(()=>location.reload(), 150); }
 
 // ===================== smooth rendering =====================
 let RQ=0;
@@ -1940,6 +1982,43 @@ function inviteCards(){
     h("button",{class:"primary ivyes", onclick:()=>answerInvite(v,true)}, "Join"))));
 }
 
+// ===================== messages kept on this device =====================
+// Chats, people and messages are saved in the phone's own database (IndexedDB), so chats open
+// instantly and can be read without internet. The server copy stays (encrypted) for new devices.
+const LOCAL = {
+  t:{},
+  key: k => "u:"+S.me+":"+k,
+  load(k){ return S.mode==="live"? kvGet(LOCAL.key(k)) : Promise.resolve(null); },
+  save(k, v, delay=500){ if (S.mode!=="live") return; clearTimeout(LOCAL.t[k]); LOCAL.t[k]=setTimeout(()=>{ kvSet(LOCAL.key(k), v); }, delay); },
+  older:{}
+};
+async function loadLocalCopy(){
+  const [ch, tm] = await Promise.all([LOCAL.load("channels"), LOCAL.load("team")]);
+  if (Array.isArray(tm) && !S.team.length) { S.team=tm.map(r=>r.id); S.teamDocs=Object.fromEntries(tm.map(r=>[r.id,r])); for (const r of tm) if (!S.people[r.id] || r.id===S.me) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; }
+  if (Array.isArray(ch) && !S.channels.length) {
+    S.channels=ch; if (!S.active || !S.channels.find(c=>c.id===S.active)) S.active=S.channels[0]? S.channels[0].id : null;
+    if (!E2E.ready) await initPromise();
+    await decryptMany(S.channels.map(c=>c.last&&c.last.enc));
+  }
+  if (ch || tm) render(true);
+}
+function localMessages(cid){
+  LOCAL.load("m:"+cid).then(async rows=>{
+    if (!Array.isArray(rows) || !rows.length) return;
+    if (!E2E.ready) await initPromise();
+    await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
+    if (S.msgsFor!==cid) return;
+    if (S.msgCache[cid]) { // server copy already here: only add older messages the server no longer has
+      const first=(S.msgCache[cid][0]||{}).at||Infinity; const ids=new Set(S.msgCache[cid].map(m=>m.id));
+      const older=rows.filter(m=>m.at<first && !ids.has(m.id)); LOCAL.older[cid]=older;
+      if (older.length) { S.msgs=[...older, ...S.msgCache[cid]]; scheduleRender(); }
+      return;
+    }
+    LOCAL.older[cid]=rows; S.msgs=rows; scheduleRender();
+  });
+}
+function clearLocalCopy(){ try { indexedDB.deleteDatabase("concept"); } catch {} }
+
 // ===================== keep pop-up menus inside the screen =====================
 function fitMenu(m){
   const pad=10, vw=innerWidth, vh=innerHeight;
@@ -2299,7 +2378,7 @@ function renderComposer(c){
       h("button",{class:"inbtn emobtn", "aria-label":S.emojiOpen?"Keyboard":"Emoji", title:"Emoji", onmousedown:e=>e.preventDefault(), onclick:()=>{ S.emojiOpen=!S.emojiOpen; if (S.emojiOpen) { const t=$("#composer"); if (t) t.blur(); } render(true); if (!S.emojiOpen) setTimeout(()=>{ const t=$("#composer"); if (t) t.focus(); }); }}, svg(S.emojiOpen? ICF.kbd : ICF.smile)),
       S.editing? "" : h("button",{class:"inbtn knotbtn","aria-pressed":String(S.asTask), title:"Send this message and turn it into a task", onclick:()=>{S.asTask=!S.asTask; render(true); $("#composer").focus();}}, svg(IC.knot))),
     h("button",{class:"sendbtn", "aria-label":S.editing?"Save edit":"Send", onmousedown:e=>e.preventDefault(), onclick:()=>{ const t=$("#composer"); const v=t.value; t.value=""; autoGrow(t); t.closest(".crow").classList.remove("has-text"); ls.set("draft:"+S.active,""); sendMessage(v); }}, svg(S.editing?IC.edit:IC.send)),
-    S.editing? "" : h("button",{class:"micbtn", "aria-label":"Record a voice note", title:"Record a voice note", onclick:startRec}, svg(IC.mic))
+    S.editing? "" : h("button",{class:"micbtn", "aria-label":"Hold to record a voice note", title:"Hold to record", onpointerdown:micDown, oncontextmenu:e=>e.preventDefault(), onclick:e=>{ if (e.detail===0) startRec(); }}, svg(IC.mic))
   ));
   if (S.emojiOpen) inner.append(renderEmojiPanel());
   return box;
@@ -2541,6 +2620,6 @@ $("#meAv").addEventListener("click", ()=>openSettings());
 document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S.view=b.dataset.view; ls.set("view",S.view); if (S.view==="chats") S.inThread=false; else S.newFlow=null; if (S.view==="calls") ls.set("callsSeen", now()); if (S.view!=="calls") S.dial.on=false; if (S.view==="board" && S.filter.startsWith("chan:")) {} render(); }));
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
-if (/[?&]test=1/.test(location.search)) window.__concept={demoTyping, S, msgBanner, playTone, noticeIncoming};
+if (/[?&]test=1/.test(location.search)) window.__concept={demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet};
 boot();
 })();

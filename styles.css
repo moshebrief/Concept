@@ -1673,3 +1673,18 @@ a.srow>svg.i{color:var(--muted);width:16px;height:16px}
 .subs.withfiles .tvoice{margin-top:8px}
 .subs.withfiles .recbar{margin-top:8px}
 .popmenu{background:color-mix(in srgb,var(--surface) 97%,transparent)!important}
+
+/* ===== voice button: hold to record (WhatsApp style) ===== */
+.micbtn{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.crow .micbtn{transition:transform .16s cubic-bezier(.2,.9,.25,1),background .16s}
+.crow .micbtn.pressed{transform:scale(1.55);background:var(--cobalt)!important;color:#fff!important;box-shadow:0 6px 18px rgba(0,122,255,.35)}
+.crow .micbtn.pressed svg.i{color:#fff!important}
+.crow.holding > :not(.holdbar):not(.micbtn){display:none!important}
+.holdbar{flex:1;min-width:0;height:36px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;position:relative}
+.holdbar .recdot{width:10px;height:10px;border-radius:50%;background:#FF3B30;animation:recblink 1s ease-in-out infinite;flex:none}
+.holdbar .rectime{font-size:16px;font-variant-numeric:tabular-nums;color:var(--ink);min-width:38px}
+.holdbar .slidecancel{margin-left:auto;margin-right:18px;display:inline-flex;align-items:center;gap:2px;color:var(--muted);font-size:15px;white-space:nowrap;transition:opacity .1s}
+.holdbar .slidecancel svg.i{width:16px;height:16px}
+.holdbar .lockhint{position:absolute;right:-38px;bottom:52px;width:34px;padding:8px 0 6px;border-radius:17px;background:var(--surface);box-shadow:0 4px 14px rgba(0,0,0,.15);display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted)}
+.holdbar .lockhint svg.i{width:16px;height:16px}
+@keyframes recblink{50%{opacity:.25}}
