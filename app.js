@@ -1675,7 +1675,7 @@ const mapsLink = (lat,lng) => /iPhone|iPad|Macintosh/.test(navigator.userAgent)?
 function renderLocation(p){
   if (!p || p.lat==null) return h("span",{class:"tx"},"📍 Location");
   return h("a",{class:"lcard", href:mapsLink(p.lat,p.lng), target:"_blank", rel:"noopener", onclick:e=>e.stopPropagation()},
-    h("div",{class:"lmap", style:mapStyle(p.lat,p.lng,260,140)}, h("span",{class:"lpin"}, svg(ICF.pin2))),
+    h("div",{class:"lmap", style:mapStyle(p.lat,p.lng,242,140)}, h("span",{class:"lpin"}, svg(ICF.pin2))),
     h("div",{class:"lmeta"}, h("b",{}, p.label||"Location"), h("span",{}, p.lat.toFixed(5)+", "+p.lng.toFixed(5)), h("i",{}, "© OpenStreetMap")));
 }
 function openLocationPicker(){
