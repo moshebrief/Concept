@@ -1901,3 +1901,30 @@ html,body{overflow-x:hidden;max-width:100%}
 .lazymore{height:1px}
 .av.mgav:not(:has(svg)),.glyph.mgav:not(:has(svg)){display:grid!important;place-items:center!important;padding:0!important}
 .mgav .mgi{display:block}
+
+/* ---- bubble tails: joined smoothly to the bubble (WhatsApp style) ---- */
+.msg:not(.cont):not(.mine):not(.rich) .strip{border-top-left-radius:0!important}
+.msg.mine:not(.cont):not(.rich) .strip{border-top-right-radius:0!important}
+.msg:not(.cont):not(.mine):not(.rich) .strip::before,.msg.mine:not(.cont):not(.rich) .strip::before{width:8px!important;height:13px!important;top:0!important}
+.msg:not(.cont):not(.mine):not(.rich) .strip::before{left:-7.5px!important;clip-path:path("M0 0 H8 V13 C6.5 7.5 3.8 3 0.6 1.1 C0.2 0.8 0 0.4 0 0 Z")!important}
+.msg.mine:not(.cont):not(.rich) .strip::before{right:-7.5px!important;left:auto!important;clip-path:path("M8 0 H0 V13 C1.5 7.5 4.2 3 7.4 1.1 C7.8 0.8 8 0.4 8 0 Z")!important}
+
+/* reactions sit neatly on the bubble's bottom edge, under its corner */
+.reacts{margin-top:-9px!important;padding:0 10px!important}
+.mine .reacts{justify-content:flex-end}
+.react{border:2px solid var(--chatbg,var(--paper))!important;padding:1px 7px!important;line-height:1.3}
+
+/* ---- swipe a message left: Forward / Task buttons ---- */
+.msg{position:relative}
+.macts{position:absolute;right:10px;top:50%;display:flex;gap:8px;transform:translateY(-50%) scale(calc(.85 + .15 * var(--mp,0)));opacity:var(--mp,0);pointer-events:none;z-index:2;transition:opacity .18s,transform .18s}
+.msg.swiping .macts{transition:none}
+.msg.mopen .macts{pointer-events:auto;opacity:1}
+.mact{display:flex;flex-direction:column;align-items:center;gap:3px;font:600 11px var(--f-body);color:var(--ink);background:none;border:0;padding:0;min-width:56px}
+.maci{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--cobalt);color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.mact.task .maci{background:#34C759}
+.maci svg.i{width:21px;height:21px}
+.msg.swiping .fwdbtn,.msg.mopen .fwdbtn,.msg.swl .fwdbtn{opacity:0!important;pointer-events:none}
+.msg:not(.swiping) .brow .strip{transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+.brow{position:relative;width:100%}
+.mine .brow{justify-content:flex-start}
+.macts{right:6px}

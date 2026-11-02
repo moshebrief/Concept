@@ -166,7 +166,7 @@ function startDemo(msg){ S.mode="demo"; S.me="me"; demo.seed(); if (!S.active) S
 function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(h("span",{style:"width:9px;height:9px;background:var(--knot);transform:rotate(45deg);flex:none"}), h("span",{},t)); }
 
 function subscribeAll(){
-  loadPins(); loadAddr(); initE2E().then(()=>render());
+  loadPins(); loadAddr(); startE2E();
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
   store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
@@ -213,7 +213,7 @@ async function sendMessage(text){
   clearTimeout(TYP_STOP); sendAct("stop");
   if (vd && !S.editing) { S.vdraft=null; if (DRAFT_AUDIO) DRAFT_AUDIO.pause(); render(true); sendVoice(vd.blob, vd.dur, vd.peaks, null, {}, text); return; }
   const chn=S.channels.find(c=>c.id===S.active)||{}; const members=chn.members||[S.me];
-  if (S.editing) { const id=S.editing; S.editing=null; if (E2E.ready) { const {env}=await seal(text, members); await guarded(store.update(`channels/${S.active}/messages/${id}`, {enc:env, text:"", edited:true})); } else await guarded(store.update(`channels/${S.active}/messages/${id}`, {text, edited:true})); render(true); return; }
+  if (S.editing) { const id=S.editing; S.editing=null; if (await canSeal(members)) { const {env}=await seal(text, members); await guarded(store.update(`channels/${S.active}/messages/${id}`, {enc:env, text:"", edited:true})); } else await guarded(store.update(`channels/${S.active}/messages/${id}`, {text, edited:true})); render(true); return; }
   const extra={}; if (S.replyTo) extra.replyTo=S.replyTo; if (S.statusReply) { extra.statusQuote=S.statusReply; S.statusReply=null; }
   const ments=(S.pendingMentions||[]).filter(mid=>members.includes(mid) && text.includes("@"+nameOf(mid).replace(/^Example:\s*/,"").split(" ")[0])); S.pendingMentions=[]; if (ments.length) extra.mentions=ments;
   const hadBar=!!S.replyTo || S.asTask; S.replyTo=null; const asTask=S.asTask; S.asTask=false;
@@ -383,7 +383,7 @@ async function sendVoice(blob, dur, peaks, target, vextra={}, caption=""){
   addPending({id:mid, cid, by:S.me, at:now(), kind:"voice", text:caption, voice:{id:vid, parts:0, mime:blob.type||"audio/webm", dur:Math.round(dur*10)/10, peaks}, pending:true, ...pextra, ...vextra});
   try {
     const chv=S.channels.find(c=>c.id===cid)||{}; let venv=null, eiv="", b64;
-    if (E2E.ready) { const sealed=await seal(caption||"", chv.members||[S.me]); venv=sealed.env; const iv=crypto.getRandomValues(new Uint8Array(12)); eiv=b64e(iv); b64=b64e(await crypto.subtle.encrypt({name:"AES-GCM",iv}, sealed.mk, await blob.arrayBuffer())); }
+    if (await canSeal(chv.members||[S.me])) { const sealed=await seal(caption||"", chv.members||[S.me]); venv=sealed.env; const iv=crypto.getRandomValues(new Uint8Array(12)); eiv=b64e(iv); b64=b64e(await crypto.subtle.encrypt({name:"AES-GCM",iv}, sealed.mk, await blob.arrayBuffer())); }
     else b64=await blobToB64(blob);
     const parts=Math.ceil(b64.length/CHUNK);
     for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me}));
@@ -987,28 +987,72 @@ async function quickTask(msgs, opts={}){
 function toggleSel(id){ S.sel = S.sel.includes(id)? S.sel.filter(x=>x!==id) : [...S.sel, id]; if (!S.sel.length) S.selecting=false; render(true); }
 
 // ---------- end-to-end encryption (keys never leave this device) ----------
-const E2E={ready:false, dev:null, priv:null, pub:null, sk:new Map()};
+const E2E={ready:false, dev:null, priv:null, pub:null, sk:new Map(), privs:new Map()};
 const b64e = buf => { let s=""; const u=new Uint8Array(buf); for (let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); };
 const b64d = s => { const b=atob(s); const u=new Uint8Array(b.length); for (let i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; };
 const TE=new TextEncoder(), TD=new TextDecoder();
 const DEC=new Map();
+// One encryption key per account, shared by all of the person's phones and computers (like WhatsApp
+// moving your chats to a new phone). The key is kept in a private record only that person can read.
+// Keys that older installs used are kept too, so messages sent to them still open everywhere.
+const KR_PATH = () => "data/users/"+S.me+"/keyring";
+async function newKeyRec(){ const kp=await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveKey"]); return {dev:"d"+uidShort().slice(0,6), priv:await crypto.subtle.exportKey("jwk",kp.privateKey), pub:await crypto.subtle.exportKey("jwk",kp.publicKey)}; }
+const importPriv = jwk => crypto.subtle.importKey("jwk", jwk, {name:"ECDH",namedCurve:"P-256"}, false, ["deriveKey"]);
 async function initE2E(){
-  if (!window.crypto || !crypto.subtle) return;
+  if (!window.crypto || !crypto.subtle || !S.me) return;
   try {
-    let rec=ls.get("e2e:"+S.me,null);
-    if (!rec || !rec.priv) { const kp=await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveKey"]); rec={dev:"d"+uidShort().slice(0,6), priv:await crypto.subtle.exportKey("jwk",kp.privateKey), pub:await crypto.subtle.exportKey("jwk",kp.publicKey)}; ls.set("e2e:"+S.me,rec); }
-    E2E.dev=rec.dev; E2E.pub={kty:"EC", crv:"P-256", x:rec.pub.x, y:rec.pub.y};
-    E2E.priv=await crypto.subtle.importKey("jwk",rec.priv,{name:"ECDH",namedCurve:"P-256"},false,["deriveKey"]);
-    E2E.ready=true;
-    const cur=await store.get("keys/"+S.me).catch(()=>null); const devices={...((cur&&cur.devices)||{})};
-    if (!devices[E2E.dev] || devices[E2E.dev].x!==E2E.pub.x) { devices[E2E.dev]={...E2E.pub, at:now()}; const ent=Object.entries(devices).sort((a,b)=>(b[1].at||0)-(a[1].at||0)).slice(0,5); await store.set("keys/"+S.me,{devices:Object.fromEntries(ent)}).catch(()=>{}); }
-    S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub};
+    const local=ls.get("e2e:"+S.me,null);
+    let ring=null, ringOk=true, dirty=false;
+    try { ring=await store.get(KR_PATH()); } catch { ringOk=false; }
+    if (!ring || !ring.primary || !ring.primary.priv) {
+      ring={primary:(local&&local.priv)? local : await newKeyRec(), old:{}};
+      dirty=ringOk; // first device for this account: save the key for the person's other devices
+    } else {
+      ring={primary:ring.primary, old:{...(ring.old||{})}};
+      if (local && local.priv && local.dev!==ring.primary.dev && !ring.old[local.dev]) { ring.old[local.dev]=local.priv; dirty=true; }
+      for (const [d,p] of Object.entries(ls.get("e2eOld:"+S.me,{})||{})) if (d!==ring.primary.dev && !ring.old[d]) { ring.old[d]=p; dirty=true; }
+    }
+    if (dirty && S.mode==="live") {
+      await store.set(KR_PATH(), ring);
+      // Two devices could set this up at the same moment: keep whichever was saved first.
+      const back=await store.get(KR_PATH()).catch(()=>null);
+      if (back && back.primary && back.primary.dev!==ring.primary.dev) { const mine=ring.primary; ring={primary:back.primary, old:{...(back.old||{}), [mine.dev]:mine.priv}}; await store.set(KR_PATH(), ring).catch(()=>{}); }
+    }
+    const old={...(ring.old||{})}; if (local && local.priv && local.dev!==ring.primary.dev) old[local.dev]=local.priv;
+    ls.set("e2eOld:"+S.me, old); ls.set("e2e:"+S.me, ring.primary);
+    E2E.dev=ring.primary.dev; E2E.pub={kty:"EC", crv:"P-256", x:ring.primary.pub.x, y:ring.primary.pub.y};
+    E2E.priv=await importPriv(ring.primary.priv);
+    E2E.privs=new Map([[E2E.dev, E2E.priv]]);
+    for (const [d,p] of Object.entries(old)) { try { E2E.privs.set(d, await importPriv(p)); } catch {} }
+    E2E.ready=true; DEC.forEach((v,k)=>{ if (v===false) DEC.delete(k); }); // retry anything that failed before
+    if (ringOk && S.mode==="live") {
+      const cur=await store.get("keys/"+S.me).catch(()=>null); const devices=(cur&&cur.devices)||{};
+      if (Object.keys(devices).length!==1 || !devices[E2E.dev] || devices[E2E.dev].x!==E2E.pub.x) await store.set("keys/"+S.me,{devices:{[E2E.dev]:{...E2E.pub, at:now()}}}).catch(()=>{});
+    }
+    S.keys[S.me]={[E2E.dev]:E2E.pub};
   } catch { E2E.ready=false; }
 }
-async function sharedKey(j){
-  const k=j.x+"."+j.y; if (E2E.sk.has(k)) return E2E.sk.get(k);
-  const p=(async()=>{ const pub=await crypto.subtle.importKey("jwk",{kty:"EC",crv:"P-256",x:j.x,y:j.y},{name:"ECDH",namedCurve:"P-256"},false,[]); return crypto.subtle.deriveKey({name:"ECDH",public:pub},E2E.priv,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]); })();
+// Sets up encryption, tries again if the connection wasn't ready, then re-opens anything that was locked.
+async function startE2E(tries=0){
+  await initE2E();
+  if (!E2E.ready && tries<5) { setTimeout(()=>startE2E(tries+1), 4000*(tries+1)); return; }
+  if (E2E.ready) { await decryptMany([...S.channels.map(c=>c.last&&c.last.enc), ...(S.msgs||[]).flatMap(m=>[m.enc, m.penc])]); }
+  render();
+}
+async function sharedKey(j, priv){
+  priv=priv||E2E.priv;
+  const k=j.x+"."+j.y+(priv===E2E.priv? "" : "#"+[...E2E.privs.entries()].find(e=>e[1]===priv)?.[0]); if (E2E.sk.has(k)) return E2E.sk.get(k);
+  const p=(async()=>{ const pub=await crypto.subtle.importKey("jwk",{kty:"EC",crv:"P-256",x:j.x,y:j.y},{name:"ECDH",namedCurve:"P-256"},false,[]); return crypto.subtle.deriveKey({name:"ECDH",public:pub},priv,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]); })();
   E2E.sk.set(k,p); return p;
+}
+// Encrypt only when every member can open it; otherwise the message is sent without the extra lock
+// (it's still private to the chat) so nobody ever gets a message they can't read.
+async function canSeal(members){ if (!E2E.ready) return false; try { return !(await ensureKeys(members||[])).length; } catch { return false; } }
+// Before encrypting, make sure every member's key is known; ask the server for any that are missing.
+async function ensureKeys(members){
+  const need=[...new Set(members)].filter(u=>u && u!==S.me && !Object.keys(S.keys[u]||{}).length);
+  for (const u of need) { try { const d=await store.get("keys/"+u); if (d && d.devices) S.keys[u]=d.devices; } catch {} }
+  return [...new Set(members)].filter(u=>u && u!==S.me && !Object.keys(S.keys[u]||{}).length);
 }
 async function seal(text, members){
   const mk=await crypto.subtle.generateKey({name:"AES-GCM",length:256},true,["encrypt","decrypt"]);
@@ -1022,8 +1066,11 @@ async function seal(text, members){
   return {env, mk};
 }
 async function openKey(env){
-  const e=(env.keys||[]).find(k=>k.u===S.me && k.d===E2E.dev); if (!e || !E2E.ready) throw new Error("nokey");
-  const raw=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(e.iv)}, await sharedKey(env.pk), b64d(e.k));
+  if (!E2E.ready) throw new Error("nokey");
+  const mine=(env.keys||[]).filter(k=>k.u===S.me && E2E.privs.has(k.d)).sort((a,b)=>(b.d===E2E.dev)-(a.d===E2E.dev));
+  let raw=null;
+  for (const e of mine) { try { raw=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(e.iv)}, await sharedKey(env.pk, E2E.privs.get(e.d)), b64d(e.k)); break; } catch {} }
+  if (!raw) throw new Error("nokey");
   return crypto.subtle.importKey("raw",raw,{name:"AES-GCM"},false,["encrypt","decrypt"]);
 }
 async function unseal(env){ const mk=await openKey(env); return TD.decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(env.iv)}, mk, b64d(env.ct))); }
@@ -1166,27 +1213,55 @@ function swipeTask(m){
   if (existing) { openTask(existing.id); return; }
   quickTask([m], {silent:mode==="silent", open:mode!=="silent"});
 }
+// Swipe right = reply. Swipe left = slide the bubble over and show Forward / Task buttons (like the chat list).
+// Touch events on phones (most reliable on iPhone), mouse/pen through pointer events.
+let OPEN_MSG=null;
+function closeMsgActions(){ if (!OPEN_MSG) return; const el=OPEN_MSG; OPEN_MSG=null; el.classList.remove("mopen"); el.style.setProperty("--sx","0px"); }
+document.addEventListener("touchstart", e=>{ if (OPEN_MSG && !OPEN_MSG.contains(e.target)) closeMsgActions(); }, {passive:true, capture:true});
+document.addEventListener("pointerdown", e=>{ if (OPEN_MSG && e.pointerType!=="touch" && !OPEN_MSG.contains(e.target)) closeMsgActions(); }, true);
+const MOPEN=-132;
 function attachGestures(el, strip, m){
   if (m.deleted) return;
-  let x0=0,y0=0,dx=0,active=false,decided=false,horiz=false,lp=null,pid=null;
-  strip.style.touchAction="pan-y";
-  strip.addEventListener("pointerdown", e=>{ if (S.selecting || e.button>0 || e.target.closest("button,a,.vbars,input")) return; x0=e.clientX; y0=e.clientY; dx=0; active=true; decided=false; horiz=false; pid=e.pointerId; lp=setTimeout(()=>{ if (active && !decided){ active=false; holdMenu(m); } }, 430); });
-  strip.addEventListener("pointermove", e=>{ if (!active || e.pointerId!==pid) return; const mx=e.clientX-x0, my=e.clientY-y0;
-    if (!decided && (Math.abs(mx)>8 || Math.abs(my)>8)) { decided=true; clearTimeout(lp); horiz=Math.abs(mx)>Math.abs(my)*1.2; if (horiz) { try { strip.setPointerCapture(pid); } catch {} } else { active=false; return; } }
-    if (horiz) { dx=Math.max(-96,Math.min(96,mx)); el.style.setProperty("--sx", dx+"px"); el.classList.add("swiping"); el.classList.toggle("swr", dx>56); el.classList.toggle("swl", dx<-56); } });
-  const reset=()=>{ el.classList.remove("swiping","swr","swl"); el.style.setProperty("--sx","0px"); };
-  strip.addEventListener("pointerup", ()=>{ clearTimeout(lp); if (!active) return; active=false; if (!horiz) return; reset();
-    if (dx>56) { S.replyTo=m.id; S.actFor=null; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); }
-    else if (dx<-56) swipeTask(m); });
-  strip.addEventListener("pointercancel", ()=>{ clearTimeout(lp); active=false; reset(); });
-  strip.addEventListener("contextmenu", e=>{ e.preventDefault(); holdMenu(m); });
+  const canAct = !m.pending && S.canWrite && plain(m)!==false;
+  if (canAct) (strip.parentElement||el).append(h("div",{class:"macts", "aria-hidden":"true"},
+    h("button",{class:"mact", tabindex:"-1", onclick:e=>{ e.stopPropagation(); closeMsgActions(); forwardMenu(m); }}, h("span",{class:"maci"}, svg(ICF.fwd)), "Forward"),
+    h("button",{class:"mact task", tabindex:"-1", onclick:e=>{ e.stopPropagation(); closeMsgActions(); swipeTask(m); }}, h("span",{class:"maci"}, svg(IC.knot)), m.taskId? "Open task" : "Task")));
+  let x0=0,y0=0,dx=0,base=0,active=false,decided=false,horiz=false,lp=null;
+  const set=v=>{ el.style.setProperty("--sx", v+"px"); el.classList.toggle("swr", v>56); el.classList.toggle("swl", v<-40); el.style.setProperty("--mp", String(Math.min(1, Math.max(0, -v/ -MOPEN)))); };
+  const start=(x,y,target)=>{ if (S.selecting || target.closest("button,a,.vbars,input,.macts")) return false;
+    x0=x; y0=y; dx=0; base=OPEN_MSG===el? MOPEN : 0; active=true; decided=false; horiz=false;
+    clearTimeout(lp); lp=setTimeout(()=>{ if (active && !decided){ active=false; holdMenu(m); } }, 430); return true; };
+  const move=(x,y)=>{ if (!active) return false; const mx=x-x0, my=y-y0;
+    if (!decided && (Math.abs(mx)>7 || Math.abs(my)>7)) { decided=true; clearTimeout(lp); horiz=Math.abs(mx)>Math.abs(my)*1.15; if (!horiz) { active=false; return false; } SW.drag=true; el.classList.add("swiping"); if (OPEN_MSG && OPEN_MSG!==el) closeMsgActions(); }
+    if (!horiz) return false;
+    let v=base+mx; if (!canAct) v=Math.max(0,v);
+    v = v>0? Math.min(90, v) : Math.max(MOPEN-30, v);
+    dx=v; set(v); return true; };
+  const end=()=>{ clearTimeout(lp); if (!active) return; active=false; if (!horiz) return;
+    el.classList.remove("swiping"); SW.drag=false;
+    if (dx>56) { set(0); S.replyTo=m.id; S.actFor=null; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); }
+    else if (dx < MOPEN/2.4 && canAct) { set(MOPEN); el.classList.add("mopen"); OPEN_MSG=el; if (navigator.vibrate) try{ navigator.vibrate(6); }catch{} }
+    else { set(0); el.classList.remove("mopen"); if (OPEN_MSG===el) OPEN_MSG=null; }
+    if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag && !OPEN_MSG) scheduleRender(); }, 300); } };
+  const cancel=()=>{ clearTimeout(lp); if (active && horiz) { el.classList.remove("swiping"); SW.drag=false; set(OPEN_MSG===el? MOPEN : 0); } active=false; };
+  if ("ontouchstart" in window) {
+    strip.addEventListener("touchstart", e=>{ if (e.touches.length!==1) return; const t=e.touches[0]; start(t.clientX, t.clientY, e.target); }, {passive:true});
+    strip.addEventListener("touchmove", e=>{ const t=e.touches[0]; if (t && move(t.clientX, t.clientY) && e.cancelable) e.preventDefault(); }, {passive:false});
+    strip.addEventListener("touchend", end); strip.addEventListener("touchcancel", cancel);
+  }
+  strip.addEventListener("pointerdown", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; if (e.button>0) return; if (start(e.clientX, e.clientY, e.target)) { try { strip.setPointerCapture(e.pointerId); } catch {} } });
+  strip.addEventListener("pointermove", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; move(e.clientX, e.clientY); });
+  strip.addEventListener("pointerup", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; end(); });
+  strip.addEventListener("pointercancel", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; cancel(); });
+  strip.addEventListener("click", e=>{ if (OPEN_MSG===el) { e.stopPropagation(); closeMsgActions(); } }, true);
+  strip.addEventListener("contextmenu", e=>{ e.preventDefault(); if (!horiz) holdMenu(m); });
 }
 async function copyMsg(m){ const t=plain(m); S.actFor=null; render(true); try { await navigator.clipboard.writeText(t||""); toast("Copied"); } catch { toast("Couldn't copy here"); } }
 
 // ---------- sending (shared by send + forward) ----------
 async function sendTextTo(cid, text, extra={}, givenId){
   const chn=S.channels.find(c=>c.id===cid)||{}; const members=chn.members||[S.me];
-  let env=null; if (E2E.ready) { try { env=(await seal(text, members)).env; } catch { env=null; } }
+  let env=null; if (await canSeal(members)) { try { env=(await seal(text, members)).env; } catch { env=null; } }
   const id=givenId||newMsgId();
   const msg = env? {by:S.me, text:"", enc:env, at:now(), ...extra} : {by:S.me, text, at:now(), ...extra};
   await guarded(store.set(`channels/${cid}/messages/${id}`, msg));
@@ -1663,7 +1738,7 @@ async function sendRich(cid, kind, payload, caption="", extra={}, id){
   const chn=S.channels.find(c=>c.id===cid)||{}; const members=chn.members||[S.me];
   id=id||newMsgId();
   const msg={by:S.me, at:now(), kind, ...extra};
-  if (E2E.ready) { const a=await seal(caption||"", members); msg.enc=a.env; msg.text=""; const b=await seal(JSON.stringify(payload), members); msg.penc=b.env; }
+  if (await canSeal(members)) { const a=await seal(caption||"", members); msg.enc=a.env; msg.text=""; const b=await seal(JSON.stringify(payload), members); msg.penc=b.env; }
   else { msg.text=caption||""; msg.payload=payload; }
   await guarded(store.set(`channels/${cid}/messages/${id}`, msg));
   const items=payload.items||[]; const sub = kind==="media"? (items[0]||{}).t : kind;
@@ -2716,7 +2791,7 @@ function renderMsg(m, cont, chan){
   const el = h("div",{style:mine?null:`--tint:${(S.people[m.by]&&S.people[m.by].color)||colorFor(m.by)}`, class:`msg${mine?" mine":""}${cont?" cont":""}${task?" knotted":""}${m.pending?" pending":""}${rich?" rich k-"+m.kind:""}${S.justTied===m.id?" justtied":""}${S.selecting?" selmode":""}${sel?" selected":""}`, id:"msg-"+m.id, onclick:e=>{ if (S.selecting && !m.deleted){ e.stopPropagation(); toggleSel(m.id); } }});
   if (S.selecting) el.append(h("span",{class:"selck"}, sel? svg(ICF.check):""));
   if (!cont && !mine && ch.kind!=="dm") el.append(h("div",{class:"who"}, nameOf(m.by).replace(/^Example:\s*/,"")));
-  const strip = h("div",{class:"strip", tabindex:"0", "aria-label":"Message. Hold for options, swipe right to reply, swipe left to make a task", onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); holdMenu(m); } }});
+  const strip = h("div",{class:"strip", tabindex:"0", "aria-label":"Message. Hold for options, swipe right to reply, swipe left to forward or make a task", onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); holdMenu(m); } }});
   if (m.fwd) strip.append(h("div",{class:"fwdlabel"}, svg(m.fwd>=5? ICF.fwd2 : ICF.fwd), m.fwd>=5? "Forwarded many times" : "Forwarded"));
   if (m.replyTo) { const r=S.msgs.find(x=>x.id===m.replyTo); if (r) strip.append(h("div",{class:"quote", onclick:e=>{e.stopPropagation(); jumpToMessage(S.active, r.id);}}, h("b",{},nameOf(r.by)), (r.deleted?"Message deleted": msgText(r)).slice(0,140))); }
   if (m.statusQuote) strip.append(h("div",{class:"quote"}, h("b",{}, "Status · "+nameOf(m.statusQuote.by).replace(/^Example:\s*/,"")), String(m.statusQuote.text).slice(0,140)));
@@ -2730,7 +2805,7 @@ function renderMsg(m, cont, chan){
   }
   else { const tx=shown(m); strip.append(h("span",{class:"tx"+(plain(m)===false?" locked":"")}, plain(m)? richText(tx) : tx)); }
   strip.append(h("span",{class:"mt"}, m.edited? "edited · ":"", fmtTime(m.at), ticks(m, ch)));
-  el.append(h("span",{class:"swi swi-r","aria-hidden":"true"}, svg(IC.reply)), h("span",{class:"swi swi-l","aria-hidden":"true"}, svg(IC.knot)));
+  el.append(h("span",{class:"swi swi-r","aria-hidden":"true"}, svg(IC.reply)));
   el.append(h("div",{class:"brow"}, strip,
     !m.deleted && !m.pending && !S.selecting && S.canWrite && plain(m)!==false? h("button",{class:"fwdbtn", title:"Forward", "aria-label":"Forward message", onclick:e=>{ e.stopPropagation(); forwardMenu(m); }}, svg(ICF.fwd)) : "",
     !m.deleted && !S.selecting && S.canWrite? h("button",{class:"mchev", title:"Options", "aria-label":"Message options", onclick:e=>{ e.stopPropagation(); holdMenu(m); }}, svg(ICF.chev)) : ""));
