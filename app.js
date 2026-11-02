@@ -1455,12 +1455,18 @@ function openLogin(){
   async function sendCode(){
     const d=num.replace(/[^\d]/g,"").replace(/^0+/,""); if (d.length<6) { err="Enter your phone number."; draw(); return; }
     if (cc==="+1" && d.length===11 && d.startsWith("1")) num=d.slice(1);
-    phone=cc+(cc==="+1" && d.length===11 && d.startsWith("1")? d.slice(1) : d); busy=true; err=""; draw();
+    phone=cc+(cc==="+1" && d.length===11 && d.startsWith("1")? d.slice(1) : d);
+    if (cc==="+1" && phone.length!==12) { err="Enter a 10-digit phone number."; draw(); return; }
+    // Each code is a paid text message: at most 5 per phone (device) in 30 minutes.
+    const sent=(ls.get("otpSent",[])||[]).filter(t=>Date.now()-t<30*60e3);
+    if (sent.length>=5) { err="Too many codes requested. Please wait about "+Math.ceil((30*60e3-(Date.now()-sent[0]))/60e3)+" minutes and try again."; draw(); return; }
+    busy=true; err=""; draw();
     let error=null;
     try { const r=await Promise.race([SB.auth.signInWithOtp({phone}), new Promise((_,rej)=>setTimeout(()=>rej(new Error("No answer from the server. Check your connection and try again.")),20000))]); error=r && r.error; }
     catch (e) { error=e; }
     busy=false;
     if (error) { err=explainAuthError(error); draw(); return; }
+    ls.set("otpSent", [...sent, Date.now()]);
     step="code"; wait=30; clearInterval(timer); timer=setInterval(()=>{ wait--; const r=$("#ob-resend"); if (r){ r.disabled=wait>0; r.textContent=wait>0? "Resend code in "+wait+"s" : "Resend code"; } if (wait<=0) clearInterval(timer); },1000); draw();
   }
   async function verify(token){

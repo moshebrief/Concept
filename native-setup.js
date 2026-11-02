@@ -90,7 +90,13 @@ function android() {
   const perms = ["INTERNET", "RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS", "CAMERA", "READ_CONTACTS",
                  "ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS", "VIBRATE"];
   for (const p of perms) if (!man.includes(`android.permission.${p}"`)) man = man.replace("</manifest>", `    <uses-permission android:name="android.permission.${p}" />\n</manifest>`);
-  if (!man.includes("android.hardware.camera")) man = man.replace("</manifest>", `    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n</manifest>`);
+  // Asking for camera, microphone and location makes Google Play quietly hide the app from phones
+  // missing any of that hardware (for example a camera without autofocus). Mark all of it optional.
+  const optional = ["android.hardware.camera", "android.hardware.camera.any", "android.hardware.camera.autofocus",
+    "android.hardware.camera.front", "android.hardware.camera.flash", "android.hardware.microphone",
+    "android.hardware.location", "android.hardware.location.gps", "android.hardware.location.network",
+    "android.hardware.telephony", "android.hardware.wifi", "android.hardware.screen.portrait"];
+  for (const f of optional) if (!man.includes(`"${f}"`)) man = man.replace("</manifest>", `    <uses-feature android:name="${f}" android:required="false" />\n</manifest>`);
   if (!man.includes('android:screenOrientation')) man = man.replace('android:name=".MainActivity"', 'android:name=".MainActivity"\n            android:screenOrientation="portrait"\n            android:windowSoftInputMode="adjustResize"');
   if (!man.includes("default_notification_icon")) man = man.replace("</application>", `    <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_notify" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notify_color" />
