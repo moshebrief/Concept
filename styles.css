@@ -1928,3 +1928,5 @@ html,body{overflow-x:hidden;max-width:100%}
 .brow{position:relative;width:100%}
 .mine .brow{justify-content:flex-start}
 .macts{right:6px}
+.msg .vbars{gap:1.6px!important;height:32px!important}
+.msg .vbars i{max-width:3px!important;min-width:2px!important}

@@ -308,7 +308,7 @@ async function startRec(cb, opts={}){
   catch { openVoiceFallback(cb); return; }
   const mime = pickMime(); let mr;
   try { mr = new MediaRecorder(stream, mime? {mimeType:mime, audioBitsPerSecond:32000} : {audioBitsPerSecond:32000}); } catch { mr = new MediaRecorder(stream); }
-  const ac = audioCtx() || new (window.AudioContext||window.webkitAudioContext)(); const an = ac.createAnalyser(); an.fftSize=256; const srcNode=ac.createMediaStreamSource(stream); srcNode.connect(an);
+  const ac = audioCtx() || new (window.AudioContext||window.webkitAudioContext)(); try { if (ac.state!=="running") ac.resume(); } catch {} const an = ac.createAnalyser(); an.fftSize=256; const srcNode=ac.createMediaStreamSource(stream); srcNode.connect(an);
   REC = {mr, stream, ac, an, srcNode, chunks:[], t0:now(), levels:[], cancel:false, cb, hold:!!opts.hold}; S.recFor = cb? "task" : "chat";
   mr.ondataavailable = e => { if (e.data && e.data.size) REC.chunks.push(e.data); };
   mr.onstop = async () => {
@@ -317,16 +317,19 @@ async function startRec(cb, opts={}){
     if (r.cancel) { render(true); return; }
     const dur=(now()-r.t0)/1000; if (dur<0.6) { render(true); toast("Hold on a little longer to record"); return; }
     const blob = new Blob(r.chunks, {type:(r.mr.mimeType||mime||"audio/webm").split(";")[0]});
-    if (r.draft && !r.cb) { S.vdraft={cid:r.cid, blob, dur, peaks:peaksFromLevels(r.levels), url:URL.createObjectURL(blob)}; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); return; }
+    const live=peaksFromLevels(r.levels);
+    const flat=Math.max(...live)-Math.min(...live)<.15;
+    const peaks=flat? ((await peaksFromBlob(blob)).peaks||live) : live;
+    if (r.draft && !r.cb) { S.vdraft={cid:r.cid, blob, dur, peaks, url:URL.createObjectURL(blob)}; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); return; }
     render(true);
-    (r.cb||sendVoice)(blob, dur, peaksFromLevels(r.levels));
+    (r.cb||sendVoice)(blob, dur, peaks);
   };
   mr.start(250); S.rec=true; REC.cid=S.active; if (navigator.vibrate) try{ navigator.vibrate(15); }catch{}
   if (!cb) { sendAct("recording"); REC.act=setInterval(()=>sendAct("recording", REC&&REC.cid), 2500); }
   REC.timer = setInterval(()=>{ const el=$("#recTime"); const sec=(now()-REC.t0)/1000; if (el) el.textContent=fmtDur(sec); if (sec>=180) stopRec(false); }, 250);
   const buf=new Uint8Array(an.frequencyBinCount);
-  const loop=()=>{ if (!REC) return; an.getByteTimeDomainData(buf); let m=0; for (const v of buf) m=Math.max(m, Math.abs(v-128)); const lv=Math.min(1,m/64); REC.levels.push(lv);
-    const bars=document.querySelectorAll("#recBars i"); if (bars.length){ const tail=REC.levels.slice(-bars.length); bars.forEach((b,i)=>b.style.transform=`scaleY(${Math.max(.12,tail[i]||0)})`); }
+  const loop=()=>{ if (!REC) return; an.getByteTimeDomainData(buf); let sq=0; for (const v of buf) { const x=(v-128)/128; sq+=x*x; } const lv=Math.sqrt(sq/buf.length); REC.levels.push(lv);
+    const bars=document.querySelectorAll("#recBars i"); if (bars.length){ const tail=REC.levels.slice(-bars.length); bars.forEach((b,i)=>b.style.transform=`scaleY(${Math.max(.1,Math.min(1,Math.sqrt(tail[i]||0)*2.2))})`); }
     REC.raf=requestAnimationFrame(loop); };
   loop();
   if (REC.hold) holdUI(true); else render(true);
@@ -358,20 +361,36 @@ function micDown(e){
     if (done) return; done=true; HOLD=null; btn.classList.remove("pressed");
     for (const [t,f] of [["pointermove",move],["pointerup",up],["pointercancel",cancel]]) { btn.removeEventListener(t,f); removeEventListener(t,f); }
     started.then(()=>{
-      if (!REC) { if (kind==="tap") toast("Hold to record, release to send"); return; }
-      if (kind==="lock") { REC.hold=false; holdUI(false); if (navigator.vibrate) try { navigator.vibrate(15); } catch {} render(true); }
+      if (!REC) return;
+      if (kind==="lock" || kind==="tap") { REC.hold=false; holdUI(false); if (navigator.vibrate) try { navigator.vibrate(15); } catch {} render(true); }
       else if (kind==="send") stopRec(false);
-      else { stopRec(true); if (kind==="tap") toast("Hold to record, release to send"); else if (navigator.vibrate) try { navigator.vibrate([10,40,10]); } catch {} }
+      else { stopRec(true); if (navigator.vibrate) try { navigator.vibrate([10,40,10]); } catch {} }
     });
   }
   for (const [t,f] of [["pointermove",move],["pointerup",up],["pointercancel",cancel]]) { btn.addEventListener(t,f); addEventListener(t,f); }
 }
 function stopRec(cancel, draft){ if (!REC) return; REC.cancel=!!cancel; REC.draft=!!draft; try { REC.mr.stop(); } catch { REC=null; S.rec=false; render(true); } }
-function peaksFromLevels(lv){ const n=36, out=[]; if (!lv.length) return Array(n).fill(.3); const step=lv.length/n; for (let i=0;i<n;i++){ const sl=lv.slice(Math.floor(i*step), Math.max(Math.floor(i*step)+1, Math.floor((i+1)*step))); out.push(+Math.max(.08, Math.min(1, Math.max(...sl)*1.3)).toFixed(2)); } return out; }
+// Waveform like WhatsApp: loudness of each slice of the recording (in decibels), so you can see
+// where the voice went up and down. 64 values are stored; the bubble draws them as thin bars.
+const WAVE_N=64;
+function shapePeaks(rms){
+  const db=rms.map(r=>20*Math.log10(Math.max(r,1e-5)));
+  const top=Math.max(...db), floor=top-36;
+  return rms.map((r,i)=>+Math.max(.05, Math.min(1, (db[i]-floor)/(top-floor||1))).toFixed(2));
+}
+function peaksFromLevels(lv){
+  if (!lv.length) return Array(WAVE_N).fill(.2);
+  const step=lv.length/WAVE_N, out=[];
+  for (let i=0;i<WAVE_N;i++){ const sl=lv.slice(Math.floor(i*step), Math.max(Math.floor(i*step)+1, Math.floor((i+1)*step))); out.push(Math.sqrt(sl.reduce((a,v)=>a+v*v,0)/sl.length)); }
+  return shapePeaks(out);
+}
 async function peaksFromBlob(blob){
-  try { const ac=new (window.AudioContext||window.webkitAudioContext)(); const ab=await ac.decodeAudioData(await blob.arrayBuffer()); const d=ab.getChannelData(0); const n=36, step=Math.floor(d.length/n), out=[]; let mx=0;
-    for (let i=0;i<n;i++){ let m=0; for (let j=i*step;j<(i+1)*step;j+=64) m=Math.max(m,Math.abs(d[j])); out.push(m); mx=Math.max(mx,m); } try{ac.close();}catch{} return {peaks:out.map(v=>+Math.max(.08,v/(mx||1)).toFixed(2)), dur:ab.duration}; }
-  catch { return {peaks:Array.from({length:36},(_, i)=>+(.3+.5*Math.abs(Math.sin(i*1.7))).toFixed(2)), dur:0}; }
+  try { const AC=window.AudioContext||window.webkitAudioContext; const ac=new AC(); const buf=await blob.arrayBuffer();
+    const ab=await new Promise((res,rej)=>{ const p=ac.decodeAudioData(buf, res, rej); if (p && p.then) p.then(res, rej); });
+    const d=ab.getChannelData(0), step=Math.max(1, Math.floor(d.length/WAVE_N)), out=[];
+    for (let i=0;i<WAVE_N;i++){ let sum=0, n=0; for (let j=i*step;j<Math.min(d.length,(i+1)*step);j+=8){ sum+=d[j]*d[j]; n++; } out.push(Math.sqrt(sum/Math.max(1,n))); }
+    try{ac.close();}catch{} return {peaks:shapePeaks(out), dur:ab.duration}; }
+  catch { return {peaks:Array.from({length:WAVE_N},(_, i)=>+(.3+.5*Math.abs(Math.sin(i*1.7))).toFixed(2)), dur:0}; }
 }
 function blobToB64(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(",")[1]||""); r.onerror=rej; r.readAsDataURL(blob); }); }
 async function sendVoice(blob, dur, peaks, target, vextra={}, caption=""){
@@ -437,10 +456,10 @@ function renderVoice(m){
   el.append(h("button",{class:"vplay", "aria-label":"Play voice note", onclick:()=>togglePlay(m)}, svg(IC.play)));
   // Waveform: always 30 bars so every note looks even; a dot shows where you are.
   const src=v.peaks&&v.peaks.length? v.peaks : Array.from({length:30},(_,i)=>.25+.2*Math.abs(Math.sin(i*1.3)));
-  const N=30, pk=Array.from({length:N},(_,i)=>{ const a=Math.floor(i*src.length/N), b=Math.max(a+1, Math.floor((i+1)*src.length/N)); let mx=0; for (let j=a;j<b;j++) mx=Math.max(mx, src[j]||0); return mx; });
+  const N=40, pk=Array.from({length:N},(_,i)=>{ const a=Math.floor(i*src.length/N), b=Math.max(a+1, Math.floor((i+1)*src.length/N)); let mx=0; for (let j=a;j<b;j++) mx=Math.max(mx, src[j]||0); return mx; });
   const top=Math.max(.05, ...pk);
   const bars=h("div",{class:"vbars", onclick:e=>{ if (playing!==m.id || !isFinite(PLAYER.duration)) return; const r=e.currentTarget.getBoundingClientRect(); PLAYER.currentTime=PLAYER.duration*Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)); }});
-  pk.forEach(p=>bars.append(h("i",{style:`height:${Math.round(14+Math.pow(p/top,.8)*86)}%`})));
+  pk.forEach(p=>bars.append(h("i",{style:`height:${Math.round(10+Math.pow(p/top,1.15)*90)}%`})));
   bars.append(h("b",{class:"vknob"}));
   el.append(h("div",{class:"vmid"}, bars, h("div",{class:"vmeta"}, h("span",{class:"vdur"}, fmtDur(v.dur)))));
   // Right side: who recorded it (with a little mic), or the speed button while it plays — like WhatsApp.
@@ -1611,7 +1630,6 @@ async function startLive(u){
   else if (u.phone && fmtPhone(u.phone)!==mine.phone) store.update("team/"+S.me, {phone:fmtPhone(u.phone)}).catch(()=>{});
   subscribeAll(); render();
   setTimeout(pushRegister, 1500);
-  setTimeout(backupReminder, 8000);
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch {} clearLocalCopy(); setTimeout(()=>location.reload(), 150); }
 
@@ -3111,6 +3129,6 @@ $("#meAv").addEventListener("click", ()=>openSettings());
 document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S.view=b.dataset.view; ls.set("view",S.view); if (S.view==="chats") S.inThread=false; else S.newFlow=null; if (S.view==="calls") ls.set("callsSeen", now()); if (S.view!=="calls") S.dial.on=false; if (S.view==="board" && S.filter.startsWith("chan:")) {} render(); }));
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels};
 boot();
 })();
