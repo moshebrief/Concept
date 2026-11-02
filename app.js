@@ -2419,7 +2419,7 @@ function openBackup(){
         h("div",{class:"srow col"}, h("span",{class:"sic"}, svg(ICF.cal)), h("span",{class:"stx"}, h("b",{}, "Backup reminder")),
           h("div",{class:"segmini wide", role:"group", "aria-label":"Backup reminder"}, [["off","Off"],["day","Daily"],["week","Weekly"],["month","Monthly"]].map(([v,l])=>h("button",{"aria-pressed":String((bk.freq||"week")===v), onclick:()=>{ bk.freq=v; setPref("backup", {...bk}); draw(); }}, l))))),
       busy? h("div",{class:"bkbusy"}, h("span",{class:"spin dark"}), busy) :
-      ready? h("button",{class:"primary wide", onclick:async()=>{ const f=ready.file; try { if (navigator.canShare && navigator.canShare({files:[f]})) await navigator.share({files:[f], title:"Task Message backup"}); else { const a=h("a",{href:URL.createObjectURL(f), download:f.name}); document.body.append(a); a.click(); a.remove(); } bk.last=now(); setPref("backup", {...bk}); ready=null; toast("Backup saved"); draw(); } catch (e) { if (e && e.name==="AbortError") return; toast("Couldn't save the backup."); } }}, svg(IC.send), "Save to iCloud Drive / Google Drive") :
+      ready? h("button",{class:"primary wide", onclick:async()=>{ const f=ready.file; try { await saveBackupFile(f); bk.last=now(); setPref("backup", {...bk}); ready=null; toast("Backup saved"); draw(); } catch (e) { if (e && e.name==="AbortError") return; toast("Couldn't save the backup."); } }}, svg(IC.send), "Save to iCloud Drive / Google Drive") :
       h("button",{class:"primary wide", onclick:()=>askPassword(true, async pw=>{ busy="Preparing…"; draw(); try { ready=await buildBackup(pw, bk.media!==false, t=>{ busy=t; draw(); }); busy=""; draw(); toast(ready.count+" messages ready to save"); } catch { busy=""; draw(); toast("Couldn't make the backup."); } })}, svg(ICF.lock), "Back up now"),
       ready? h("p",{class:"note", style:"margin:-4px 4px 0"}, PLAT==="android"? "Tap the button, then choose Drive." : "Tap the button, then Save to Files → iCloud Drive.") : "",
       h("button",{class:"ghost", style:"align-self:center", onclick:()=>{
@@ -2428,6 +2428,22 @@ function openBackup(){
         document.body.append(inp); inp.click(); }}, svg(IC.arrow), "Restore from a backup")
     ];
   });
+}
+// Saving the backup file. In the iPhone/Android app the phone's own share screen opens, where you pick
+// "Save to Files → iCloud Drive" (iPhone) or "Drive" (Android). On iPhone a copy is also kept in
+// Files → On My iPhone → Task Message, which the iPhone's own iCloud Backup includes.
+async function saveBackupFile(f){
+  const FS=NP("Filesystem"), SH=NP("Share");
+  if (FS && SH) {
+    const data=b64Of(await f.arrayBuffer());
+    if (PLAT==="ios") { try { await FS.writeFile({path:"Backups/"+f.name, data, directory:"DOCUMENTS", recursive:true}); } catch {} }
+    const w=await FS.writeFile({path:f.name, data, directory:"CACHE"});
+    try { await SH.share({title:"Task Message backup", files:[w.uri], dialogTitle:"Save your backup"}); }
+    catch (e) { if (/cancel/i.test(String(e && (e.message||e)))) { const err=new Error("cancel"); err.name="AbortError"; throw err; } throw e; }
+    return;
+  }
+  if (navigator.canShare && navigator.canShare({files:[f]})) { await navigator.share({files:[f], title:"Task Message backup"}); return; }
+  const a=h("a",{href:URL.createObjectURL(f), download:f.name}); document.body.append(a); a.click(); a.remove();
 }
 function askPassword(isNew, done){
   let a="", b="";

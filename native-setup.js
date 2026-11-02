@@ -199,6 +199,8 @@ function ios() {
   add("UIBackgroundModes", "<array>\n\t\t<string>remote-notification</string>\n\t</array>");
   add("UIRequiresFullScreen", "<true/>");
   add("ITSAppUsesNonExemptEncryption", "<false/>"); // only the encryption built into iOS is used
+  add("UIFileSharingEnabled", "<true/>");              // backups show in Files → On My iPhone → Task Message
+  add("LSSupportsOpeningDocumentsInPlace", "<true/>");
   pl = pl.replace(/(<key>UISupportedInterfaceOrientations<\/key>\s*<array>)[\s\S]*?(<\/array>)/, "$1\n\t\t<string>UIInterfaceOrientationPortrait</string>\n\t$2");
   write(plP, pl);
 
