@@ -2201,3 +2201,12 @@ html[data-nav="back"]::view-transition-new(root){animation:vtInL .3s cubic-bezie
 @keyframes ncdown{to{transform:translateY(100%)}}
 @keyframes ncfade{from{background:rgba(0,0,0,0)}}
 @keyframes ncfadeout{to{background:rgba(0,0,0,0)}}
+/* lighter transition: a small drop-in, not a full slide */
+html[data-nav="fwd"]::view-transition-old(root){animation:vtFadeOut .2s ease both!important;box-shadow:none!important}
+html[data-nav="fwd"]::view-transition-new(root){animation:vtDropIn .24s cubic-bezier(.2,.8,.2,1) both!important;box-shadow:none!important}
+html[data-nav="back"]::view-transition-old(root){animation:vtDropOut .2s ease both!important;box-shadow:none!important}
+html[data-nav="back"]::view-transition-new(root){animation:vtFadeIn .22s ease both!important}
+@keyframes vtDropIn{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
+@keyframes vtDropOut{to{transform:translateX(18px);opacity:0}}
+@keyframes vtFadeOut{to{opacity:.4}}
+@keyframes vtFadeIn{from{opacity:.4}}

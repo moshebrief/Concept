@@ -202,7 +202,7 @@ function openMsgs(){
   if (unsubMsgs) unsubMsgs(); S.msgs=S.msgCache[S.active]||[]; S.msgsFor=S.active; S.msgLimit=120;
   if (!S.active) return;
   const cid=S.active;
-  localMessages(cid);
+  S._lm=localMessages(cid);
   unsubMsgs = store.sub("channels/"+cid+"/messages", async rows => {
     if (S.msgsFor!==cid) return;
     rows.sort((a,b)=>a.at-b.at);
@@ -311,9 +311,14 @@ function navGo(dir, fn){
   }
   fn();
   const el=document.querySelector(dir==="fwd"? ".main.chatmain" : ".lines");
-  if (el && el.animate) el.animate(dir==="fwd"? [{transform:"translateX(100%)"},{transform:"none"}] : [{transform:"translateX(-28%)", opacity:.6},{transform:"none", opacity:1}], {duration:300, easing:"cubic-bezier(.2,.8,.2,1)"});
+  if (el && el.animate) el.animate(dir==="fwd"? [{transform:"translateX(18px)", opacity:0},{transform:"none", opacity:1}] : [{opacity:.4},{opacity:1}], {duration:230, easing:"cubic-bezier(.2,.8,.2,1)"});
 }
-function selectChannel(id){ const wasIn=S.inThread && S.view==="chats"; S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true; if (wasIn) render(); else navGo("fwd", ()=>render()); }
+function selectChannel(id){ const wasIn=S.inThread && S.view==="chats"; S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true;
+  if (wasIn) { render(); return; }
+  // Get this chat's saved messages ready first, so the chat appears once, already filled in.
+  const show=()=>navGo("fwd", ()=>render());
+  if (S.msgs.length || !S._lm) show(); else Promise.race([S._lm, new Promise(r=>setTimeout(r,160))]).then(show);
+}
 function goBackToList(){ navGo("back", ()=>{ S.inThread=false; render(); }); }
 // iPhone-style swipe from the left edge of a chat to go back to the list.
 (function edgeBack(){
@@ -2407,7 +2412,7 @@ async function loadLocalCopy(){
   if (ch || tm) render(true);
 }
 function localMessages(cid){
-  LOCAL.load("m:"+cid).then(async rows=>{
+  return LOCAL.load("m:"+cid).then(async rows=>{
     if (!Array.isArray(rows) || !rows.length) return;
     if (!E2E.ready) await initPromise();
     await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
