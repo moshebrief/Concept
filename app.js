@@ -340,7 +340,7 @@ function goBackToList(){ navGo("back", ()=>{ S.inThread=false; render(); }); }
     st.dx=Math.max(0,dx); const w=window.innerWidth;
     st.main.style.transform=`translateX(${st.dx}px)`; st.main.style.boxShadow="-8px 0 24px rgba(0,0,0,.14)";
     if (st.list) { st.list.style.transform=`translateX(${-28+28*st.dx/w}%)`; st.list.style.opacity=String(.75+.25*st.dx/w); }
-    if (e.cancelable) e.preventDefault(); }, {passive:false});
+  }, {passive:true});
   const end=()=>{ if (!st) return; const s=st; st=null; if (!s.on) return; const w=window.innerWidth, go=s.dx>w*.33;
     const ease="transform .24s cubic-bezier(.2,.8,.2,1), opacity .24s";
     s.main.style.transition=ease; if (s.list) s.list.style.transition=ease;
@@ -1370,7 +1370,7 @@ function attachGestures(el, strip, m){
   const cancel=()=>{ clearTimeout(lp); if (active && horiz) { el.classList.remove("swiping"); SW.drag=false; set(OPEN_MSG===el? MOPEN : 0); } active=false; };
   if ("ontouchstart" in window) {
     strip.addEventListener("touchstart", e=>{ if (e.touches.length!==1) return; const t=e.touches[0]; start(t.clientX, t.clientY, e.target); }, {passive:true});
-    strip.addEventListener("touchmove", e=>{ const t=e.touches[0]; if (t && move(t.clientX, t.clientY) && e.cancelable) e.preventDefault(); }, {passive:false});
+    strip.addEventListener("touchmove", e=>{ const t=e.touches[0]; if (t) move(t.clientX, t.clientY); }, {passive:true}); // CSS touch-action keeps sideways moves for us, so scrolling stays smooth
     strip.addEventListener("touchend", end); strip.addEventListener("touchcancel", cancel);
   }
   strip.addEventListener("pointerdown", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; if (e.button>0) return; if (start(e.clientX, e.clientY, e.target)) { try { strip.setPointerCapture(e.pointerId); } catch {} } });

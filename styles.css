@@ -2248,3 +2248,10 @@ button,a,[role=button],label.td2chip,.lineitem,.card,.contact,.srow.pick,.srow.p
 .swrow.gm > .lineitem{background:var(--surface)!important}
 .swrow.gm > .lineitem[aria-current="true"]{background:color-mix(in srgb,var(--cobalt) 10%,var(--surface))!important}
 button:active{opacity:1}
+
+/* ---- smoothness: let the browser scroll on its own thread and skip drawing off-screen items ---- */
+.brow .strip{touch-action:pan-y}
+.main.chatmain{touch-action:pan-y}
+.swrow{touch-action:pan-y}
+.stream,#list,.td2body,.dbody{overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+.swrow > .lineitem,.brow .strip,.macts{backface-visibility:hidden}
