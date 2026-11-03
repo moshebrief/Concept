@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
     // 3) Delete the person's own records
     await sb.from("docs").delete().in("path", [`team/${uid}`, `keys/${uid}`, `contacts/${uid}`, `devices/${uid}`]);
     await sb.from("docs").delete().like("col", `data/users/${uid}%`);
+    await sb.from("docs").delete().eq("col", `profile/${uid}`);
 
     // 4) Delete their uploaded files
     for (;;) {

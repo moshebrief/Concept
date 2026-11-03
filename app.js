@@ -240,6 +240,7 @@ async function sendMessage(text){
   catch { dropPending(id); const t=$("#composer"); if (t && !t.value) { t.value=text; t.dispatchEvent(new Event("input",{bubbles:true})); } }
 }
 async function nextNum(){
+  if (S.mode==="live" && SB) { const {data, error}=await SB.rpc("next_task_num"); if (error) throw sbErr(error); return data; }
   const c = await store.get("meta/counter").catch(()=>null);
   const n = ((c&&c.n)||0)+1; await store.set("meta/counter",{n}); return n;
 }
@@ -258,6 +259,7 @@ async function saveTask(){
     const num = await guarded(nextNum());
     const t = {...d, team:(curTeam()||{}).id||"", title:d.title.trim(), num, createdBy:S.me, at:now(), log:[{at:now(), by:S.me, what:"created"}]};
     await guarded(store.set("tasks/"+id, t));
+    for (const f of (d.files||[]).filter(f=>f.kind==="voice" && f.by===S.me)) for (let i=0;i<(f.voice&&f.voice.parts||0);i++) store.update(`voice/${f.voice.id}/parts/${i}`, {task:id}).catch(()=>{});
     if (d.fromMsg && d.channel) { S.justTied=d.fromMsg; guarded(store.update(`channels/${d.channel}/messages/${d.fromMsg}`, {taskId:id})).catch(()=>{}); }
     toast(`CN-${num} created`);
   } else {
@@ -421,7 +423,7 @@ async function sendVoice(blob, dur, peaks, target, vextra={}, caption=""){
     if (await canSeal(chv.members||[S.me])) { const sealed=await seal(caption||"", chv.members||[S.me]); venv=sealed.env; const iv=crypto.getRandomValues(new Uint8Array(12)); eiv=b64e(iv); b64=b64e(await crypto.subtle.encrypt({name:"AES-GCM",iv}, sealed.mk, await blob.arrayBuffer())); }
     else b64=await blobToB64(blob);
     const parts=Math.ceil(b64.length/CHUNK);
-    for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me}));
+    for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me, ch:cid}));
     const msg={by:S.me, text: venv? "" : caption, at:now(), kind:"voice", voice:{id:vid, parts, mime:blob.type||"audio/webm", dur:Math.round(dur*10)/10, peaks, eiv}, ...vextra}; if (venv) msg.enc=venv;
     if (S.replyTo && !target) { msg.replyTo=S.replyTo; S.replyTo=null; }
     msg.at=S.pend.find(p=>p.id===mid)?.at||msg.at;
@@ -1036,7 +1038,7 @@ async function copyVoiceToTask(taskId, msgs){
     try {
       const blob=await (await fetch(await voiceUrl(m.voice, m.enc))).blob();
       const vid="v"+now().toString(36)+uidShort().slice(0,4); const b64=await blobToB64(blob); const parts=Math.ceil(b64.length/CHUNK);
-      for (let i=0;i<parts;i++) await store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me});
+      for (let i=0;i<parts;i++) await store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me, task:taskId});
       VOICE_URLS[vid]=URL.createObjectURL(blob);
       files.push({id:vid, kind:"voice", by:m.by, at:m.at, fromMsg:m.id, voice:{id:vid, parts, mime:blob.type||m.voice.mime||"audio/webm", dur:m.voice.dur, peaks:m.voice.peaks}});
     } catch {}
@@ -1455,7 +1457,7 @@ function addTaskPhotos(){
 async function storeTaskVoice(blob, dur, peaks){
   if (blob.size>3.5*1024*1024) { toast("That recording is too long."); return; }
   const set=taskFilesSetter(); const vid="v"+now().toString(36)+uidShort().slice(0,4);
-  try { const b64=await blobToB64(blob); const parts=Math.ceil(b64.length/CHUNK); for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me}));
+  try { const b64=await blobToB64(blob); const parts=Math.ceil(b64.length/CHUNK); const tk=S.openTask && S.openTask!=="new"? S.openTask : ""; for (let i=0;i<parts;i++) await guarded(store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me, task:tk}));
     VOICE_URLS[vid]=URL.createObjectURL(blob);
     set([...((S.draftTask&&S.draftTask.files)||[]), {id:vid, kind:"voice", by:S.me, at:now(), voice:{id:vid, parts, mime:blob.type||"audio/webm", dur:Math.round(dur*10)/10, peaks}}]); toast("Voice memo added");
   } catch { toast("The voice memo didn't save."); }
