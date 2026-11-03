@@ -3094,13 +3094,13 @@ function renderDrawer(){
   const pi=Math.max(0, PRI.findIndex(p=>p[0]===d.priority));
   body.append(h("div",{class:"td2chips"},
     h("button",{class:"td2chip"+(who?" set":""), title: who? "Assigned to "+fullName(who) : "Assign", "aria-label": who? "Assigned to "+fullName(who)+". Change" : "Assign to someone", disabled:ro, onclick:()=>pickAssignee(d, t)},
-      who? avatar(who,"td2av") : svg(ICF.personplus), who? h("span",{}, (who===S.me? "Me" : fullName(who).replace(/^Example:\s*/,"").split(" ")[0])) : ""),
+      who? avatar(who,"td2av") : svg(ICF.personplus)),
     h("label",{class:"td2chip"+(d.due?" set":"")+(overdue?" late":""), title: d.due? "Due "+dueTxt : "Add due date"},
-      svg(ICF.cal), d.due? h("span",{}, dueTxt) : "",
-      d.due && !ro? h("button",{class:"td2chx", "aria-label":"Remove due date", onclick:e=>{ e.preventDefault(); e.stopPropagation(); d.due=""; render(); }}, svg(IC.x)) : "",
+      svg(ICF.cal),
       h("input",{type:"date", id:"t-due", class:"td2date", value:d.due, disabled:ro, "aria-label":"Due date", onchange:e=>{ d.due=e.target.value; render(); }})),
+    d.due? h("span",{class:"td2due"+(overdue?" late":"")}, dueTxt, ro? "" : h("button",{class:"td2chx", "aria-label":"Remove due date", onclick:()=>{ d.due=""; render(); }}, svg(IC.x))) : "",
     h("button",{class:"td2chip pri p-"+PRI[pi][0], title:PRI[pi][1]+" (tap to change)", "aria-label":PRI[pi][1]+". Tap to change", disabled:ro, onclick:()=>{ d.priority=PRI[(pi+1)%3][0]; render(); }},
-      svg(ICF.flag), d.priority==="high"? h("b",{}, "!!") : d.priority==="normal"? h("b",{}, "!") : "")));
+      svg(ICF.flag))));
   // ---- subtasks + photos + voice memos
   body.append(h("div",{class:"td2card td2subs"}, renderTaskFiles(d, ro, renderSubtasks(d, t, isNew, ro))));
   // ---- notes

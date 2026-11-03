@@ -2072,3 +2072,55 @@ html,body{overflow-x:hidden;max-width:100%}
 .td2subs .subrow{min-height:40px!important;padding:3px 8px!important;border-radius:11px}
 .td2subs .subrow .subtx{font-size:15px}
 .td2subs .subs{gap:8px}
+
+/* ---- task screen v4: round icons, smaller ---- */
+.td2head{padding:8px 12px!important;gap:6px!important}
+.td2x,.td2ic{width:32px!important;height:32px!important}
+.td2x svg.i,.td2ic svg.i{width:16px!important;height:16px!important}
+.td2save{width:34px!important;height:34px!important}
+.td2save svg.i{width:17px!important;height:17px!important}
+.td2num{font-size:12px;padding:4px 9px}
+.td2body{padding:12px 14px calc(24px + env(safe-area-inset-bottom,0px))!important;gap:11px!important}
+.td2title{font-size:19px!important;line-height:1.25!important}
+.td2seg{border-radius:999px!important;padding:2px!important}
+.td2segb{height:28px!important;font-size:12px!important;border-radius:999px!important;gap:5px!important}
+.td2segb i{width:7px!important;height:7px!important}
+.td2chips{gap:8px!important;align-items:center}
+.td2chip{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;border-radius:50%!important;gap:0!important}
+.td2chip svg.i{width:16px!important;height:16px!important}
+.td2chip.set{background:color-mix(in srgb,var(--cobalt) 12%,var(--surface))!important;border-color:transparent!important}
+.td2chip .av.td2av{width:34px!important;height:34px!important;margin:0!important;font-size:12px!important}
+.td2chip:has(.av){border:0!important;padding:0!important;overflow:hidden}
+.td2chip.pri.p-normal{background:color-mix(in srgb,#FF9500 14%,var(--surface))!important}
+.td2due{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 4px 0 9px;border-radius:999px;background:var(--fill);font:600 12px var(--f-body);color:var(--ink);margin-left:-4px}
+.td2due.late{background:color-mix(in srgb,#FF3B30 13%,transparent);color:#FF3B30}
+.td2due .td2chx{width:18px;height:18px;margin:0}
+.td2card{border-radius:12px!important}
+.td2subs{padding:10px!important}
+.td2subs .subs{gap:7px!important}
+.td2subs .subhead .attbtns{gap:7px!important}
+.td2subs .subhead .attbtns .attb{width:36px!important;height:36px!important;border-radius:50%!important}
+.td2subs .subhead .attbtns .attb svg.i{width:17px!important;height:17px!important}
+.td2subs .subcount{font-size:11px;padding:2px 7px}
+.td2subs .subrow{min-height:34px!important;padding:2px 8px!important;border-radius:999px!important}
+.td2subs .subrow .subtx{font-size:14px!important}
+.td2subs .subrow .subchk{width:20px!important;height:20px!important}
+.td2subs .tthumb{width:58px!important;height:58px!important;border-radius:10px!important}
+.td2subs .tvoice{border-radius:999px!important;padding:3px 8px 3px 4px!important}
+.td2subs .tvoice .vplay{width:30px!important;height:30px!important}
+.td2notes{min-height:52px!important;padding:10px 12px!important;font-size:14.5px!important}
+.td2src{padding:10px 12px!important;gap:8px!important}
+.td2srch{font-size:12.5px!important}
+.td2src p{font-size:14px!important;padding:8px 10px!important;border-radius:10px!important}
+.td2voice{border-radius:999px!important;padding:3px 10px 3px 4px!important}
+.td2voice .vplay{width:32px!important;height:32px!important}
+.td2voice .vplay svg.i{width:15px!important;height:15px!important}
+.td2voice .vbars{height:26px!important}
+.td2voice .vmeta{font-size:11px}
+.td2label{font-size:11px!important;margin:2px 4px -6px!important}
+.td2logr{padding:5px 12px!important;font-size:12.5px!important}
+.td2logr em{font-size:11.5px!important}
+@media (pointer:coarse){ .td2subs .subrow input.subtx{font-size:14px!important} .td2notes{font-size:14.5px!important} }
+.td2subs .subrow{min-height:32px!important}
+.td2subs .subrow .subtx{padding:4px 0!important}
+.td2notes{min-height:44px!important}
