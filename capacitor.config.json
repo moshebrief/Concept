@@ -14,10 +14,11 @@
   "plugins": {
     "SplashScreen": {
       "launchAutoHide": false,
-      "launchShowDuration": 2000,
+      "launchShowDuration": 1500,
       "backgroundColor": "#007AFF",
       "showSpinner": false,
-      "androidScaleType": "CENTER_CROP"
+      "androidScaleType": "CENTER_CROP",
+      "launchFadeOutDuration": 220
     },
     "Keyboard": {
       "resize": "native",
@@ -28,14 +29,18 @@
       "initialViewportFitValueHint": "cover"
     },
     "FirebaseMessaging": {
-      "presentationOptions": ["badge"]
+      "presentationOptions": [
+        "badge"
+      ]
     }
   },
   "experimental": {
     "ios": {
       "spm": {
         "packageOptions": {
-          "@capacitor-firebase/messaging": { "symlink": true }
+          "@capacitor-firebase/messaging": {
+            "symlink": true
+          }
         }
       }
     }

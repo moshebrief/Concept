@@ -155,12 +155,26 @@ function chanGlyph(c){
 }
 
 // ---------- boot ----------
+// Opening the app: if you were signed in, show your chats straight from this phone's saved copy
+// (no waiting for the internet), then catch up with the server in the background.
+let SPLASH_DONE=false;
+function hideSplash(){ if (SPLASH_DONE) return; SPLASH_DONE=true; const ss=NP("SplashScreen"); if (ss) { try { ss.hide({fadeOutDuration:220}); } catch {} } document.documentElement.classList.add("ready"); }
+function cachedSession(){
+  try { const ref=(CFG.supabaseUrl.match(/https:\/\/([^.]+)\./)||[])[1]; const raw=localStorage.getItem("sb-"+ref+"-auth-token"); if (!raw) return null; const j=JSON.parse(raw); return j && j.user && j.user.id? j : null; } catch { return null; }
+}
 async function boot(){
   applyPrefs(); nativeInit(); render();
-  if (!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase && !/YOUR_/.test(CFG.supabaseUrl+CFG.supabaseKey))) { startDemo("Example data. Add your Supabase keys in config.js to go live."); return; }
+  setTimeout(hideSplash, 1500); // never keep the splash longer than this
+  if (!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase && !/YOUR_/.test(CFG.supabaseUrl+CFG.supabaseKey))) { startDemo("Example data. Add your Supabase keys in config.js to go live."); hideSplash(); return; }
   SB=window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:false}});
+  const cached=cachedSession();
+  if (cached) {
+    startLive(cached.user);
+    SB.auth.getSession().then(({data})=>{ if ((!data || !data.session) && !cachedSession()) { location.reload(); } }).catch(()=>{}); // signed out elsewhere: show the sign-in screen (an offline start keeps working)
+    return;
+  }
   const {data}=await SB.auth.getSession();
-  if (!data || !data.session) { openLogin(); return; }
+  if (!data || !data.session) { openLogin(); hideSplash(); return; }
   await startLive(data.session.user);
 }
 function startDemo(msg){ S.mode="demo"; S.me="me"; demo.seed(); if (!S.active) S.active="launch"; showBanner(msg); subscribeAll(); }
@@ -1672,6 +1686,7 @@ async function loadProfileData(){
     for (const r of data||[]) { const [,id,f]=r.path.split("/"); seen.add(id); const p=PROF[id]||(PROF[id]={vis:{}}); p[f]=(r.data&&r.data.v)||""; p.vis=p.vis||{}; p.vis[f]=(r.data&&r.data.vis)||"all"; }
     for (const id of Object.keys(PROF)) if (!seen.has(id) && id!==S.me) { PROF[id].photo=""; }
     applyProfiles(); scheduleRender();
+    try { ls.set("prof:"+S.me, PROF); } catch {}
   } catch {}
 }
 async function saveProfileField(f, v, vis){
@@ -1727,13 +1742,19 @@ function openVisPicker(f, title){
 async function startLive(u){
   DB=makeDocStore(SB); ASSETS=makeAssets(SB); S.mode="live"; S.me=u.id; S.canWrite=true;
   const b=$("#banner"); if (b) b.hidden=true;
-  let mine=null; try { mine=await store.get("team/"+S.me); } catch {}
-  S.people[S.me]={id:S.me, name:(mine&&mine.name)||"You", avatarUrl:(mine&&mine.photo)||"", color:colorFor(S.me)};
-  loadLocalCopy();
+  const was=ls.get("me:"+S.me, null);
+  S.people[S.me]={id:S.me, name:(was&&was.name)||"You", avatarUrl:"", color:colorFor(S.me)};
+  if (was) { S.teamDocs[S.me]={id:S.me, ...was}; }
+  await Promise.race([loadLocalCopy(), new Promise(r=>setTimeout(r,700))]);
+  try { Object.assign(PROF, ls.get("prof:"+S.me, {})||{}); applyProfiles(); } catch {}
+  render(true); hideSplash();
+  subscribeAll();
+  let mine=null, fetched=false; try { mine=await store.get("team/"+S.me); fetched=true; } catch { mine=was; }
+  if (mine) { ls.set("me:"+S.me, {name:mine.name||"", phone:mine.phone||""}); S.people[S.me]={...S.people[S.me], name:mine.name||"You"}; }
   loadProfileData().then(()=>migrateAbout(mine)); setInterval(loadProfileData, 5*60e3);
-  if (!mine || !mine.name) openProfileSetup(u, mine);
-  else if (u.phone && fmtPhone(u.phone)!==mine.phone) store.update("team/"+S.me, {phone:fmtPhone(u.phone)}).catch(()=>{});
-  subscribeAll(); render();
+  if (fetched && (!mine || !mine.name)) openProfileSetup(u, mine);
+  else if (mine && u.phone && fmtPhone(u.phone)!==mine.phone) store.update("team/"+S.me, {phone:fmtPhone(u.phone)}).catch(()=>{});
+  render();
   setTimeout(pushRegister, 1500);
 }
 async function signOut(){ try { await SB.auth.signOut(); } catch {} clearLocalCopy(); setTimeout(()=>location.reload(), 150); }
@@ -2667,7 +2688,7 @@ async function nativeInit(){
   const sb=NP("SystemBars"); const dark=matchMedia("(prefers-color-scheme: dark)").matches;
   if (sb) { try { sb.setStyle({style: "DEFAULT"}); } catch {} }
   void dark;
-  const ss=NP("SplashScreen"); if (ss) setTimeout(()=>{ try { ss.hide({fadeOutDuration:180}); } catch {} }, 120);
+
 }
 async function pushRegister(){
   const fm=NP("FirebaseMessaging"); if (!fm || PUSH_READY || S.mode!=="live") return;
