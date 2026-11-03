@@ -2224,7 +2224,27 @@ button,a,[role=button],label.td2chip,.lineitem,.card,.contact,.srow.pick,.srow.p
 .tap{scale:.92;transition:scale .09s ease-out,background-color .1s!important}
 .tapped{scale:1}
 .lineitem.tap,.card.tap,.contact.tap,.srow.tap,.srow.pick.tap,.srow.pick1.tap,.td2card.tap,.ncrow.tap,.mact.tap{scale:.975}
-.lineitem.tap,.contact.tap,.srow.pick.tap,.srow.pick1.tap,.ncrow.tap{background-color:color-mix(in srgb,var(--ink) 5%,transparent)}
+.lineitem.tap,.contact.tap,.srow.pick.tap,.srow.pick1.tap,.ncrow.tap{box-shadow:inset 0 0 0 100vmax color-mix(in srgb,var(--ink) 5%,transparent)}
 .mlink.tap,.oblink.tap,.nctxt.tap,.td2link.tap{scale:1;opacity:.5}
 @media (prefers-reduced-motion:reduce){.tap{scale:1}}
 .micbtn.sending.savecheck svg.i{transform:none!important;stroke-width:2.6}
+
+/* ---- Gmail-style chat swipe ---- */
+.swrow.gm .gmbg{position:absolute;inset:0;display:flex;align-items:center;gap:10px;padding:0 24px;color:#fff;font:600 14px var(--f-body);visibility:hidden}
+.swrow.gm .gmbg.l{justify-content:flex-start;background:#1A73E8}
+.swrow.gm .gmbg.r{justify-content:flex-end;background:#D93025}
+.swrow.gm.sl .gmbg.l,.swrow.gm.sr .gmbg.r{visibility:visible}
+.swrow.gm .gmbg b{opacity:0;transform:translateX(-6px);transition:opacity .15s,transform .15s}
+.swrow.gm .gmbg.r b{transform:translateX(6px)}
+.gmic{display:grid;place-items:center;width:30px;height:30px;transform:scale(.8);opacity:.75;transition:transform .2s cubic-bezier(.3,1.6,.5,1),opacity .15s}
+.gmic svg.i{width:24px;height:24px;color:#fff;stroke:#fff}
+.swrow.gm.armed .gmic{transform:scale(1.12);opacity:1}
+.swrow.gm.armed .gmbg b{opacity:1;transform:none}
+.swrow.gm:not(.armed) .gmbg{filter:saturate(.55) brightness(1.05)}
+.swrow.gm > .lineitem{box-shadow:none}
+.swrow.gm.sl > .lineitem,.swrow.gm.sr > .lineitem{box-shadow:0 1px 6px rgba(0,0,0,.12)}
+.swrow.gm.anim > .lineitem{transition:transform .26s cubic-bezier(.2,.9,.25,1)}
+
+.swrow.gm > .lineitem{background:var(--surface)!important}
+.swrow.gm > .lineitem[aria-current="true"]{background:color-mix(in srgb,var(--cobalt) 10%,var(--surface))!important}
+button:active{opacity:1}

@@ -2291,32 +2291,43 @@ function swipeActs(c){
 function closeSwipe(anim=true){ if (!SW.open) return; const r=document.querySelector(`.swrow[data-sw="${SW.open}"]`); SW.open=null; if (r) setOff(r, 0, anim); }
 function setOff(row, x, anim){ const li=row.querySelector(":scope > .lineitem"); if (!li) return; row.classList.toggle("anim", !!anim); li.style.setProperty("--swx", x+"px"); row.dataset.off=String(x); row.classList.toggle("sl", x>0); row.classList.toggle("sr", x<0); }
 document.addEventListener("pointerdown", e=>{ if (SW.open && !e.target.closest(`.swrow[data-sw="${SW.open}"] .swacts`)) { const inRow=e.target.closest(`.swrow[data-sw="${SW.open}"]`); closeSwipe(); if (inRow) inRow.dataset.eat="1"; } }, true);
+// Gmail-style swipe on a chat row: the row follows your finger over a colored strip with one icon.
+// Swipe right = mark read / unread. Swipe left = delete (asks first). Let go past the line to do it.
 function swipeWrap(li, c){
-  const A=swipeActs(c), lw=A.l.length*SWB, rw=A.r.length*SWB;
-  const btn=a=>h("button",{class:"swbtn "+a.cls, "aria-label":a.label, onclick:e=>{ e.stopPropagation(); SW.open=null; a.fn(); }}, svg(a.icon), h("span",{}, a.label));
-  const row=h("div",{class:"swrow", "data-sw":c.id}, h("div",{class:"swacts l", style:`width:${lw}px`}, A.l.map(btn)), h("div",{class:"swacts r", style:`width:${rw}px`}, A.r.map(btn)), li);
-  if (SW.open===c.id) setOff(row, Number(SW.openX)||0, false);
+  const ur=unread(c);
+  const R={cls:"sw-blue", icon: ur? ICF.check : ICF.dotchat, label: ur? "Read" : "Unread", fn:()=>toggleUnread(c)};
+  const L={cls:"sw-red", icon:IC.trash, label:"Delete"};
+  const row=h("div",{class:"swrow gm", "data-sw":c.id},
+    h("div",{class:"gmbg l "+R.cls, "aria-hidden":"true"}, h("span",{class:"gmic"}, svg(R.icon)), h("b",{}, R.label)),
+    h("div",{class:"gmbg r "+L.cls, "aria-hidden":"true"}, h("b",{}, L.label), h("span",{class:"gmic"}, svg(L.icon))),
+    li);
   let st=null;
-  row.addEventListener("pointerdown", e=>{ if (e.button>0 || e.target.closest(".swacts") || e.target.closest(".subtoggle")) return; st={x:e.clientX, y:e.clientY, id:e.pointerId, base:Number(row.dataset.off)||0, mode:null, off:0}; });
+  const TH=()=>Math.min(140, row.clientWidth*.3);
+  row.addEventListener("pointerdown", e=>{ if (e.button>0 || e.target.closest(".subtoggle")) return; st={x:e.clientX, y:e.clientY, id:e.pointerId, mode:null, off:0, armed:false}; });
   row.addEventListener("pointermove", e=>{
     if (!st || e.pointerId!==st.id) return; const dx=e.clientX-st.x, dy=e.clientY-st.y;
-    if (!st.mode) { if (Math.abs(dx)>9 && Math.abs(dx)>Math.abs(dy)*1.3) { st.mode="h"; SW.drag=true; try { row.setPointerCapture(st.id); } catch {} if (SW.open && SW.open!==c.id) closeSwipe(); } else if (Math.abs(dy)>9) { st=null; return; } else return; }
-    let x=st.base+dx; const W=row.clientWidth;
-    if (x>0 && !lw) x=x*.15; if (x<0 && !rw) x=x*.15;
-    if (x>lw) x=lw+(x-lw)*.55; if (x<-rw) x=-rw+(x+rw)*.55; x=Math.max(-W, Math.min(W, x));
+    if (!st.mode) { if (Math.abs(dx)>10 && Math.abs(dx)>Math.abs(dy)*1.4) { st.mode="h"; SW.drag=true; try { row.setPointerCapture(st.id); } catch {} } else if (Math.abs(dy)>10) { st=null; return; } else return; }
+    const W=row.clientWidth; let x=Math.max(-W, Math.min(W, dx));
     st.off=x; setOff(row, x, false);
-    const full=Math.abs(x)>W*.62; row.classList.toggle("full", full); e.preventDefault();
+    const armed=Math.abs(x)>TH(); if (armed!==st.armed) { st.armed=armed; row.classList.toggle("armed", armed); if (armed && navigator.vibrate) try { navigator.vibrate(8); } catch {} }
+    e.preventDefault();
   });
-  const end=e=>{
+  const end=()=>{
     if (!st) return; const s=st; st=null; if (s.mode!=="h") return;
     row.dataset.eat="1"; setTimeout(()=>{ delete row.dataset.eat; }, 350);
-    const x=s.off, W=row.clientWidth; row.classList.remove("full"); SW.drag=false;
-    let open=0, act=null;
-    if (x<0 && rw) { if (-x>W*.62) act=A.r[A.r.length-1]; else if (-x>rw*.45) open=-rw; }
-    if (x>0 && lw) { if (x>W*.62) act=A.l[0]; else if (x>lw*.45) open=lw; }
-    setOff(row, open, true); SW.open=open? c.id : null; SW.openX=open;
-    if (act) { if (navigator.vibrate) try { navigator.vibrate(12); } catch {} setTimeout(()=>act.fn(), 180); }
-    if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag) scheduleRender(); }, 260); }
+    SW.drag=false; row.classList.remove("armed");
+    const flush=()=>{ if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag) scheduleRender(); }, 300); } };
+    if (s.off>TH()) { setOff(row, 0, true); setTimeout(()=>{ R.fn(); flush(); }, 260); return; }
+    if (-s.off>TH()) {
+      setOff(row, -row.clientWidth, true);
+      let gone=false;
+      setTimeout(()=>sheet("Delete chat?", (draw, close)=>[
+        h("p",{class:"note", style:"margin:0"}, "“"+chanTitle(c)+"” will be removed from your chat list and its messages hidden on your devices. It comes back if someone sends a new message."),
+        h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary danger-bg", onclick:()=>{ gone=true; close(); deleteChat(c); }}, "Delete"))],
+        {onClose:()=>{ if (!gone) { setOff(row, 0, true); flush(); } }}), 240);
+      return;
+    }
+    setOff(row, 0, true); flush();
   };
   row.addEventListener("pointerup", end); row.addEventListener("pointercancel", end);
   row.addEventListener("click", e=>{ if (row.dataset.eat) { e.stopImmediatePropagation(); e.preventDefault(); delete row.dataset.eat; } }, true);
