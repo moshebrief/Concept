@@ -2165,3 +2165,9 @@ html[data-nav="back"]::view-transition-new(root){animation:vtInL .3s cubic-bezie
   .drawer.enter{animation:drawerIn .3s cubic-bezier(.2,.8,.2,1) both!important}
 }
 @keyframes drawerIn{from{transform:translateY(36px);opacity:0}to{transform:none;opacity:1}}
+.ntsheet .inp{width:100%;min-height:46px;border:1px solid var(--sep,var(--rule));border-radius:12px;padding:10px 12px;background:var(--fill);color:var(--ink);font-size:16px;box-sizing:border-box}
+.ntsheet .invrow{display:flex;gap:8px;align-items:center}
+.ntsheet .invrow .inp{flex:1;min-width:0}
+.ncnote{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;background:color-mix(in srgb,var(--cobalt) 8%,var(--surface))}
+.ncnote span{color:var(--muted);font-size:14px;line-height:1.35}
+.ncnote .primary{margin-top:6px}

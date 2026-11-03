@@ -1810,7 +1810,13 @@ async function signOut(){ try { await SB.auth.signOut(); } catch {} clearLocalCo
 // ===================== smooth rendering =====================
 let RQ=0;
 function scheduleRender(){ if (SW.drag) { SW.pending=true; return; } if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
+// While you're typing in a search box, task or settings field, background updates wait until you're
+// done, so the keyboard never gets closed under your fingers.
+let TYPING_HOLD=false;
+function typingInField(){ const a=document.activeElement; return !!(a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.id!=="composer" && a.closest("#drawer, section.flow, .settings, .ntsheet")); }
+document.addEventListener("focusout", ()=>{ if (TYPING_HOLD) setTimeout(()=>{ if (!typingInField() && TYPING_HOLD) { TYPING_HOLD=false; scheduleRender(); } }, 60); }, true);
 function softRender(){
+  if (typingInField()) { if (S.newFlow && document.activeElement.closest("section.flow")) { flowRedraw(); return; } TYPING_HOLD=true; return; }
   const main=$(".chatmain");
   const canPatch = S.view==="chats" && !S.newFlow && main && main.dataset.cid===String(S.active||"") && !S.openTask;
   if (!canPatch) { render(); return; }
@@ -3297,6 +3303,30 @@ function pickAssignee(d, t){
 function openNewChat(){ S.newFlow={step:"pick", sel:[], name:"", icon:"", q:""}; S.inThread=false; S.view="chats"; render(); setTimeout(()=>{ const i=$("#nf-q"); if (i) i.focus(); },30); }
 function closeFlow(){ S.newFlow=null; render(); }
 const GROUP_ICONS=["💬","🚀","📣","🛠️","🎯","📦","🎨","📈","☕","🏠","⚽","🎉"];
+// Start a chat with any phone number (like WhatsApp's "New contact").
+function openChatByNumber(){
+  let cc=ls.get("cc","+1"), num=(S.newFlow&&/^[+\d\s()-]{6,}$/.test(S.newFlow.q||"")? S.newFlow.q : ""), name="", busy=false, notOn=null;
+  sheet("New contact", (draw, close)=>{
+    const go=async()=>{
+      const phone=toE164(num, cc); if (dgt(phone).length<8) { toast("Enter the full phone number."); return; }
+      busy=true; notOn=null; draw();
+      const uid=userByPhone(phone) || await lookupPhone(phone); busy=false;
+      if (uid===S.me) { draw(); toast("That's your own number."); return; }
+      if (uid) { close(); S.newFlow=null; await setContact(uid, true).catch(()=>{}); createChannel("", [S.me, uid], "dm"); return; }
+      notOn=phone; draw();
+    };
+    return [
+      h("div",{class:"invrow"},
+        h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c))),
+        h("input",{class:"inp", id:"nc-num", type:"tel", inputmode:"tel", autocomplete:"tel", placeholder:"Phone number", value:num, oninput:e=>{ num=e.target.value; notOn=null; }, onkeydown:e=>{ if (e.key==="Enter") go(); }})),
+      h("input",{class:"inp", id:"nc-name", maxlength:"40", autocomplete:"name", placeholder:"Name (optional)", value:name, oninput:e=>name=e.target.value}),
+      notOn? h("div",{class:"ncnote"}, h("b",{}, "Not on Task Message yet"), h("span",{}, "Send them an invite. When they sign up with this number, you can chat right away."),
+        h("button",{class:"primary wide", onclick:()=>{ openSms(notOn, `Join me on Task Message — chat and turn messages into tasks. ${siteLink("")||location.origin}`); close(); }}, svg(IC.send), "Invite by text")) :
+      h("button",{class:"primary wide", disabled:busy, onclick:go}, busy? "Checking…" : "Start chat")
+    ];
+  });
+  setTimeout(()=>{ const i=$("#nc-num"); if (i) i.focus(); }, 80);
+}
 function flowRedraw(){ const old=document.querySelector("section.flow"); if (!old) { render(); return; } const nw=renderFlow(); const l=old.querySelector(".list"), st=l? l.scrollTop : 0; old.className=nw.className.replace(" enter",""); swapKids(old, [...nw.childNodes]); }
 function renderFlow(){
   const F=S.newFlow; const others=S.team.filter(id=>id!==S.me).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
@@ -3318,6 +3348,7 @@ function renderFlow(){
     if (!q) {
       list.append(h("button",{class:"action", onclick:()=>{F.step="members"; F.q=""; render(); setTimeout(()=>{ const i=$("#nf-q"); if(i) i.focus(); },30);}}, h("span",{class:"actic"}, svg(IC.group)), h("b",{},"New group")));
     }
+    if (!q) list.append(h("button",{class:"action", onclick:openChatByNumber}, h("span",{class:"actic"}, svg(ICF.personplus)), h("b",{},"New contact")));
     if (!q) list.append(h("button",{class:"action", onclick:importContacts}, h("span",{class:"actic"}, svg(ICF.book)), h("b",{}, S.addr.length? "Update phone contacts" : "Import phone contacts")));
     const saved=match.filter(id=>S.contacts.includes(id)).sort((a,b)=>nameOf(a).localeCompare(nameOf(b))), more=match.filter(id=>!S.contacts.includes(id));
     const go=id=>()=>{ S.newFlow=null; createChannel("", [S.me,id], "dm"); };
