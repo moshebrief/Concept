@@ -984,7 +984,8 @@ async function setContact(id, on){
   S.contacts=ids; S.allContacts[S.me]=ids; render();
   try { await guarded(store.set("contacts/"+S.me, {ids})); toast(on? "Contact saved" : "Contact removed"); } catch {}
 }
-const peopleForTasks = () => { const t=curTeam(); return [...new Set([S.me, ...(t? t.members||[] : []), ...S.contacts])].filter(Boolean); };
+// Tasks can only be assigned to people who share a team with you (the task's team if it has one).
+const peopleForTasks = (task) => { const tid=task&&task.team; const ts=myTeams().filter(t=>!tid || t.id===tid); return [...new Set([S.me, ...ts.flatMap(t=>t.members||[])])].filter(Boolean); };
 
 // ---------- messages → tasks ----------
 const msgText = m => { if (!m.kind) return shown(m); const p=m.kind==="media"? plainP(m) : null; const items=(p&&p.items)||[]; const lab=m.kind==="voice"? "🎤 Voice note ("+fmtDur(m.voice&&m.voice.dur)+")" : richLabel(m.kind, (items[0]||{}).t, items.length); const cap=plain(m); return cap? lab+" · "+cap : lab; };
@@ -998,10 +999,29 @@ async function quickTask(msgs, opts={}){
     const num=await guarded(nextNum());
     await guarded(store.set("tasks/"+id, {title, notes, status:STATUSES[0].id, assignee:"", due:"", priority:"normal", channel:cid, fromMsg:msgs[0].id, fromMsgs:msgs.map(m=>m.id), fromText:msgs.map(msgText).join("\n"), fromBy:msgs[0].by, team:(curTeam()||{}).id||"", num, createdBy:S.me, at:now(), subtasks:[], log:[{at:now(), by:S.me, what:"created from "+(msgs.length>1? msgs.length+" messages":"a message")}]}));
     for (const m of msgs) store.update(`channels/${cid}/messages/${m.id}`, {taskId:id}).catch(()=>{});
+    copyVoiceToTask(id, msgs);
     S.justTied=msgs[0].id; S.actFor=null; S.selecting=false; S.sel=[]; render(true);
     if (opts.open) openTask(id); else if (!opts.silent) toast("Added to "+STATUSES[0].name, {label:"Open", fn:()=>openTask(id)});
     return id;
   } catch {}
+}
+// A voice note turned into a task gets its own copy inside the task, so it keeps playing there
+// even after the chat copy is cleared from the server, and for teammates who aren't in that chat.
+async function copyVoiceToTask(taskId, msgs){
+  const files=[];
+  for (const m of msgs.filter(m=>m.kind==="voice" && m.voice)) {
+    try {
+      const blob=await (await fetch(await voiceUrl(m.voice, m.enc))).blob();
+      const vid="v"+now().toString(36)+uidShort().slice(0,4); const b64=await blobToB64(blob); const parts=Math.ceil(b64.length/CHUNK);
+      for (let i=0;i<parts;i++) await store.set(`voice/${vid}/parts/${i}`, {d:b64.slice(i*CHUNK,(i+1)*CHUNK), by:S.me});
+      VOICE_URLS[vid]=URL.createObjectURL(blob);
+      files.push({id:vid, kind:"voice", by:m.by, at:m.at, fromMsg:m.id, voice:{id:vid, parts, mime:blob.type||m.voice.mime||"audio/webm", dur:m.voice.dur, peaks:m.voice.peaks}});
+    } catch {}
+  }
+  if (!files.length) return;
+  const t=S.tasks.find(x=>x.id===taskId)||{}; const all=[...files, ...(t.files||[])];
+  await store.update("tasks/"+taskId, {files:all}).catch(()=>{});
+  if (S.openTask===taskId && S.draftTask) { S.draftTask.files=[...files, ...(S.draftTask.files||[]).filter(f=>!files.some(x=>x.id===f.id))]; render(true); }
 }
 function toggleSel(id){ S.sel = S.sel.includes(id)? S.sel.filter(x=>x!==id) : [...S.sel, id]; if (!S.sel.length) S.selecting=false; render(true); }
 
@@ -1245,7 +1265,7 @@ function attachGestures(el, strip, m){
   if (canAct) (strip.parentElement||el).append(h("div",{class:"macts", "aria-hidden":"true"},
     h("button",{class:"mact", tabindex:"-1", onclick:e=>{ e.stopPropagation(); closeMsgActions(); forwardMenu(m); }}, h("span",{class:"maci"}, svg(ICF.fwd)), "Forward"),
     h("button",{class:"mact task", tabindex:"-1", onclick:e=>{ e.stopPropagation(); closeMsgActions(); swipeTask(m); }}, h("span",{class:"maci"}, svg(IC.knot)), m.taskId? "Open task" : "Task")));
-  let x0=0,y0=0,dx=0,base=0,active=false,decided=false,horiz=false,lp=null;
+  let x0=0,y0=0,dx=0,base=0,active=false,decided=false,horiz=false,lp=null,endedAt=0;
   const set=v=>{ el.style.setProperty("--sx", v+"px"); el.classList.toggle("swr", v>56); el.classList.toggle("swl", v<-40); el.style.setProperty("--mp", String(Math.min(1, Math.max(0, -v/ -MOPEN)))); };
   const start=(x,y,target)=>{ if (S.selecting || target.closest("button,a,.vbars,input,.macts")) return false;
     x0=x; y0=y; dx=0; base=OPEN_MSG===el? MOPEN : 0; active=true; decided=false; horiz=false;
@@ -1257,7 +1277,7 @@ function attachGestures(el, strip, m){
     v = v>0? Math.min(90, v) : Math.max(MOPEN-30, v);
     dx=v; set(v); return true; };
   const end=()=>{ clearTimeout(lp); if (!active) return; active=false; if (!horiz) return;
-    el.classList.remove("swiping"); SW.drag=false;
+    el.classList.remove("swiping"); SW.drag=false; endedAt=Date.now();
     if (dx>56) { set(0); S.replyTo=m.id; S.actFor=null; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); }
     else if (dx < MOPEN/2.4 && canAct) { set(MOPEN); el.classList.add("mopen"); OPEN_MSG=el; if (navigator.vibrate) try{ navigator.vibrate(6); }catch{} }
     else { set(0); el.classList.remove("mopen"); if (OPEN_MSG===el) OPEN_MSG=null; }
@@ -1272,7 +1292,7 @@ function attachGestures(el, strip, m){
   strip.addEventListener("pointermove", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; move(e.clientX, e.clientY); });
   strip.addEventListener("pointerup", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; end(); });
   strip.addEventListener("pointercancel", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; cancel(); });
-  strip.addEventListener("click", e=>{ if (OPEN_MSG===el) { e.stopPropagation(); closeMsgActions(); } }, true);
+  strip.addEventListener("click", e=>{ if (Date.now()-endedAt<400) { e.stopPropagation(); e.preventDefault(); return; } if (OPEN_MSG===el) { e.stopPropagation(); closeMsgActions(); } }, true);
   strip.addEventListener("contextmenu", e=>{ e.preventDefault(); if (!horiz) holdMenu(m); });
 }
 async function copyMsg(m){ const t=plain(m); S.actFor=null; render(true); try { await navigator.clipboard.writeText(t||""); toast("Copied"); } catch { toast("Couldn't copy here"); } }
@@ -1427,7 +1447,7 @@ function renderTaskFiles(d, ro, box){
     h("button",{class:"attb", title:"Add photo", "aria-label":"Add photo", onclick:addTaskPhotos}, svg(ICF.image)),
     h("button",{class:"attb", title:"Record voice memo", "aria-label":"Record voice memo", onclick:()=>startRec(storeTaskVoice)}, svg(IC.mic))));
   if (S.rec && S.recFor==="task") box.append(h("div",{class:"recbar small"}, h("button",{class:"rectrash","aria-label":"Cancel recording", onclick:()=>stopRec(true)}, svg(IC.trash)), h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, fmtDur(REC? (now()-REC.t0)/1000:0)), h("div",{class:"recbars", id:"recBars"}, Array.from({length:24},()=>h("i"))), h("button",{class:"micbtn sending","aria-label":"Save voice memo", onclick:()=>stopRec(false)}, svg(ICF.check))));
-  const imgs=d.files.filter(f=>f.kind==="image"), voices=d.files.filter(f=>f.kind==="voice");
+  const imgs=d.files.filter(f=>f.kind==="image"), voices=d.files.filter(f=>f.kind==="voice" && !f.fromMsg);
   if (imgs.length) box.append(h("div",{class:"tthumbs"}, imgs.map(f=>{ const src=f.localUrl||blobUrl(f.asset); return h("div",{class:"tthumb"}, h("img",{src, alt:"", onclick:()=>viewPhoto(src)}), ro? "" : h("button",{class:"tdel","aria-label":"Remove photo", onclick:()=>set(d.files.filter(x=>x.id!==f.id))}, svg(IC.x))); })));
   voices.forEach(f=>box.append(h("div",{class:"tvoice"}, renderVoice({id:"tv-"+f.id, voice:f.voice}), ro? "" : h("button",{class:"iconbtn sm","aria-label":"Remove voice memo", onclick:()=>set(d.files.filter(x=>x.id!==f.id))}, svg(IC.x)))));
   return box;
@@ -2961,8 +2981,9 @@ function renderBoard(){
           (t.subtasks||[]).length? h("span",{class:"subchip"}, svg(ICF.list), t.subtasks.filter(x=>x.done).length+"/"+t.subtasks.length) : "",
           t.priority==="high"? h("span",{class:"flag", title:"High priority"}, svg(ICF.flag)) : "",
           t.due? h("span",{class:"due"+(late?" late":""), title:late?"Overdue":"Due"}, svg(ICF.cal), fmtDue(t.due)) : "",
+          (()=>{ const v=(t.files||[]).filter(f=>f.kind==="voice"); return v.length? h("span",{class:"cchip vchip", title:"Voice note"}, svg(IC.mic), fmtDur(v[0].voice&&v[0].voice.dur)) : ""; })(),
+          (()=>{ const p=(t.files||[]).filter(f=>f.kind==="image").length; return p? h("span",{class:"cchip", title:"Photos"}, svg(ICF.image), String(p)) : ""; })(),
           t.thread? h("span",{class:"cchat", title:"Has a conversation"}, svg(IC.chat)):"",
-          t.fromText? h("span",{class:"cchat", title:"From a message: "+t.fromText.slice(0,80)}, svg(IC.reply)):"",
           h("span",{class:"grow"}),
           t.assignee? avatar(t.assignee,"sm") : h("span",{class:"noav", title:"Unassigned"}, svg(ICF.none)))
       ));
@@ -3047,36 +3068,74 @@ function renderDrawer(){
   const d=S.draftTask; const ro=!S.canWrite; if (!STATUSES.some(s=>s.id===d.status)) d.status=STATUSES[0].id; const stc=(STATUSES.find(s=>s.id===d.status)||STATUSES[0]).c;
   const close=()=>{ S.openTask=null; S.draftTask=null; render(); };
   const opening=LAST_DRAWER!==S.openTask; LAST_DRAWER=S.openTask;
-  const dr=h("aside",{class:"drawer"+(opening?" enter":""), id:"drawer", style:`--c:${stc}`, "aria-label":"Task", onkeydown:e=>{ if (e.key==="Escape") close(); }});
+  const dr=h("aside",{class:"drawer td2"+(opening?" enter":""), id:"drawer", style:`--c:${stc}`, "aria-label":"Task", onkeydown:e=>{ if (e.key==="Escape") close(); }});
   const has = t && t.thread && S.channels.find(c=>c.id===t.thread);
-  dr.append(h("div",{class:"dhead"}, h("span",{class:"tidbig"}, isNew? "New task" : "CN-"+t.num), h("span",{class:"grow"}),
-    t && (has || (S.canWrite && canThread(t)))? h("button",{class:"iconbtn", title: has? "Open conversation":"Start a conversation about this task", "aria-label": has? "Open conversation":"Start conversation", onclick:()=>openTaskChat(t)}, svg(IC.thread)) : "",
-    d.fromMsg && d.channel && S.channels.find(c=>c.id===d.channel)? h("button",{class:"iconbtn", title:"Go to the original message", "aria-label":"Go to message", onclick:()=>jumpToMessage(d.channel, d.fromMsg)}, svg(ICF.goto)) : "",
-    h("button",{class:"iconbtn","aria-label":"Close", title:"Close", onclick:close}, svg(IC.x))));
-  const body=h("div",{class:"dbody"});
-  body.append(h("textarea",{class:"inp ttlinp", id:"t-title", rows:"1", placeholder:"Task title", disabled:ro, oninput:e=>{ d.title=e.target.value; e.target.style.height="auto"; e.target.style.height=e.target.scrollHeight+"px"; }, onkeydown:e=>{ if(e.key==="Enter"){ e.preventDefault(); saveTask(); } }}, d.title));
-  body.append(h("div",{class:"statusrow"}, STATUSES.map(s=>h("button",{class:"stbtn","aria-pressed":String(d.status===s.id), style:`--c:${s.c}`, disabled:ro, onclick:()=>{ d.status=s.id; render(); }}, s.name))));
-  body.append(renderTaskFiles(d, ro, renderSubtasks(d, t, isNew, ro)));
-  const members=peopleForTasks();
-  body.append(h("div",{class:"lbl"}, svg(ICF.personplus)), h("div",{class:"assignrow"},
-    h("button",{class:"apick"+(d.assignee===""?" on":""), title:"Unassigned", "aria-label":"Unassigned", disabled:ro, onclick:()=>{ d.assignee=""; render(); }}, svg(ICF.none)),
-    members.map(id=>h("button",{class:"apick"+(d.assignee===id?" on":""), title:fullName(id).replace(/^Example:\s*/,""), "aria-label":"Assign to "+fullName(id), disabled:ro, onclick:()=>{ d.assignee=id; render(); }}, avatar(id)))));
-  body.append(h("div",{class:"metarow"},
-    h("label",{class:"metabox", title:"Due date"}, svg(ICF.cal), h("input",{type:"date", id:"t-due", value:d.due, disabled:ro, onchange:e=>d.due=e.target.value})),
-    h("div",{class:"prirow", role:"group", "aria-label":"Priority"}, [["low","Low priority","var(--c-done)"],["normal","Normal priority","var(--c-doing)"],["high","High priority","var(--bad)"]].map(([v,l,c])=>h("button",{class:"pbtn","aria-pressed":String(d.priority===v), title:l, "aria-label":l, style:`--c:${c}`, disabled:ro, onclick:()=>{ d.priority=v; render(); }}, svg(ICF.flag), v==="high"?"!!":v==="normal"?"!":"")))));
-  body.append(h("textarea",{class:"inp notes", id:"t-notes", disabled:ro, placeholder:"Add notes…", oninput:e=>d.notes=e.target.value}, d.notes));
-  if (d.fromText) { const ch=S.channels.find(c=>c.id===d.channel); body.append(h("div",{class:"source"}, h("div",{class:"lb"}, svg(IC.chat), nameOf(d.fromBy), ch? " · "+chanTitle(ch):""), h("p",{}, d.fromText))); }
-  if (t && t.log && t.log.length) body.append(h("div",{class:"history"}, [...t.log].reverse().slice(0,6).map(l=>h("div",{}, h("b",{}, nameOf(l.by)), " "+l.what+" · ", h("span",{}, fmtShort(l.at))))));
-  dr.append(body);
-  if (!ro) {
-    const foot=h("div",{class:"dfoot"});
-    if (!isNew) { if (S.confirmDel) foot.append(h("span",{class:"confirm"}, "Delete?"), h("button",{class:"iconbtn dangerbtn","aria-label":"Yes, delete", title:"Delete", onclick:()=>deleteTask(t.id)}, svg(IC.trash)), h("button",{class:"iconbtn","aria-label":"Keep task", title:"Keep", onclick:()=>{S.confirmDel=false; render();}}, svg(IC.x)));
-      else foot.append(h("button",{class:"iconbtn dangerbtn","aria-label":"Delete task", title:"Delete task", onclick:()=>{S.confirmDel=true; render();}}, svg(IC.trash))); }
-    foot.append(h("span",{class:"grow"}), h("button",{class:"roundgo", "aria-label":isNew?"Create task":"Save", title:isNew?"Create task":"Save", onclick:saveTask}, svg(ICF.check)));
-    dr.append(foot);
+  const src = d.fromMsg && d.channel && S.channels.find(c=>c.id===d.channel);
+  // ---- top bar: close · task number · actions · Save
+  dr.append(h("div",{class:"dhead td2head"},
+    h("button",{class:"td2x","aria-label":"Close", title:"Close", onclick:close}, svg(IC.x)),
+    h("span",{class:"td2num"}, isNew? "New task" : "CN-"+t.num),
+    h("span",{class:"grow"}),
+    t && (has || (S.canWrite && canThread(t)))? h("button",{class:"td2ic", title: has? "Open conversation":"Start a conversation about this task", "aria-label": has? "Open conversation":"Start conversation", onclick:()=>openTaskChat(t)}, svg(IC.thread)) : "",
+    src? h("button",{class:"td2ic", title:"Go to the original message", "aria-label":"Go to message", onclick:()=>jumpToMessage(d.channel, d.fromMsg)}, svg(ICF.goto)) : "",
+    ro? "" : h("button",{class:"td2save", onclick:saveTask}, isNew? "Create" : "Save")));
+  const body=h("div",{class:"dbody td2body"});
+  // ---- title
+  body.append(h("textarea",{class:"td2title", id:"t-title", rows:"1", placeholder:"Task title", disabled:ro, oninput:e=>{ d.title=e.target.value; e.target.style.height="auto"; e.target.style.height=e.target.scrollHeight+"px"; }, onkeydown:e=>{ if(e.key==="Enter"){ e.preventDefault(); saveTask(); } }}, d.title));
+  // ---- status: segmented control
+  body.append(h("div",{class:"td2seg", role:"group", "aria-label":"Status"}, STATUSES.map(s=>h("button",{class:"td2segb","aria-pressed":String(d.status===s.id), style:`--c:${s.c}`, disabled:ro, onclick:()=>{ d.status=s.id; render(); }}, h("i"), s.name))));
+  // ---- details card: assignee · due date · priority
+  const who=d.assignee; const team=peopleForTasks(t||d);
+  const dueTxt = d.due? new Date(d.due+"T12:00:00").toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"}) : "None";
+  const overdue = d.due && d.status!=="done" && d.due < new Date().toISOString().slice(0,10);
+  body.append(h("div",{class:"td2card"},
+    h("button",{class:"td2row", disabled:ro, onclick:()=>pickAssignee(d, t)},
+      h("span",{class:"td2ri", style:"background:#5856D6"}, svg(ICF.personplus)), h("span",{class:"td2rl"}, "Assigned to"),
+      h("span",{class:"td2rv"}, who? [avatar(who,"td2av"), h("span",{}, fullName(who).replace(/^Example:\s*/,"").split(" ")[0])] : h("span",{class:"muted"}, "No one")), ro? "" : svg(CHEV_R)),
+    h("label",{class:"td2row"},
+      h("span",{class:"td2ri", style:"background:#FF3B30"}, svg(ICF.cal)), h("span",{class:"td2rl"}, "Due date"),
+      h("span",{class:"td2rv"+(overdue?" late":"")}, dueTxt), d.due && !ro? h("button",{class:"td2clr", "aria-label":"Remove due date", onclick:e=>{ e.preventDefault(); e.stopPropagation(); d.due=""; render(); }}, svg(IC.x)) : (ro? "" : svg(CHEV_R)),
+      h("input",{type:"date", id:"t-due", class:"td2date", value:d.due, disabled:ro, onchange:e=>{ d.due=e.target.value; render(); }})),
+    h("div",{class:"td2row"},
+      h("span",{class:"td2ri", style:"background:#FF9500"}, svg(ICF.flag)), h("span",{class:"td2rl"}, "Priority"),
+      h("div",{class:"td2pri", role:"group", "aria-label":"Priority"}, [["low","Low"],["normal","Medium"],["high","High"]].map(([v,l])=>h("button",{"aria-pressed":String(d.priority===v), class:"p-"+v, disabled:ro, onclick:()=>{ d.priority=v; render(); }}, l))))));
+  // ---- subtasks + photos + voice memos
+  body.append(h("div",{class:"td2card td2subs"}, renderTaskFiles(d, ro, renderSubtasks(d, t, isNew, ro))));
+  // ---- notes
+  body.append(h("div",{class:"td2card"}, h("textarea",{class:"td2notes", id:"t-notes", disabled:ro, placeholder:"Add notes…", oninput:e=>{ d.notes=e.target.value; e.target.style.height="auto"; e.target.style.height=Math.max(88,e.target.scrollHeight)+"px"; }}, d.notes)));
+  // ---- where it came from (with the voice note playable right here)
+  if (d.fromText || d.fromMsg) {
+    const ch=S.channels.find(c=>c.id===d.channel);
+    const srcVoices=(d.files||[]).filter(f=>f.kind==="voice" && f.fromMsg);
+    let voiceEls=srcVoices.map(f=>renderVoice({id:"tv-"+f.id, by:f.by, voice:f.voice}));
+    if (!voiceEls.length && d.fromMsg) { const pool=[...(S.msgCache[d.channel]||[]), ...(LOCAL.older[d.channel]||[]), ...(d.channel===S.active? S.msgs : [])]; const m=pool.find(x=>x.id===d.fromMsg); if (m && m.kind==="voice" && m.voice) voiceEls=[renderVoice(m)]; }
+    const txt=(d.fromText||"").replace(/^🎤 Voice note \([^)]*\)\s*·?\s*/,"");
+    body.append(h("div",{class:"td2card td2src"},
+      h("div",{class:"td2srch"}, avatar(d.fromBy||S.me,"td2av"), h("b",{}, nameOf(d.fromBy).replace(/^Example:\s*/,"")), ch? h("span",{}, " in "+chanTitle(ch)) : "", h("span",{class:"grow"}), src? h("button",{class:"td2link", onclick:()=>jumpToMessage(d.channel, d.fromMsg)}, "View in chat") : ""),
+      voiceEls.length? h("div",{class:"td2voice"}, voiceEls) : "",
+      txt && !(voiceEls.length && /^🎤/.test(d.fromText||""))? h("p",{}, txt) : ""));
   }
-  setTimeout(()=>{ const ti=$("#t-title"); if (ti){ ti.style.height="auto"; ti.style.height=ti.scrollHeight+"px"; } });
+  // ---- activity
+  if (t && t.log && t.log.length) body.append(h("div",{class:"td2label"}, "Activity"), h("div",{class:"td2card td2log"}, [...t.log].reverse().slice(0,6).map(l=>h("div",{class:"td2logr"}, avatar(l.by,"td2av sm"), h("span",{}, h("b",{}, nameOf(l.by).replace(/^Example:\s*/,"").split(" ")[0]), " "+l.what), h("em",{}, fmtShort(l.at))))));
+  // ---- delete
+  if (!ro && !isNew) body.append(S.confirmDel?
+    h("div",{class:"td2card td2del"}, h("p",{}, "Delete this task? This can't be undone."), h("div",{class:"td2delb"}, h("button",{class:"ghost", onclick:()=>{S.confirmDel=false; render();}}, "Cancel"), h("button",{class:"primary danger", onclick:()=>deleteTask(t.id)}, "Delete"))) :
+    h("button",{class:"td2card td2delrow", onclick:()=>{S.confirmDel=true; render();}}, svg(IC.trash), "Delete task"));
+  dr.append(body);
+  setTimeout(()=>{ const ti=$("#t-title"); if (ti){ ti.style.height="auto"; ti.style.height=ti.scrollHeight+"px"; } const n=$("#t-notes"); if (n){ n.style.height="auto"; n.style.height=Math.max(88,n.scrollHeight)+"px"; } });
   return dr;
+}
+const CHEV_R='<path d="M9.5 6l6 6-6 6"/>';
+// Choose who the task is for — only people on your team.
+function pickAssignee(d, t){
+  const team=peopleForTasks(t||d);
+  sheet("Assign to", (draw, close)=>[
+    h("div",{class:"ulist sgroup"},
+      h("button",{class:"srow pick1"+(!d.assignee?" on":""), onclick:()=>{ d.assignee=""; close(); render(); }}, h("span",{class:"cav"}, h("span",{class:"av td2none"}, svg(ICF.none))), h("span",{class:"stx"}, h("b",{}, "No one")), !d.assignee? svg(ICF.check) : ""),
+      team.map(id=>h("button",{class:"srow pick1"+(d.assignee===id?" on":""), onclick:()=>{ d.assignee=id; close(); render(); }}, h("span",{class:"cav"}, avatar(id)), h("span",{class:"stx"}, h("b",{}, id===S.me? "Me" : fullName(id).replace(/^Example:\s*/,"")), h("span",{}, (S.teamDocs[id]||{}).about||"")), d.assignee===id? svg(ICF.check) : ""))),
+    team.length<=1? h("p",{class:"note", style:"margin:0 4px"}, "You can assign tasks to people on your team. Add people to your team first.") : h("p",{class:"note", style:"margin:0 4px"}, "Only people on your team are shown."),
+    team.length<=1 && curTeam()? h("button",{class:"primary wide", onclick:()=>{ close(); openAddMembers(); }}, svg(ICF.personplus), "Add people to my team") : ""
+  ]);
 }
 
 // new conversation modal
