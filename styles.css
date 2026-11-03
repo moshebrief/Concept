@@ -2218,3 +2218,12 @@ html[data-nav="back"]::view-transition-new(root){animation:vtFadeIn .22s ease bo
 @keyframes sendDrop{from{transform:translateY(14px) scale(.96);opacity:0;transform-origin:100% 100%}to{transform:none;opacity:1}}
 @keyframes recvDrop{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.msg.fresh .brow{animation:none!important}}
+
+/* ---- press feedback on every button ---- */
+button,a,[role=button],label.td2chip,.lineitem,.card,.contact,.srow.pick,.srow.pick1,.apick{transition:scale .3s cubic-bezier(.3,1.5,.5,1),background-color .15s,opacity .15s}
+.tap{scale:.92;transition:scale .09s ease-out,background-color .1s!important}
+.tapped{scale:1}
+.lineitem.tap,.card.tap,.contact.tap,.srow.tap,.srow.pick.tap,.srow.pick1.tap,.td2card.tap,.ncrow.tap,.mact.tap{scale:.975}
+.lineitem.tap,.contact.tap,.srow.pick.tap,.srow.pick1.tap,.ncrow.tap{background-color:color-mix(in srgb,var(--ink) 5%,transparent)}
+.mlink.tap,.oblink.tap,.nctxt.tap,.td2link.tap{scale:1;opacity:.5}
+@media (prefers-reduced-motion:reduce){.tap{scale:1}}

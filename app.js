@@ -320,6 +320,15 @@ function selectChannel(id){ const wasIn=S.inThread && S.view==="chats"; S.select
   if (S.msgs.length || !S._lm) show(); else Promise.race([S._lm, new Promise(r=>setTimeout(r,160))]).then(show);
 }
 function goBackToList(){ navGo("back", ()=>{ S.inThread=false; render(); }); }
+// Every button gives a small "press" — it dips when touched and springs back when released.
+(function pressFeedback(){
+  const SEL="button, a, [role=button], label.td2chip, .lineitem, .card, .contact, .srow.pick, .srow.pick1, .apick";
+  let cur=null;
+  const release=()=>{ if (!cur) return; const el=cur; cur=null; el.classList.remove("tap"); el.classList.add("tapped"); setTimeout(()=>el.classList.remove("tapped"), 320); };
+  document.addEventListener("pointerdown", e=>{ if (e.button>0) return; const el=e.target.closest(SEL); if (!el || el.disabled || el.closest(".micbtn, .vbars")) return; release(); cur=el; el.classList.add("tap"); }, true);
+  ["pointerup","pointercancel","dragstart"].forEach(t=>document.addEventListener(t, release, true));
+  document.addEventListener("pointermove", e=>{ if (cur && (Math.abs(e.movementX)>6 || Math.abs(e.movementY)>6)) release(); }, true);
+})();
 // iPhone-style swipe from the left edge of a chat to go back to the list.
 (function edgeBack(){
   let st=null;
