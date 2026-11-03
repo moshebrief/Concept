@@ -2210,3 +2210,11 @@ html[data-nav="back"]::view-transition-new(root){animation:vtFadeIn .22s ease bo
 @keyframes vtDropOut{to{transform:translateX(18px);opacity:0}}
 @keyframes vtFadeOut{to{opacity:.4}}
 @keyframes vtFadeIn{from{opacity:.4}}
+/* a sent message drops in softly from the composer; received ones fade up */
+.msg.mine.fresh .brow{animation:sendDrop .3s cubic-bezier(.2,.9,.25,1.05) both}
+.msg.mine.fresh{animation:none!important}
+.msg.fresh:not(.mine) .brow{animation:recvDrop .26s cubic-bezier(.2,.8,.2,1) both}
+.msg.fresh:not(.mine){animation:none!important}
+@keyframes sendDrop{from{transform:translateY(14px) scale(.96);opacity:0;transform-origin:100% 100%}to{transform:none;opacity:1}}
+@keyframes recvDrop{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.msg.fresh .brow{animation:none!important}}
