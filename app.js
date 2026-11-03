@@ -139,7 +139,8 @@ function monogram(name, cls){
 function avatar(id, cls=""){
   const p = S.people[id]||{}; const nm=(p.name||"").replace(/^Example:\s*/,"");
   const el = h("span",{class:"av mgav "+cls, title:fullName(id)});
-  if (p.avatarUrl) el.append(h("img",{src:p.avatarUrl, alt:""}));
+  const pu=(typeof PROF!=="undefined" && PROF[id] && PROF[id].photo!==undefined)? PROF[id].photo : p.avatarUrl;
+  if (pu) el.append(h("img",{src:pu, alt:"", onerror:e=>e.target.remove()}));
   else { const t=initials(nm); if (t) { el.append(h("span",{class:"mgi"}, t)); if (t.length>1) el.classList.add("mg2"); } else el.append(svg(PERSON_SIL)); }
   return el;
 }
@@ -168,7 +169,7 @@ function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(
 function subscribeAll(){
   loadPins(); loadAddr(); startE2E();
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
-  store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; matchAddr(); await resolvePeople(S.team); scheduleRender(); });
+  store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
   store.sub("invites", rows => { S.invites=rows; scheduleRender(); });
   store.sub("contacts", async rows => { S.allContacts=Object.fromEntries(rows.map(r=>[r.id, r.ids||[]])); S.contacts=S.allContacts[S.me]||[]; await resolvePeople(Object.keys(S.allContacts)); scheduleRender(); });
@@ -821,13 +822,16 @@ function renderSettings(){
   const group=(label, ...rows)=>[h("div",{class:"seg-label"},label), h("div",{class:"ulist sgroup"}, rows)];
   const row=(icon, title, control, sub)=>h("div",{class:"srow"}, h("span",{class:"sic"}, svg(icon)), h("span",{class:"stx"}, h("b",{},title), sub? h("span",{},sub):""), control||"");
   const toggle=(k, def)=>{ const on = p[k]===undefined? def : !!p[k]; return h("button",{class:"switch"+(on?" on":""), role:"switch", "aria-checked":String(on), "aria-label":k, onclick:()=>setPref(k,!on)}, h("i")); };
-  w.append(h("div",{class:"profcard"}, avatar(S.me,"xl"), h("div",{class:"pcx"}, h("b",{}, (me.name||(S.people[S.me]||{}).name||"You").replace(/^Example:\s*/,"")), h("span",{}, me.phone||me.about||""))));
+  w.append(h("button",{class:"profcard", onclick:openEditProfile, "aria-label":"Edit profile"}, avatar(S.me,"xl"), h("div",{class:"pcx"}, h("b",{}, (me.name||(S.people[S.me]||{}).name||"You").replace(/^Example:\s*/,"")), h("span",{}, myProf().about||me.about||me.phone||"Tap to add a photo and About")), h("span",{class:"pcedit"}, svg(ICF.edit||IC.edit))));
   w.append(...group("Profile",
     S.mode==="live"? row(ICF.personplus, "Name", h("input",{class:"sinp", id:"s-name", maxlength:"40", value:me.name||"", onchange:e=>{ const v=e.target.value.trim(); if (v) guarded(store.update("team/"+S.me,{name:v})).then(()=>toast("Saved")).catch(()=>{}); }})) : "",
-    row(ICF.info, "About", h("input",{class:"sinp", id:"s-about", maxlength:"80", placeholder:"Available", value:me.about||"", onchange:e=>S.canWrite&&guarded(store.update("team/"+S.me,{about:e.target.value.trim()})).then(()=>toast("Saved")).catch(()=>{})})),
+    row(ICF.info, "About", h("input",{class:"sinp", id:"s-about", maxlength:"120", placeholder:"Available", value:myProf().about||me.about||"", onchange:e=>S.canWrite&&saveProfileField("about", e.target.value.trim()).then(()=>toast("Saved")).catch(()=>{})})),
     row(IC.phone, "Phone number", h("input",{class:"sinp", id:"s-phone", type:"tel", placeholder:"Add number", value:me.phone||"", onchange:e=>S.canWrite&&savePhone(e.target.value)})),
     row(ICF.book, "Phone contacts", h("button",{class:"iconbtn", title:"Import contacts", "aria-label":"Import contacts", onclick:importContacts}, svg(IC.arrow)), S.addr.length? `${S.addr.length} · ${S.onConcept.length} on Task Message` : "")));
+  const visRow=(icon, title, f)=>h("button",{class:"srow pick", onclick:()=>openVisPicker(f, title)}, h("span",{class:"sic"}, svg(icon)), h("span",{class:"stx"}, h("b",{},title)), h("span",{class:"sval"}, visName((myProf().vis||{})[f])), svg(IC.arrow));
   w.append(...group("Privacy",
+    visRow(ICF.image, "Profile photo", "photo"),
+    visRow(ICF.info, "About", "about"),
     row(TICK2, "Read receipts", toggle("readReceipts", true), "If you turn this off, you won't send or see blue ticks"),
     row(ICF.lock, "End-to-end encryption", h("span",{class:"sval mono", id:"fp"}, E2E.ready? "On" : "Off"))));
   fingerprint().then(f=>{ const el=$("#fp"); if (el && f) el.textContent=f; });
@@ -1630,8 +1634,9 @@ function openProfileSetup(u, existing){
     try { await guarded(store.set("team/"+S.me, {...(existing||{}), name:name.trim().slice(0,40), phone:fmtPhone(u.phone)||((existing||{}).phone||""), joinedAt:(existing&&existing.joinedAt)||now()})); } catch { return; }
     o.remove(); openFindContacts(); };
   o.replaceChildren(obScreen({
-    title:"What's your name?", sub:"This is how people will see you in chats and tasks.",
-    body:[h("div",{class:"obfield"}, h("input",{class:"obnum", id:"ob-name", maxlength:"40", autocomplete:"name", autocapitalize:"words", placeholder:"Your name", value:name, oninput:e=>name=e.target.value, onkeydown:e=>{ if (e.key==="Enter") save(); }}))],
+    title:"Create your profile", sub:"Add your name and an optional photo. This is how people will see you in chats and tasks.",
+    body:[h("button",{class:"obphoto", "aria-label":"Add a profile photo", onclick:()=>pickProfilePhoto(()=>{ const b=o.querySelector(".obphoto"); if (b) b.replaceChildren(avatar(S.me,"xl"), h("span",{class:"epcam"}, svg(ICF.image))); })}, myProf().photo? avatar(S.me,"xl") : svg(ICF.image), h("span",{class:"epcam"}, svg(IC.plus))),
+      h("div",{class:"obfield"}, h("input",{class:"obnum", id:"ob-name", maxlength:"40", autocomplete:"name", autocapitalize:"words", placeholder:"Your name", value:name, oninput:e=>name=e.target.value, onkeydown:e=>{ if (e.key==="Enter") save(); }}))],
     label:"Continue", go:save}));
   setTimeout(()=>{ const n=$("#ob-name"); if (n) n.focus(); });
 }
@@ -1646,12 +1651,86 @@ function openFindContacts(){
     label:"Find my contacts", go:()=>{ o.remove(); importContacts(); },
     foot:h("button",{class:"oblink center", onclick:()=>o.remove()}, "Not now")}));
 }
+// ===================== profiles: photo + about, each with its own "who can see" =====================
+// Stored as profile/<person>/photo and profile/<person>/about. The server only hands each one to
+// the people allowed to see it: everyone, only the owner's contacts, or nobody.
+const PROF={};
+const VIS_OPTS=[["all","Everyone"],["contacts","My contacts"],["nobody","Nobody"]];
+const visName = v => (VIS_OPTS.find(x=>x[0]===v)||VIS_OPTS[0])[1];
+function myProf(){ return PROF[S.me]||(PROF[S.me]={photo:"", about:"", vis:{photo:"all", about:"all"}}); }
+function applyProfiles(){
+  for (const [id,p] of Object.entries(PROF)) {
+    if (p.about!==undefined) S.teamDocs[id]={...(S.teamDocs[id]||{id}), about:p.about};
+    if (S.people[id]) S.people[id]={...S.people[id], avatarUrl:p.photo||""};
+  }
+}
+async function loadProfileData(){
+  if (S.mode!=="live" || !SB) return;
+  try {
+    const {data, error}=await SB.from("docs").select("path,data").like("col","profile/%").limit(5000); if (error) return;
+    const seen=new Set();
+    for (const r of data||[]) { const [,id,f]=r.path.split("/"); seen.add(id); const p=PROF[id]||(PROF[id]={vis:{}}); p[f]=(r.data&&r.data.v)||""; p.vis=p.vis||{}; p.vis[f]=(r.data&&r.data.vis)||"all"; }
+    for (const id of Object.keys(PROF)) if (!seen.has(id) && id!==S.me) { PROF[id].photo=""; }
+    applyProfiles(); scheduleRender();
+  } catch {}
+}
+async function saveProfileField(f, v, vis){
+  const p=myProf(); p[f]=v; p.vis={...(p.vis||{}), [f]:vis||p.vis[f]||"all"};
+  applyProfiles(); render(true);
+  if (S.mode!=="live") return;
+  await guarded(store.set(`profile/${S.me}/${f}`, {v, vis:p.vis[f]}));
+}
+// Older versions kept "About" inside the always-visible profile; move it into the private record.
+async function migrateAbout(mine){
+  if (!mine || !mine.about) return;
+  const p=myProf(); if (!p.about) await saveProfileField("about", mine.about, (p.vis&&p.vis.about)||"all").catch(()=>{});
+  store.update("team/"+S.me, {about:""}).catch(()=>{});
+}
+async function squarePhoto(file, size=512){
+  const url=URL.createObjectURL(file); const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
+  const s=Math.min(img.naturalWidth, img.naturalHeight); const c=document.createElement("canvas"); c.width=c.height=size;
+  const cx=c.getContext("2d"); cx.imageSmoothingQuality="high"; cx.drawImage(img, (img.naturalWidth-s)/2, (img.naturalHeight-s)/2, s, s, 0, 0, size, size); URL.revokeObjectURL(url);
+  return await new Promise(res=>c.toBlob(res, "image/jpeg", .88));
+}
+function pickProfilePhoto(done){
+  const inp=h("input",{type:"file", accept:"image/*", style:"position:fixed;left:-9999px;opacity:0", onchange:async e=>{ const f=e.target.files&&e.target.files[0]; inp.remove(); if (!f) return;
+    try { toast("Updating photo…"); const blob=await squarePhoto(f); let url;
+      if (S.mode==="live" && SB) { const path=S.me+"/avatar-"+now().toString(36)+".jpg"; const {error}=await SB.storage.from("media").upload(path, blob, {contentType:"image/jpeg", upsert:false}); if (error) throw error; url=blobUrl(path); }
+      else url=URL.createObjectURL(blob);
+      await saveProfileField("photo", url); toast("Photo updated"); done&&done();
+    } catch { toast("The photo didn't upload. Try again."); } }});
+  document.body.append(inp); inp.click();
+}
+function openEditProfile(){
+  const me=S.teamDocs[S.me]||{}; let name=(me.name||(S.people[S.me]||{}).name||"").replace(/^Example:\s*/,""), about=myProf().about||me.about||"";
+  sheet("Edit profile", (draw, close)=>[
+    h("div",{class:"epav"},
+      h("button",{class:"epphoto", "aria-label":"Change profile photo", onclick:()=>pickProfilePhoto(draw)}, avatar(S.me,"xl"), h("span",{class:"epcam"}, svg(ICF.image))),
+      myProf().photo? h("button",{class:"oblink", onclick:async()=>{ await saveProfileField("photo",""); draw(); }}, "Remove photo") : h("button",{class:"oblink", onclick:()=>pickProfilePhoto(draw)}, "Add photo")),
+    h("label",{class:"eplbl"}, "Name"),
+    h("input",{class:"inp", id:"ep-name", maxlength:"40", autocomplete:"name", value:name, oninput:e=>name=e.target.value}),
+    h("label",{class:"eplbl"}, "About"),
+    h("input",{class:"inp", id:"ep-about", maxlength:"120", placeholder:"Available", value:about, oninput:e=>about=e.target.value}),
+    h("p",{class:"note", style:"margin:0 2px"}, "Who sees your photo and About is set in Settings → Privacy."),
+    h("button",{class:"primary wide", onclick:async()=>{ if (!name.trim()) { toast("Enter your name."); return; }
+      try { if (name.trim()!==(me.name||"")) await guarded(store.update("team/"+S.me, {name:name.trim().slice(0,40)}));
+        if (about.trim()!==(myProf().about||"")) await saveProfileField("about", about.trim().slice(0,120));
+        S.people[S.me]={...(S.people[S.me]||{}), name:name.trim()}; close(); toast("Profile saved"); render(); } catch {} }}, "Save")]);
+}
+function openVisPicker(f, title){
+  let cur=(myProf().vis||{})[f]||"all";
+  sheet(title, (draw, close)=>[
+    h("p",{class:"note", style:"margin:0 4px"}, f==="photo"? "Who can see your profile photo." : "Who can see your About."),
+    pickList(VIS_OPTS.map(([v,l])=>[v,l, v==="contacts"? "People you've saved as contacts" : v==="all"? "Anyone on Task Message" : "Only you"]), cur, async v=>{ cur=v; draw(); await saveProfileField(f, myProf()[f]||"", v).catch(()=>{}); toast("Saved"); close(); })]);
+}
+
 async function startLive(u){
   DB=makeDocStore(SB); ASSETS=makeAssets(SB); S.mode="live"; S.me=u.id; S.canWrite=true;
   const b=$("#banner"); if (b) b.hidden=true;
   let mine=null; try { mine=await store.get("team/"+S.me); } catch {}
   S.people[S.me]={id:S.me, name:(mine&&mine.name)||"You", avatarUrl:(mine&&mine.photo)||"", color:colorFor(S.me)};
   loadLocalCopy();
+  loadProfileData().then(()=>migrateAbout(mine)); setInterval(loadProfileData, 5*60e3);
   if (!mine || !mine.name) openProfileSetup(u, mine);
   else if (u.phone && fmtPhone(u.phone)!==mine.phone) store.update("team/"+S.me, {phone:fmtPhone(u.phone)}).catch(()=>{});
   subscribeAll(); render();
