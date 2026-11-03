@@ -249,6 +249,7 @@ async function saveTask(){
     const prev = S.tasks.find(t=>t.id===S.openTask)||{};
     const changes=[]; if (prev.status!==d.status) changes.push("moved to "+stName(d.status)); if (prev.assignee!==d.assignee) changes.push(d.assignee? "assigned "+nameOf(d.assignee): "unassigned");
     const log=[...(prev.log||[])]; if (changes.length) log.push({at:now(), by:S.me, what:changes.join(", ")}); else log.push({at:now(), by:S.me, what:"edited"});
+    if (prev.thread && d.assignee && d.assignee!==prev.assignee) { const th=S.channels.find(c=>c.id===prev.thread); if (th && !(th.members||[]).includes(d.assignee)) store.update("channels/"+th.id, {members:[...(th.members||[]), d.assignee]}).catch(()=>{}); }
     await guarded(store.update("tasks/"+S.openTask, {title:d.title.trim(), notes:d.notes, status:d.status, assignee:d.assignee, due:d.due, priority:d.priority, subtasks:d.subtasks||[], files:d.files||[], log:log.slice(-20)}));
     toast("Saved");
   }
@@ -482,27 +483,31 @@ function openVoiceFallback(cb){
 }
 
 // ---------- task conversations ----------
-const groupOf = t => { const src=t && S.channels.find(c=>c.id===t.channel); return src && src.kind!=="dm" && src.kind!=="task"? src : null; };
-const canThread = t => !!(t && (groupOf(t) || (t.thread && S.channels.find(c=>c.id===t.thread))));
+// The chat a task came from (group or private chat). A task made inside a task conversation belongs
+// to that conversation's main chat, so everything stays under one chat in the list.
+const sourceChat = t => { let src=t && S.channels.find(c=>c.id===t.channel); if (src && src.kind==="task" && src.parent) src=S.channels.find(c=>c.id===src.parent)||src; return src||null; };
+const groupOf = t => { const src=sourceChat(t); return src && src.kind!=="dm" && src.kind!=="task"? src : null; };
+const canThread = t => !!(t && (S.canWrite || (t.thread && S.channels.find(c=>c.id===t.thread))));
 const subsOf = cid => S.channels.filter(c=>c.kind==="task" && c.parent===cid);
+// Everyone who belongs in a task's conversation: the whole chat it came from, plus whoever it's assigned to.
+const taskChatMembers = t => { const src=sourceChat(t); return [...new Set([...(src? src.members||[] : [t.createdBy]), t.assignee, S.me].filter(Boolean))]; };
 async function openTaskChat(t){
   const existing = t.thread && S.channels.find(c=>c.id===t.thread);
-  const src=groupOf(t);
+  const src=sourceChat(t);
+  const members=taskChatMembers(t);
+  const hide=()=>{ if (window.innerWidth<=860) { S.openTask=null; S.draftTask=null; } if (src) { S.expanded[src.id]=true; ls.set("expanded", S.expanded); } };
   if (existing) {
-    if (src) { const want=[...new Set([...(src.members||[]), S.me])].sort().join(","); if (want!==[...(existing.members||[])].sort().join(",")) store.update("channels/"+existing.id, {members:want.split(",")}).catch(()=>{}); }
-    if (window.innerWidth<=860) { S.openTask=null; S.draftTask=null; } if (src) { S.expanded[src.id]=true; ls.set("expanded", S.expanded); } selectChannel(existing.id); return;
+    const want=[...new Set([...(existing.members||[]), ...members])];
+    if (want.length!==(existing.members||[]).length) store.update("channels/"+existing.id, {members:want}).catch(()=>{});
+    hide(); selectChannel(existing.id); return;
   }
-  if (!src) { toast("Task conversations are for groups"); return; }
+  if (!S.canWrite) return;
   const id="k"+now().toString(36)+uidShort().slice(0,3);
-  const members=[...new Set([...(src.members||[]), S.me])];
-  S.expanded[src.id]=true; ls.set("expanded", S.expanded);
-  await guarded(store.set("channels/"+id, {name:t.title, kind:"task", taskId:t.id, parent:src.id, members, createdBy:S.me, at:now()}));
+  await guarded(store.set("channels/"+id, {name:t.title, kind:"task", taskId:t.id, parent:src? src.id : "", members, createdBy:S.me, at:now()}));
   await guarded(store.update("tasks/"+t.id, {thread:id}));
-  if (window.innerWidth<=860) { S.openTask=null; S.draftTask=null; }
+  hide();
   S.active=id; S.view="chats"; S.inThread=true; ls.set("active",id); ls.set("view","chats"); openMsgs(); render();
-
 }
-
 
 // ---------- shared overlay helper ----------
 function overlay(cls, label){ const o=h("div",{class:"overlay "+cls, role:"dialog", "aria-label":label}); document.body.append(o); return o; }
@@ -2750,7 +2755,7 @@ function listChildren(){
   const rest=top.filter(c=>!S.pins.includes(c.id));
   const item = c => {
     const li=itemEl(c); longPress(li,(x,y)=>rowMenu(c,x,y)); const el=swipeWrap(li, c);
-    const subs=c.kind!=="dm" && c.kind!=="task"? subsOf(c.id).filter(x=>!q || chans.includes(x) || chans.includes(c)) : [];
+    const subs=c.kind!=="task"? subsOf(c.id).filter(x=>!q || chans.includes(x) || chans.includes(c)) : [];
     if (!subs.length) return el;
     const open = !!S.expanded[c.id] || (q && subMatch.has(c.id));
     const su=subs.filter(unread).length;
@@ -2802,8 +2807,8 @@ function renderThread(){
     h("button",{class:"tinfo", "aria-label":"Chat info", onclick:()=>openChatInfo(c)}, chanGlyph(c),
       h("div",{class:"t"}, h("b",{},chanTitle(c)), h("span",{id:"thead-sub", "data-orig":theadSub(c)}, theadSub(c)))),
     h("span",{class:"grow"}),
-    c.kind!=="dm" && c.kind!=="task" && subsOf(c.id).length? h("button",{class:"iconbtn subsbtn", title:"Task conversations", "aria-label":"Task conversations in this group", onclick:e=>{ const r=e.currentTarget.getBoundingClientRect(); subsMenu(c, r.right, r.bottom); }}, svg(IC.thread), h("b",{}, subsOf(c.id).length), subsOf(c.id).some(unread)? h("i",{class:"tdot"}) : "") : "",
-    c.kind==="task" && S.channels.find(z=>z.id===c.parent)? h("button",{class:"iconbtn", title:"Back to the group", "aria-label":"Open the group", onclick:()=>selectChannel(c.parent)}, (()=>{ const g=chanGlyph(S.channels.find(z=>z.id===c.parent)); g.classList.add("mini"); return g; })()) : "",
+    c.kind!=="task" && subsOf(c.id).length? h("button",{class:"iconbtn subsbtn", title:"Task conversations", "aria-label":"Task conversations in this chat", onclick:e=>{ const r=e.currentTarget.getBoundingClientRect(); subsMenu(c, r.right, r.bottom); }}, svg(IC.thread), h("b",{}, subsOf(c.id).length), subsOf(c.id).some(unread)? h("i",{class:"tdot"}) : "") : "",
+    c.kind==="task" && S.channels.find(z=>z.id===c.parent)? h("button",{class:"iconbtn", title:"Back to the main chat", "aria-label":"Open the main chat", onclick:()=>selectChannel(c.parent)}, (()=>{ const g=chanGlyph(S.channels.find(z=>z.id===c.parent)); g.classList.add("mini"); return g; })()) : "",
     (()=>{ if (c.kind!=="dm") return ""; const ph=(S.teamDocs[(c.members||[]).find(x=>x!==S.me)]||{}).phone; return ph? h("a",{class:"iconbtn hcall", href:telHref(ph), title:"Call "+ph, "aria-label":"Call "+ph+" with your phone"}, svg(IC.phone)) : ""; })(),
     c.kind==="task" && S.tasks.find(x=>x.id===c.taskId)? h("button",{class:"iconbtn", title:"View task", "aria-label":"View task", onclick:()=>openTask(c.taskId)}, svg(IC.knot)) :
     "",
