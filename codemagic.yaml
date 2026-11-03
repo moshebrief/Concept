@@ -76,13 +76,27 @@ workflows:
         script: node native-setup.js ios
       - name: Sync
         script: npx cap sync ios
+      - name: Download Swift packages
+        script: |
+          # Fetch every library the app uses first, with retries, and print the real error if one fails.
+          for i in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App; then exit 0; fi
+            echo "Package download failed (try $i of 3), retrying in 15 seconds..."; sleep 15
+          done
+          echo "---- Details ----"
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -showBuildSettings 2>&1 | tail -40
+          exit 1
       - name: Signing
         script: xcode-project use-profiles
       - name: Build
         script: |
           xcode-project build-ipa \
             --project "ios/App/App.xcodeproj" \
-            --scheme "App"
+            --scheme "App" || {
+            echo "---- Why it failed ----"
+            xcodebuild -project ios/App/App.xcodeproj -scheme App -showBuildSettings 2>&1 | grep -iv "^ " | tail -40
+            exit 1
+          }
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
