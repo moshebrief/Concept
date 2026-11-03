@@ -298,7 +298,42 @@ async function createChannel(name, members, kind="group", icon=""){
   await guarded(store.set("channels/"+id, {name:name||"", kind, members, icon:icon||"", createdBy:S.me, at:now()}));
   S.active=id; S.view="chats"; S.inThread=true; ls.set("active",id); ls.set("view","chats"); openMsgs(); render();
 }
-function selectChannel(id){ S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true; render(); }
+// Moving between screens on a phone: the new screen slides in from the right, going back slides it away
+// (like iPhone apps). Uses the browser's View Transitions when available, a simple slide otherwise.
+function navGo(dir, fn){
+  const phone=window.innerWidth<=860, calm=window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!phone || calm) { fn(); return; }
+  const root=document.documentElement;
+  if (document.startViewTransition) {
+    root.dataset.nav=dir;
+    try { const t=document.startViewTransition(()=>{ fn(); }); t.finished.finally(()=>{ delete root.dataset.nav; }); } catch { delete root.dataset.nav; fn(); }
+    return;
+  }
+  fn();
+  const el=document.querySelector(dir==="fwd"? ".main.chatmain" : ".lines");
+  if (el && el.animate) el.animate(dir==="fwd"? [{transform:"translateX(100%)"},{transform:"none"}] : [{transform:"translateX(-28%)", opacity:.6},{transform:"none", opacity:1}], {duration:300, easing:"cubic-bezier(.2,.8,.2,1)"});
+}
+function selectChannel(id){ const wasIn=S.inThread && S.view==="chats"; S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true; if (wasIn) render(); else navGo("fwd", ()=>render()); }
+function goBackToList(){ navGo("back", ()=>{ S.inThread=false; render(); }); }
+// iPhone-style swipe from the left edge of a chat to go back to the list.
+(function edgeBack(){
+  let st=null;
+  document.addEventListener("touchstart", e=>{ if (window.innerWidth>860 || !S.inThread || S.view!=="chats" || S.openTask || REC) return; const t=e.touches[0]; if (!t || t.clientX>24) return;
+    const main=document.querySelector(".main.chatmain"), list=document.querySelector(".app .lines"); if (!main || !main.contains(e.target)) return;
+    st={x:t.clientX, y:t.clientY, main, list, dx:0, on:false}; }, {passive:true});
+  document.addEventListener("touchmove", e=>{ if (!st) return; const t=e.touches[0]; const dx=t.clientX-st.x, dy=t.clientY-st.y;
+    if (!st.on) { if (Math.abs(dy)>Math.abs(dx) && Math.abs(dy)>8) { st=null; return; } if (dx<8) return; st.on=true; document.querySelector(".app").classList.add("peek"); }
+    st.dx=Math.max(0,dx); const w=window.innerWidth;
+    st.main.style.transform=`translateX(${st.dx}px)`; st.main.style.boxShadow="-8px 0 24px rgba(0,0,0,.14)";
+    if (st.list) { st.list.style.transform=`translateX(${-28+28*st.dx/w}%)`; st.list.style.opacity=String(.75+.25*st.dx/w); }
+    if (e.cancelable) e.preventDefault(); }, {passive:false});
+  const end=()=>{ if (!st) return; const s=st; st=null; if (!s.on) return; const w=window.innerWidth, go=s.dx>w*.33;
+    const ease="transform .24s cubic-bezier(.2,.8,.2,1), opacity .24s";
+    s.main.style.transition=ease; if (s.list) s.list.style.transition=ease;
+    s.main.style.transform=go? "translateX(100%)" : "none"; if (s.list) { s.list.style.transform=go? "none" : "translateX(-28%)"; s.list.style.opacity=go? "1" : ".75"; }
+    setTimeout(()=>{ for (const el of [s.main, s.list]) if (el) { el.style.transition=""; el.style.transform=""; el.style.opacity=""; el.style.boxShadow=""; } document.querySelector(".app").classList.remove("peek"); if (go) { S.inThread=false; render(); } }, 250); };
+  document.addEventListener("touchend", end); document.addEventListener("touchcancel", end);
+})();
 function jumpToMessage(cid, mid){ S.openTask=window.innerWidth>860? S.openTask: null; selectChannel(cid); const tryJump=(n)=>{ const el=document.getElementById("msg-"+mid); if (el){ el.scrollIntoView({block:"center"}); el.querySelector(".strip").animate([{outline:"2px solid var(--knot)"},{outline:"2px solid transparent"}],{duration:1600}); } else if (n>0) setTimeout(()=>tryJump(n-1),200); }; setTimeout(()=>tryJump(10),60); }
 
 
@@ -321,13 +356,21 @@ function pickMime(){ if (!window.MediaRecorder) return null; for (const t of ["a
 async function startRec(cb, opts={}){
   if (typeof cb!=="function") cb=null;
   if (!S.canWrite || REC || (!cb && !S.active)) return;
+  // Show the recording screen the moment the mic is pressed; the microphone itself wakes up a split second later.
+  REC = {pending:true, t0:now(), levels:[], chunks:[], cancel:false, cb, hold:!!opts.hold, cid:S.active};
+  S.recFor = cb? "task" : "chat"; S.rec=true; if (navigator.vibrate) try{ navigator.vibrate(15); }catch{}
+  if (REC.hold) holdUI(true); else render(true);
+  REC.timer = setInterval(()=>{ const el=$("#recTime"); if (el && REC) el.textContent=fmtDur((now()-REC.t0)/1000); }, 250);
   let stream=null;
   try { if (!navigator.mediaDevices || !window.MediaRecorder) throw 0; stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}); }
-  catch { openVoiceFallback(cb); return; }
+  catch { clearInterval(REC&&REC.timer); REC=null; S.rec=false; holdUI(false); render(true); openVoiceFallback(cb); return; }
+  const early=REC;
+  if (!early || early.abort) { stream.getTracks().forEach(t=>t.stop()); return; }
+  clearInterval(early.timer);
   const mime = pickMime(); let mr;
   try { mr = new MediaRecorder(stream, mime? {mimeType:mime, audioBitsPerSecond:32000} : {audioBitsPerSecond:32000}); } catch { mr = new MediaRecorder(stream); }
   const ac = audioCtx() || new (window.AudioContext||window.webkitAudioContext)(); try { if (ac.state!=="running") ac.resume(); } catch {} const an = ac.createAnalyser(); an.fftSize=256; const srcNode=ac.createMediaStreamSource(stream); srcNode.connect(an);
-  REC = {mr, stream, ac, an, srcNode, chunks:[], t0:now(), levels:[], cancel:false, cb, hold:!!opts.hold}; S.recFor = cb? "task" : "chat";
+  REC = Object.assign(early, {pending:false, mr, stream, ac, an, srcNode});
   mr.ondataavailable = e => { if (e.data && e.data.size) REC.chunks.push(e.data); };
   mr.onstop = async () => {
     const r=REC; REC=null; S.rec=false; holdUI(false); r.stream.getTracks().forEach(t=>t.stop()); try{ r.srcNode.disconnect(); if (r.ac!==AC) r.ac.close(); }catch{}
@@ -342,15 +385,16 @@ async function startRec(cb, opts={}){
     render(true);
     (r.cb||sendVoice)(blob, dur, peaks);
   };
-  mr.start(250); S.rec=true; REC.cid=S.active; if (navigator.vibrate) try{ navigator.vibrate(15); }catch{}
+  mr.start(250); S.rec=true;
   if (!cb) { sendAct("recording"); REC.act=setInterval(()=>sendAct("recording", REC&&REC.cid), 2500); }
+  if (REC.stopAfter) { setTimeout(()=>{ if (REC===early) { try { early.mr.stop(); } catch {} } }, 50); }
   REC.timer = setInterval(()=>{ const el=$("#recTime"); const sec=(now()-REC.t0)/1000; if (el) el.textContent=fmtDur(sec); if (sec>=180) stopRec(false); }, 250);
   const buf=new Uint8Array(an.frequencyBinCount);
   const loop=()=>{ if (!REC) return; an.getByteTimeDomainData(buf); let sq=0; for (const v of buf) { const x=(v-128)/128; sq+=x*x; } const lv=Math.sqrt(sq/buf.length); REC.levels.push(lv);
     const bars=document.querySelectorAll("#recBars i"); if (bars.length){ const tail=REC.levels.slice(-bars.length); bars.forEach((b,i)=>b.style.transform=`scaleY(${Math.max(.1,Math.min(1,Math.sqrt(tail[i]||0)*2.2))})`); }
     REC.raf=requestAnimationFrame(loop); };
   loop();
-  if (REC.hold) holdUI(true); else render(true);
+  if (!REC.stopAfter) { if (REC.hold) holdUI(true); else render(true); }
 }
 // ---- WhatsApp-style voice button: hold to record, release to send, slide left to cancel, slide up to lock ----
 let HOLD=null;
@@ -387,7 +431,9 @@ function micDown(e){
   }
   for (const [t,f] of [["pointermove",move],["pointerup",up],["pointercancel",cancel]]) { btn.addEventListener(t,f); addEventListener(t,f); }
 }
-function stopRec(cancel, draft){ if (!REC) return; REC.cancel=!!cancel; REC.draft=!!draft; try { REC.mr.stop(); } catch { REC=null; S.rec=false; render(true); } }
+function stopRec(cancel, draft){ if (!REC) return; REC.cancel=!!cancel; REC.draft=!!draft;
+  if (REC.pending) { if (cancel) { REC.abort=true; clearInterval(REC.timer); REC=null; S.rec=false; holdUI(false); render(true); } else REC.stopAfter=true; return; }
+  try { REC.mr.stop(); } catch { REC=null; S.rec=false; render(true); } }
 // Waveform like WhatsApp: loudness of each slice of the recording (in decibels), so you can see
 // where the voice went up and down. 64 values are stored; the bubble draws them as thin bars.
 const WAVE_N=64;
@@ -2905,7 +2951,7 @@ function renderThread(){
     h("button",{class:"iconbtn accent", "aria-label":"Forward selected messages", title:"Forward", disabled:!S.sel.length, onclick:()=>forwardMenu(S.msgs.filter(m=>S.sel.includes(m.id)))}, svg(ICF.fwd)),
     h("button",{class:"iconbtn accent", "aria-label":"Make one task from the selected messages", title:"Make task", disabled:!S.sel.length, onclick:()=>quickTask(S.msgs.filter(m=>S.sel.includes(m.id)))}, svg(IC.knot))));
   else wrap.append(h("header",{class:"thead"},
-    h("button",{class:"iconbtn back","aria-label":"Back to conversations", onclick:()=>{S.inThread=false; render();}}, svg(IC.back)),
+    h("button",{class:"iconbtn back","aria-label":"Back to conversations", onclick:goBackToList}, svg(IC.back)),
     h("button",{class:"tinfo", "aria-label":"Chat info", onclick:()=>openChatInfo(c)}, chanGlyph(c),
       h("div",{class:"t"}, h("b",{},chanTitle(c)), h("span",{id:"thead-sub", "data-orig":theadSub(c)}, theadSub(c)))),
     h("span",{class:"grow"}),
@@ -3174,7 +3220,7 @@ function renderDrawer(){
   const isNew = S.openTask==="new"; const t = isNew? null : S.tasks.find(x=>x.id===S.openTask);
   if (!isNew && !t) { S.openTask=null; return h("span"); }
   const d=S.draftTask; const ro=!S.canWrite; if (!STATUSES.some(s=>s.id===d.status)) d.status=STATUSES[0].id; const stc=(STATUSES.find(s=>s.id===d.status)||STATUSES[0]).c;
-  const close=()=>{ S.openTask=null; S.draftTask=null; render(); };
+  const close=()=>{ const el=$("#drawer"); const done=()=>{ S.openTask=null; S.draftTask=null; render(); }; if (el && window.innerWidth<=860) { el.classList.add("leaving"); setTimeout(done, 200); } else done(); };
   const opening=LAST_DRAWER!==S.openTask; LAST_DRAWER=S.openTask;
   const dr=h("aside",{class:"drawer td2"+(opening?" enter":""), id:"drawer", style:`--c:${stc}`, "aria-label":"Task", onkeydown:e=>{ if (e.key==="Escape") close(); }});
   const has = t && t.thread && S.channels.find(c=>c.id===t.thread);
