@@ -2227,3 +2227,4 @@ button,a,[role=button],label.td2chip,.lineitem,.card,.contact,.srow.pick,.srow.p
 .lineitem.tap,.contact.tap,.srow.pick.tap,.srow.pick1.tap,.ncrow.tap{background-color:color-mix(in srgb,var(--ink) 5%,transparent)}
 .mlink.tap,.oblink.tap,.nctxt.tap,.td2link.tap{scale:1;opacity:.5}
 @media (prefers-reduced-motion:reduce){.tap{scale:1}}
+.micbtn.sending.savecheck svg.i{transform:none!important;stroke-width:2.6}
