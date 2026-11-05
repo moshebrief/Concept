@@ -195,7 +195,7 @@ function subscribeAll(){
     LOCAL.save("channels", S.channels); syncSoon(); noticeIncoming(S.channels); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
     openMsgs(); scheduleRender();
   });
-  store.sub("tasks", async rows => { S.tasks=rows.sort((a,b)=>(a.num||0)-(b.num||0)); await resolvePeople(rows.flatMap(t=>[t.assignee,t.createdBy]).filter(Boolean)); scheduleRender(); });
+  store.sub("tasks", async rows => { const have=new Set(rows.map(r=>r.id)); for (const k of [...PEND_TASKS.keys()]) if (have.has(k)) PEND_TASKS.delete(k); S.tasks=rows.concat([...PEND_TASKS.values()]).sort((a,b)=>(a.num||0)-(b.num||0)); primeNum(); await resolvePeople(rows.flatMap(t=>[t.assignee,t.createdBy]).filter(Boolean)); scheduleRender(); });
 }
 function openMsgs(){
   if (S.msgsFor===S.active) return;
@@ -236,8 +236,29 @@ async function sendMessage(text){
   addPending({id, cid, by:S.me, at:now(), text, pending:true, ...extra});
   if (hadBar) render(true);
   if (S.mode==="demo") setTimeout(()=>demoTyping(cid), 900);
-  try { const sent=await sendTextTo(cid, text, extra, id); if (asTask) quickTask([sent]); if (S.mode==="demo") { dropPending(id); setTimeout(()=>{ const c=S.channels.find(x=>x.id===cid); if (c) { const patch={}; (c.members||[]).filter(u=>u!==S.me).forEach(u=>{ patch["r_"+u]=sent.at; patch["d_"+u]=sent.at; }); demo.update("channels/"+cid, patch); } }, 2600); } }
+  try { const sent=await sendTextTo(cid, text, extra, id); const pm=S.pend.find(p=>p.id===id); if (pm && SB) { pm.pending=false; scheduleRender(); } if (asTask) quickTask([sent]); if (S.mode==="demo") { dropPending(id); setTimeout(()=>{ const c=S.channels.find(x=>x.id===cid); if (c) { const patch={}; (c.members||[]).filter(u=>u!==S.me).forEach(u=>{ patch["r_"+u]=sent.at; patch["d_"+u]=sent.at; }); demo.update("channels/"+cid, patch); } }, 2600); } }
   catch { dropPending(id); const t=$("#composer"); if (t && !t.value) { t.value=text; t.dispatchEvent(new Event("input",{bubbles:true})); } }
+}
+// Task numbers come from the server. One number is fetched ahead of time, so a new task appears instantly.
+const PEND_TASKS=new Map(); let NUM_VAL=null, NUM_BUSY=false;
+function primeNum(){ if (NUM_VAL!=null || NUM_BUSY || !(S.mode==="live" && SB)) return; NUM_BUSY=true; nextNum().then(n=>{ NUM_VAL=n; }).catch(()=>{}).finally(()=>{ NUM_BUSY=false; }); }
+function takeNum(){ const n=NUM_VAL; NUM_VAL=null; primeNum(); return n; }
+const guessNum = () => Math.max(0, ...S.tasks.map(t=>+t.num||0))+1;
+function putLocalTask(id, t){ PEND_TASKS.set(id, t); S.tasks=S.tasks.filter(x=>x.id!==id).concat([{id, ...t}]).sort((a,b)=>(a.num||0)-(b.num||0)); }
+function dropLocalTask(id){ PEND_TASKS.delete(id); S.tasks=S.tasks.filter(x=>x.id!==id); scheduleRender(); }
+// Shows the task right away, then saves it in the background (a number is fetched only if none was ready).
+function saveTaskFast(id, fields, after){
+  const ready=takeNum();
+  const t={...fields, num:ready!=null? ready : guessNum()};
+  putLocalTask(id, {id, ...t});
+  (async()=>{
+    try {
+      if (ready==null) { t.num=await guarded(nextNum()); putLocalTask(id, {id, ...t}); scheduleRender(); }
+      await guarded(store.set("tasks/"+id, t));
+      if (after) after(t);
+    } catch { dropLocalTask(id); }
+  })();
+  return t;
 }
 async function nextNum(){
   if (S.mode==="live" && SB) { const {data, error}=await SB.rpc("next_task_num"); if (error) throw sbErr(error); return data; }
@@ -256,12 +277,13 @@ async function saveTask(){
   const d=S.draftTask; if (!d.title.trim()) { toast("Give the task a title first."); return; }
   if (S.openTask==="new") {
     const id="t"+now().toString(36)+uidShort().slice(0,3);
-    const num = await guarded(nextNum());
-    const t = {...d, team:(curTeam()||{}).id||"", title:d.title.trim(), num, createdBy:S.me, at:now(), log:[{at:now(), by:S.me, what:"created"}]};
-    await guarded(store.set("tasks/"+id, t));
-    for (const f of (d.files||[]).filter(f=>f.kind==="voice" && f.by===S.me)) for (let i=0;i<(f.voice&&f.voice.parts||0);i++) store.update(`voice/${f.voice.id}/parts/${i}`, {task:id}).catch(()=>{});
-    if (d.fromMsg && d.channel) { S.justTied=d.fromMsg; guarded(store.update(`channels/${d.channel}/messages/${d.fromMsg}`, {taskId:id})).catch(()=>{}); }
-    toast(`CN-${num} created`);
+    const {num:_n, ...rest}=d;
+    saveTaskFast(id, {...rest, team:(curTeam()||{}).id||"", title:d.title.trim(), createdBy:S.me, at:now(), log:[{at:now(), by:S.me, what:"created"}]}, ()=>{
+      for (const f of (d.files||[]).filter(f=>f.kind==="voice" && f.by===S.me)) for (let i=0;i<(f.voice&&f.voice.parts||0);i++) store.update(`voice/${f.voice.id}/parts/${i}`, {task:id}).catch(()=>{});
+      if (d.fromMsg && d.channel) guarded(store.update(`channels/${d.channel}/messages/${d.fromMsg}`, {taskId:id})).catch(()=>{});
+    });
+    if (d.fromMsg && d.channel) S.justTied=d.fromMsg;
+    toast("Task created");
   } else {
     const prev = S.tasks.find(t=>t.id===S.openTask)||{};
     const changes=[]; if (prev.status!==d.status) changes.push("moved to "+stName(d.status)); if (prev.assignee!==d.assignee) changes.push(d.assignee? "assigned "+nameOf(d.assignee): "unassigned");
@@ -405,7 +427,7 @@ async function startRec(cb, opts={}){
   REC.timer = setInterval(()=>{ const el=$("#recTime"); const sec=(now()-REC.t0)/1000; if (el) el.textContent=fmtDur(sec); if (sec>=180) stopRec(false); }, 250);
   const buf=new Uint8Array(an.frequencyBinCount);
   const loop=()=>{ if (!REC) return; an.getByteTimeDomainData(buf); let sq=0; for (const v of buf) { const x=(v-128)/128; sq+=x*x; } const lv=Math.sqrt(sq/buf.length); REC.levels.push(lv);
-    const bars=document.querySelectorAll("#recBars i"); if (bars.length){ const tail=REC.levels.slice(-bars.length); bars.forEach((b,i)=>b.style.transform=`scaleY(${Math.max(.1,Math.min(1,Math.sqrt(tail[i]||0)*2.2))})`); }
+    if (!REC.bars || !REC.bars.length || !REC.bars[0].isConnected) REC.bars=document.querySelectorAll("#recBars i"); const bars=REC.bars; if (bars.length){ const tail=REC.levels.slice(-bars.length); bars.forEach((b,i)=>b.style.transform=`scaleY(${Math.max(.1,Math.min(1,Math.sqrt(tail[i]||0)*2.2))})`); }
     REC.raf=requestAnimationFrame(loop); };
   loop();
   if (!REC.stopAfter) { if (REC.hold) holdUI(true); else render(true); }
@@ -415,7 +437,7 @@ let HOLD=null;
 function holdUI(on){
   const row=document.querySelector(".crow"); if (!row) return;
   row.classList.toggle("holding", !!on);
-  const old=row.querySelector(".holdbar"); if (old) old.remove();
+  const old=row.querySelector(".holdbar"); if (on && old) return; if (old) old.remove();
   if (on) row.prepend(h("div",{class:"holdbar"}, h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, "0:00"),
     h("span",{class:"slidecancel", id:"slideCancel"}, svg(IC.back), "Slide to cancel"),
     h("span",{class:"lockhint", id:"lockHint"}, svg(ICF.lock), svg('<path d="M7 14l5-5 5 5"/>'))));
@@ -1081,10 +1103,11 @@ async function quickTask(msgs, opts={}){
   const notes = msgs.length>1? msgs.map(m=>nameOf(m.by).replace(/^Example:\s*/,"")+": "+msgText(m)).join("\n") : (msgText(msgs[0]).length>first.length? msgText(msgs[0]) : "");
   const id="t"+now().toString(36)+uidShort().slice(0,3);
   try {
-    const num=await guarded(nextNum());
-    await guarded(store.set("tasks/"+id, {title, notes, status:STATUSES[0].id, assignee:"", due:"", priority:"normal", channel:cid, fromMsg:msgs[0].id, fromMsgs:msgs.map(m=>m.id), fromText:msgs.map(msgText).join("\n"), fromBy:msgs[0].by, team:(curTeam()||{}).id||"", num, createdBy:S.me, at:now(), subtasks:[], log:[{at:now(), by:S.me, what:"created from "+(msgs.length>1? msgs.length+" messages":"a message")}]}));
-    for (const m of msgs) store.update(`channels/${cid}/messages/${m.id}`, {taskId:id}).catch(()=>{});
-    copyVoiceToTask(id, msgs);
+    saveTaskFast(id, {title, notes, status:STATUSES[0].id, assignee:"", due:"", priority:"normal", channel:cid, fromMsg:msgs[0].id, fromMsgs:msgs.map(m=>m.id), fromText:msgs.map(msgText).join("\n"), fromBy:msgs[0].by, team:(curTeam()||{}).id||"", createdBy:S.me, at:now(), subtasks:[], log:[{at:now(), by:S.me, what:"created from "+(msgs.length>1? msgs.length+" messages":"a message")}]}, ()=>{
+      for (const m of msgs) store.update(`channels/${cid}/messages/${m.id}`, {taskId:id}).catch(()=>{});
+      copyVoiceToTask(id, msgs);
+    });
+    for (const m of msgs) { const x=(S.msgs||[]).find(y=>y.id===m.id); if (x) x.taskId=id; }
     S.justTied=msgs[0].id; S.actFor=null; S.selecting=false; S.sel=[]; render(true);
     if (opts.open) openTask(id); else if (!opts.silent) toast("Added to "+STATUSES[0].name, {label:"Open", fn:()=>openTask(id)});
     return id;
@@ -1173,9 +1196,10 @@ async function sharedKey(j, priv){
 // (it's still private to the chat) so nobody ever gets a message they can't read.
 async function canSeal(members){ if (!E2E.ready) return false; try { return !(await ensureKeys(members||[])).length; } catch { return false; } }
 // Before encrypting, make sure every member's key is known; ask the server for any that are missing.
+const KEY_MISS={};
 async function ensureKeys(members){
-  const need=[...new Set(members)].filter(u=>u && u!==S.me && !Object.keys(S.keys[u]||{}).length);
-  for (const u of need) { try { const d=await store.get("keys/"+u); if (d && d.devices) S.keys[u]=d.devices; } catch {} }
+  const need=[...new Set(members)].filter(u=>u && u!==S.me && !Object.keys(S.keys[u]||{}).length && !(KEY_MISS[u] && Date.now()-KEY_MISS[u]<60000));
+  await Promise.all(need.map(async u=>{ try { const d=await store.get("keys/"+u); if (d && d.devices) { S.keys[u]=d.devices; delete KEY_MISS[u]; } else KEY_MISS[u]=Date.now(); } catch { KEY_MISS[u]=Date.now(); } }));
   return [...new Set(members)].filter(u=>u && u!==S.me && !Object.keys(S.keys[u]||{}).length);
 }
 async function seal(text, members){
@@ -3431,6 +3455,6 @@ $("#meAv").addEventListener("click", ()=>openSettings());
 document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S.view=b.dataset.view; ls.set("view",S.view); if (S.view==="chats") S.inThread=false; else S.newFlow=null; if (S.view==="calls") ls.set("callsSeen", now()); if (S.view!=="calls") S.dial.on=false; if (S.view==="board" && S.filter.startsWith("chan:")) {} render(); }));
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask};
 boot();
 })();
