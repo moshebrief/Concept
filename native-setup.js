@@ -247,7 +247,7 @@ function ios() {
   if (fs.existsSync(sdP)) {
     let sd = read(sdP);
     if (!sd.includes("TM_SCENE_BG")) {
-      const col = `UIColor(dynamicProvider: { tc in tc.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : UIColor(red: 0.976, green: 0.976, blue: 0.976, alpha: 1) })`;
+      const col = `UIColor(dynamicProvider: { tc in tc.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : UIColor(red: 0.953, green: 0.953, blue: 0.953, alpha: 1) })`;
       sd = sd.replace(/(window\?\.makeKeyAndVisible\(\))/, `// TM_SCENE_BG
         let tmBg = ${col}
         window?.backgroundColor = tmBg
