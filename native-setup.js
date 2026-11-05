@@ -241,6 +241,22 @@ function ios() {
     }
     write(adP, ad);
   }
+  // Capacitor 8 apps open their window in SceneDelegate (not AppDelegate), so the colour must be set there,
+  // or the window shows black around the keyboard's rounded corners.
+  const sdP = path.join(dir, "App", "SceneDelegate.swift");
+  if (fs.existsSync(sdP)) {
+    let sd = read(sdP);
+    if (!sd.includes("TM_SCENE_BG")) {
+      const col = `UIColor(dynamicProvider: { tc in tc.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : UIColor(red: 0.976, green: 0.976, blue: 0.976, alpha: 1) })`;
+      sd = sd.replace(/(window\?\.makeKeyAndVisible\(\))/, `// TM_SCENE_BG
+        let tmBg = ${col}
+        window?.backgroundColor = tmBg
+        window?.rootViewController?.view.backgroundColor = tmBg
+        $1`);
+      if (!sd.includes("TM_SCENE_BG")) throw new Error("SceneDelegate: couldn't add the window colour");
+      write(sdP, sd);
+    }
+  }
   log(`iOS ready — ${APP_ID} version ${VERSION} (${BUILD})`);
 }
 
