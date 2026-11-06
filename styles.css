@@ -1,7 +1,8 @@
 /* ---- base reset ---- */
 *,*::before,*::after{box-sizing:border-box}
 html{color-scheme:light;-webkit-text-size-adjust:100%}
-:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  background:linear-gradient(var(--edge-top,var(--paper)) 0 0) top/100% calc(env(safe-area-inset-top,0px) + 1px) no-repeat,linear-gradient(var(--edge-bot,var(--paper)) 0 0) bottom/100% calc(env(safe-area-inset-bottom,0px) + 1px) no-repeat,var(--paper)}
 body{margin:0;font:14px/1.42 -apple-system,BlinkMacSystemFont,"Roboto Flex",Roboto,system-ui,sans-serif}
 img{max-width:100%}
 [hidden]{display:none!important}
@@ -1299,7 +1300,7 @@ svg.i{width:19px;height:19px;stroke-width:1.9}
   --cobalt:#007AFF; --cobalt-soft:rgba(0,122,255,.12); --knot:#007AFF; --knot-soft:rgba(0,122,255,.12);
   --bubble:#E9E9EB; --ok:#34C759; --bad:#FF3B30; --warn:#FF9500; --on-accent:#FFFFFF;
   --c-todo:#8E8E93; --c-doing:#007AFF; --c-review:#FF9500; --c-done:#34C759;
-  --glass:rgba(249,249,249,.94); --bar:rgba(249,249,249,.9);
+  --glass:rgba(249,249,249,.94); --bar:rgba(249,249,249,.9); --glass-solid:#F9F9F9;
   --chatbg:#EFEFF4;
   --f-display:-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,Roboto,"Segoe UI",sans-serif;
   --f-body:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Roboto,"Segoe UI",sans-serif;
@@ -1312,14 +1313,14 @@ svg.i{width:19px;height:19px;stroke-width:1.9}
   --cobalt:#0A84FF; --cobalt-soft:rgba(10,132,255,.18); --knot:#0A84FF; --knot-soft:rgba(10,132,255,.18);
   --bubble:#262628; --ok:#30D158; --bad:#FF453A; --warn:#FF9F0A;
   --c-todo:#8E8E93; --c-doing:#0A84FF; --c-review:#FF9F0A; --c-done:#30D158;
-  --glass:rgba(28,28,30,.94); --bar:rgba(22,22,24,.9); --chatbg:#0B0B0D; color-scheme:dark}}
+  --glass:rgba(28,28,30,.94); --bar:rgba(22,22,24,.9); --glass-solid:#1C1C1E; --chatbg:#0B0B0D; color-scheme:dark}}
 :root[data-theme="dark"]{
   --paper:#000000; --surface:#1C1C1E; --raised:#2C2C2E; --ink:#FFFFFF; --muted:#8D8D93; --fill:rgba(118,118,128,.24);
   --rule:rgba(84,84,88,.45); --sep:rgba(84,84,88,.65);
   --cobalt:#0A84FF; --cobalt-soft:rgba(10,132,255,.18); --knot:#0A84FF; --knot-soft:rgba(10,132,255,.18);
   --bubble:#262628; --ok:#30D158; --bad:#FF453A; --warn:#FF9F0A;
   --c-todo:#8E8E93; --c-doing:#0A84FF; --c-review:#FF9F0A; --c-done:#30D158;
-  --glass:rgba(28,28,30,.94); --bar:rgba(22,22,24,.9); --chatbg:#0B0B0D; color-scheme:dark}
+  --glass:rgba(28,28,30,.94); --bar:rgba(22,22,24,.9); --glass-solid:#1C1C1E; --chatbg:#0B0B0D; color-scheme:dark}
 
 body{font-family:var(--f-body);font-size:15px;letter-spacing:-.01em;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
 svg.i{stroke-width:1.75}
@@ -2255,3 +2256,6 @@ button:active{opacity:1}
 .swrow{touch-action:pan-y}
 .stream,#list,.td2body,.dbody{overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
 .swrow > .lineitem,.brow .strip,.macts{backface-visibility:hidden}
+
+/* With a photo wallpaper the chat bars are solid, so the strips under the clock and the home bar match them exactly */
+.main.wp-photo .thead,.main.wp-photo .compose{background:var(--glass-solid,#F9F9F9)}

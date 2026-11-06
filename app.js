@@ -328,7 +328,7 @@ function navGo(dir, fn){
   const root=document.documentElement;
   if (document.startViewTransition) {
     root.dataset.nav=dir;
-    try { const t=document.startViewTransition(()=>{ fn(); }); t.finished.finally(()=>{ delete root.dataset.nav; }); } catch { delete root.dataset.nav; fn(); }
+    try { const t=document.startViewTransition(()=>{ fn(); }); t.finished.finally(()=>{ delete root.dataset.nav; queueEdges(); }); } catch { delete root.dataset.nav; fn(); }
     return;
   }
   fn();
@@ -2886,7 +2886,31 @@ let toastT; function toast(t, act){ let el=$("#toast"); if (!el){ el=h("div",{cl
 
 // ---------- render ----------
 let scrollDown=true;
+// The strips under the clock (top) and the home bar (bottom) take the exact colour of whatever bar is next to them.
+let EDGE_Q=0;
+function edgeColor(y){
+  const els=document.elementsFromPoint(2, y), layers=[];
+  for (const e of els) { if (e===document.documentElement) break;
+    const m=(getComputedStyle(e).backgroundColor.match(/[\d.]+/g)||[]).map(Number); const a=m.length>3? m[3] : (m.length? 1 : 0);
+    if (a>0) { layers.push([m[0],m[1],m[2],a]); if (a>=1) break; } }
+  const dark=document.documentElement.classList.contains("dark") || (matchMedia && matchMedia("(prefers-color-scheme: dark)").matches && !document.documentElement.classList.contains("light"));
+  let c=getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g)?.map(Number) || (dark? [0,0,0] : [242,242,247]);
+  for (const [r,g,b,a] of layers.reverse()) c=[r*a+c[0]*(1-a), g*a+c[1]*(1-a), b*a+c[2]*(1-a)];
+  return `rgb(${c.map(v=>Math.round(v)).join(",")})`;
+}
+function syncEdges(){
+  EDGE_Q=0; const root=document.documentElement, cs=getComputedStyle(root);
+  const pt=parseFloat(cs.paddingTop)||0, pb=parseFloat(cs.paddingBottom)||0, H=window.innerHeight;
+  const top=edgeColor(pt+1), bot=edgeColor(H-pb-2);
+  root.style.setProperty("--edge-top", top); root.style.setProperty("--edge-bot", bot);
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m=>m.setAttribute("content", top));
+}
+function queueEdges(){ if (!EDGE_Q) EDGE_Q=requestAnimationFrame(()=>requestAnimationFrame(syncEdges)); }
+addEventListener("resize", queueEdges);
+new MutationObserver(queueEdges).observe(document.body, {childList:true});
+setTimeout(()=>{ const app=document.getElementById("app"); if (app) new MutationObserver(queueEdges).observe(app, {childList:true, attributes:true, attributeFilter:["class"]}); }, 0);
 function render(keepComposer){
+  queueEdges();
   if (RQ) { cancelAnimationFrame(RQ); RQ=0; }
   if (S.view==="updates"||S.view==="calls") S.view="chats";
   const app=$("#app");
