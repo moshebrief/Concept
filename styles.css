@@ -2259,3 +2259,34 @@ button:active{opacity:1}
 
 /* With a photo wallpaper the chat bars are solid, so the strips under the clock and the home bar match them exactly */
 .main.wp-photo .thead,.main.wp-photo .compose{background:var(--glass-solid,#F9F9F9)}
+
+/* ===== Chat screen on phones: WhatsApp-style frosted top, iMessage-style floating bottom ===== */
+:root{--g-fill:rgba(255,255,255,.62);--g-line:rgba(255,255,255,.75);--g-edge:rgba(0,0,0,.07);--g-top:rgba(247,247,250,.58);--g-shadow:0 2px 10px rgba(0,0,0,.08)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--g-fill:rgba(44,44,48,.62);--g-line:rgba(255,255,255,.14);--g-edge:rgba(255,255,255,.08);--g-top:rgba(22,22,26,.55);--g-shadow:0 2px 10px rgba(0,0,0,.35)}}
+:root[data-theme="dark"]{--g-fill:rgba(44,44,48,.62);--g-line:rgba(255,255,255,.14);--g-edge:rgba(255,255,255,.08);--g-top:rgba(22,22,26,.55);--g-shadow:0 2px 10px rgba(0,0,0,.35)}
+@media (max-width:860px){
+  /* the chat runs edge to edge, under the clock and the home bar */
+  .app.in-thread .main.chatmain{margin-top:calc(-1 * env(safe-area-inset-top,0px));margin-bottom:calc(-1 * env(safe-area-inset-bottom,0px));position:relative;overflow:hidden}
+  .main.chatmain > .stream{position:absolute!important;inset:0!important;padding-top:calc(var(--th,60px) + 8px)!important;padding-bottom:calc(var(--ch,60px) + 8px)!important;scroll-padding-top:var(--th,60px);scroll-padding-bottom:var(--ch,60px)}
+
+  /* top: frosted glass bar that the messages slide under */
+  .main.chatmain > .thead{position:absolute!important;top:0;left:0;right:0;z-index:6;padding-top:calc(env(safe-area-inset-top,0px) + 6px)!important;padding-bottom:8px!important;
+    background:var(--g-top)!important;-webkit-backdrop-filter:blur(24px) saturate(190%)!important;backdrop-filter:blur(24px) saturate(190%)!important;border-bottom:.5px solid var(--g-edge)!important;box-shadow:none!important}
+  .main.chatmain > .thead .iconbtn{width:40px;height:40px;border-radius:999px;background:var(--g-fill);border:.5px solid var(--g-line);box-shadow:var(--g-shadow);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+  .main.chatmain > .thead .tinfo{background:transparent}
+
+  /* bottom: no bar — a round + and a floating message pill, like iMessage */
+  .main.chatmain > .compose{position:absolute!important;left:0;right:0;bottom:0;z-index:6;background:transparent!important;border-top:0!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;
+    padding-top:10px!important;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))!important}
+  /* soft blur that fades out upward, so messages melt away behind the pill */
+  .main.chatmain > .compose::before{content:"";position:absolute;left:0;right:0;top:-18px;bottom:0;z-index:-1;pointer-events:none;
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    -webkit-mask-image:linear-gradient(to top,#000 55%,transparent);mask-image:linear-gradient(to top,#000 55%,transparent)}
+  .main.chatmain .crow .plusbtn{width:42px!important;height:42px!important;background:var(--g-fill)!important;border:.5px solid var(--g-line);box-shadow:var(--g-shadow);-webkit-backdrop-filter:blur(16px) saturate(180%);backdrop-filter:blur(16px) saturate(180%)}
+  .main.chatmain .crow .inbox{min-height:42px!important;border-radius:21px!important;background:var(--g-fill)!important;border:.5px solid var(--g-line)!important;box-shadow:var(--g-shadow);-webkit-backdrop-filter:blur(16px) saturate(180%);backdrop-filter:blur(16px) saturate(180%)}
+  .main.chatmain .crow .inbox textarea{min-height:42px!important;padding-top:10px!important;padding-bottom:10px!important;padding-left:10px!important}
+  .main.chatmain .crow .micbtn{width:42px!important;height:42px!important;background:var(--g-fill)!important;border:.5px solid var(--g-line);box-shadow:var(--g-shadow);-webkit-backdrop-filter:blur(16px) saturate(180%);backdrop-filter:blur(16px) saturate(180%)}
+  .main.chatmain .crow .sendbtn{width:42px!important;height:42px!important;box-shadow:var(--g-shadow)!important}
+  .main.chatmain .compose .replybar,.main.chatmain .compose .recbar,.main.chatmain .compose .vdraft,.main.chatmain .compose .blockedbar,.main.chatmain .compose .hint,.main.chatmain .compose .emojipanel{
+    background:var(--g-fill)!important;border:.5px solid var(--g-line)!important;border-radius:20px!important;box-shadow:var(--g-shadow);-webkit-backdrop-filter:blur(18px) saturate(180%);backdrop-filter:blur(18px) saturate(180%)}
+}

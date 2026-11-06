@@ -2898,8 +2898,25 @@ function edgeColor(y){
   for (const [r,g,b,a] of layers.reverse()) c=[r*a+c[0]*(1-a), g*a+c[1]*(1-a), b*a+c[2]*(1-a)];
   return `rgb(${c.map(v=>Math.round(v)).join(",")})`;
 }
+// On phones the chat's top bar and message bar float over the messages; the messages get room for them.
+let BAR_RO=null, BAR_EL=[];
+function syncChatBars(){
+  const m=document.querySelector(".main.chatmain"), th=m&&m.querySelector(":scope > .thead"), cp=m&&m.querySelector(":scope > .compose");
+  if (!m || !th || !cp) return;
+  if (BAR_EL[0]!==th || BAR_EL[1]!==cp) {
+    if (BAR_RO) BAR_RO.disconnect();
+    BAR_EL=[th,cp];
+    if (window.ResizeObserver) { BAR_RO=new ResizeObserver(()=>setBars(m,th,cp)); BAR_RO.observe(th); BAR_RO.observe(cp); }
+  }
+  setBars(m,th,cp);
+}
+function setBars(m,th,cp){
+  const st=m.querySelector(":scope > .stream"), atEnd=st && st.scrollHeight-st.scrollTop-st.clientHeight<80;
+  m.style.setProperty("--th", th.offsetHeight+"px"); m.style.setProperty("--ch", cp.offsetHeight+"px");
+  if (st && atEnd) st.scrollTop=st.scrollHeight;
+}
 function syncEdges(){
-  EDGE_Q=0; const root=document.documentElement, cs=getComputedStyle(root);
+  EDGE_Q=0; syncChatBars(); const root=document.documentElement, cs=getComputedStyle(root);
   const pt=parseFloat(cs.paddingTop)||0, pb=parseFloat(cs.paddingBottom)||0, H=window.innerHeight;
   const top=edgeColor(pt+1), bot=edgeColor(H-pb-2);
   root.style.setProperty("--edge-top", top); root.style.setProperty("--edge-bot", bot);
@@ -2943,7 +2960,7 @@ function render(keepComposer){
   if (S.openTask) app.append(renderDrawer()); else LAST_DRAWER=null;
 
   const nta=$("#composer"); if (nta){ nta.value = S.editing? (plain(S.msgs.find(m=>m.id===S.editing))||"") : draft; autoGrow(nta); nta.closest(".crow").classList.toggle("has-text", !!nta.value.trim() || !!S.editing || !!(S.vdraft && S.vdraft.cid===S.active)); if (hadFocus||S.editing||S.replyTo) nta.focus(); }
-  const ns=$("#stream"); if (ns){ if (scrollDown||atBottom) ns.scrollTop=ns.scrollHeight; else ns.scrollTop=prevScroll; scrollDown=false; }
+  syncChatBars(); const ns=$("#stream"); if (ns){ if (scrollDown||atBottom) ns.scrollTop=ns.scrollHeight; else ns.scrollTop=prevScroll; scrollDown=false; }
   if ($("#list")) $("#list").scrollTop=listScroll;
   if (boardScroll && $("#board")) { $("#board").scrollLeft=boardScroll[0]; $("#board").scrollTop=boardScroll[1]; }
   if (focusId && $("#"+focusId)) $("#"+focusId).focus();
