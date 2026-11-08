@@ -1405,7 +1405,7 @@ function attachGestures(el, strip, m){
     const doReply = dx>=SW_REPLY || (mx>28 && vel>0.4);
     const doTask = canAct && (dx<=-SW_TASK || (mx<-28 && vel<-0.4));
     set(0); el.classList.remove("swr","swl");
-    if (doReply) { if (!armR) haptic(); S.replyTo=m.id; S.actFor=null; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); }
+    if (doReply) { if (!armR) haptic(); startReply(m); }
     else if (doTask) { if (!armL) haptic(); el.classList.add("tasked"); setTimeout(()=>el.classList.remove("tasked"), 500); swipeTask(m); }
     if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag) scheduleRender(); }, 300); } };
   const cancel=()=>{ clearTimeout(lp); if (active && horiz) { el.classList.remove("swiping","swr","swl"); SW.drag=false; set(0); } active=false; };
@@ -1421,6 +1421,24 @@ function attachGestures(el, strip, m){
   el.addEventListener("pointercancel", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; cancel(); });
   el.addEventListener("click", e=>{ if (Date.now()-endedAt<400) { e.stopPropagation(); e.preventDefault(); } }, true);
   strip.addEventListener("contextmenu", e=>{ e.preventDefault(); if (!horiz) holdMenu(m); });
+}
+function replyBarEl(){
+  const r = S.msgs.find(x=>x.id===(S.replyTo||S.editing));
+  return h("div",{class:"replybar"}, svg(S.editing?IC.edit:IC.reply), h("b",{}, S.editing? "Editing" : "Replying to "+nameOf(r&&r.by)), h("span",{}, r? (r.kind==="voice"?"🎤 Voice note":shown(r)):""),
+    h("button",{class:"iconbtn","aria-label":"Cancel", onmousedown:e=>e.preventDefault(), onclick:()=>{
+      if (S.editing) { S.replyTo=null; S.editing=null; const t=$("#composer"); if (t) t.value=""; render(true); return; }
+      S.replyTo=null; const b=document.querySelector(".compose .replybar"); if (b) b.remove(); }}, svg(IC.x)));
+}
+// Reply shows at once: the reply bar is slipped into the message box and the keyboard opens in the same touch
+// (iPhone only opens the keyboard if focus happens right inside the finger's touch, not a moment later).
+function startReply(m){
+  const hadMenu=!!S.actFor; S.replyTo=m.id; S.actFor=null; S.emojiFor=null;
+  const t=$("#composer"), inner=document.querySelector(".main.chatmain > .compose .inner");
+  if (!t || !inner || S.editing || S.rec || S.vdraft) { render(true); const c=$("#composer"); if (c) c.focus(); return; }
+  const bar=replyBarEl(), old=[...inner.children].find(x=>x.classList.contains("replybar") && !x.dataset.status);
+  if (old) old.replaceWith(bar); else inner.prepend(bar);
+  t.focus();
+  if (hadMenu) scheduleRender();
 }
 async function copyMsg(m){ const t=plain(m); S.actFor=null; render(true); try { await navigator.clipboard.writeText(t||""); toast("Copied"); } catch { toast("Couldn't copy here"); } }
 
@@ -3171,7 +3189,7 @@ function renderMsg(m, cont, chan){
       h("div",{class:"emojis"+(S.emojiMore?" more":"")}, (S.emojiMore? MORE_EMOJI : quickEmojis()).map(e=>h("button",{class:(mine_r[e]||[]).includes(S.me)?"on":"", onclick:()=>toggleReact(m,e), "aria-label":"React "+e}, e)),
         S.emojiMore? "" : h("button",{class:"emore","aria-label":"More emojis", title:"More", onclick:()=>{ S.emojiMore=true; render(true); }}, svg(IC.plus))),
       h("div",{class:"acts"},
-        h("button",{title:"Reply", "aria-label":"Reply", onclick:()=>{ S.replyTo=m.id; S.actFor=null; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); }}, svg(IC.reply)),
+        h("button",{title:"Reply", "aria-label":"Reply", onclick:()=>startReply(m)}, svg(IC.reply)),
         plain(m)!==false? h("button",{title:"Forward", "aria-label":"Forward", onclick:()=>forwardMenu(m)}, svg(ICF.fwd)) : "",
         task && canThread(task)? h("button",{title:"Task conversation", "aria-label":"Task conversation", onclick:()=>{ S.actFor=null; openTaskChat(task); }}, svg(IC.thread)) : "",
         task? h("button",{class:"tie", title:"Open task", "aria-label":"Open task", onclick:()=>openTask(task.id)}, svg(IC.knot)) : h("button",{class:"tie", title:"Make task", "aria-label":"Make task", onclick:()=>quickTask([m], {open:(S.prefs.swipeTask||"open")!=="silent"})}, svg(IC.knot)),
@@ -3187,10 +3205,7 @@ function renderComposer(c){
   const box = h("div",{class:"compose"}); const inner=h("div",{class:"inner"}); box.append(inner);
   if (!S.canWrite) { inner.append(h("div",{class:"hint",style:"text-align:center"},"View only")); return box; }
   const bp=dmPeer(c); if (bp && isBlocked(bp)) { inner.append(h("button",{class:"blockedbar", onclick:()=>setBlocked(bp,false)}, "You blocked this contact. ", h("b",{},"Tap to unblock."))); return box; }
-  if (S.replyTo || S.editing) {
-    const r = S.msgs.find(x=>x.id===(S.replyTo||S.editing));
-    inner.append(h("div",{class:"replybar"}, svg(S.editing?IC.edit:IC.reply), h("b",{}, S.editing? "Editing" : "Replying to "+nameOf(r&&r.by)), h("span",{}, r? (r.kind==="voice"?"🎤 Voice note":shown(r)):""), h("button",{class:"iconbtn","aria-label":"Cancel", onclick:()=>{S.replyTo=null; S.editing=null; const t=$("#composer"); if(t) t.value=""; render(true);}}, svg(IC.x))));
-  }
+  if (S.replyTo || S.editing) inner.append(replyBarEl());
   if (S.rec && S.recFor!=="task") {
     inner.append(h("div",{class:"recbar"},
       h("button",{class:"rectrash", "aria-label":"Cancel recording", title:"Delete", onclick:()=>stopRec(true)}, svg(IC.trash)),
@@ -3202,7 +3217,7 @@ function renderComposer(c){
     return box;
   }
   inner.append(renderVoiceDraft());
-  if (S.statusReply) inner.append(h("div",{class:"replybar"}, svg(IC.reply), h("b",{},"Status"), h("span",{}, S.statusReply.text), h("button",{class:"iconbtn","aria-label":"Cancel", onclick:()=>{S.statusReply=null; render(true);}}, svg(IC.x))));
+  if (S.statusReply) inner.append(h("div",{class:"replybar", "data-status":"1"}, svg(IC.reply), h("b",{},"Status"), h("span",{}, S.statusReply.text), h("button",{class:"iconbtn","aria-label":"Cancel", onclick:()=>{S.statusReply=null; render(true);}}, svg(IC.x))));
   const ta = h("textarea",{id:"composer", rows:"1", placeholder: S.asTask? "Task" : "Message", "aria-label":"Message",
     onfocus:()=>{ if (S.emojiOpen) { S.emojiOpen=false; const p=$(".emojipanel"); if (p) p.remove(); const b=$(".emobtn"); if (b) b.replaceChildren(svg(ICF.smile)); } },
     oninput:e=>{ autoGrow(e.target); e.target.closest(".crow").classList.toggle("has-text", !!e.target.value.trim() || !!(S.vdraft&&S.vdraft.cid===S.active)); if (!S.editing) { ls.set("draft:"+S.active, e.target.value); onComposerTyping(e.target.value); } updateMention(e.target, c); },
