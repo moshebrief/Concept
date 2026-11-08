@@ -2392,3 +2392,41 @@ button:active{opacity:1}
 .stgmove .ghost{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;height:44px;border-radius:12px}
 .stgmove .ghost:disabled{opacity:.35}
 .dangertxt{color:var(--bad,#FF3B30)!important}
+@media (max-width:860px){
+  /* emoji + task icons sit exactly in the middle of the 42px message pill (and stay at the bottom when the text grows) */
+  .main.chatmain .crow .inbox{align-items:flex-end!important}
+  .main.chatmain .crow .inbox .inbtn{height:36px!important;margin:0 0 2.25px!important;align-self:flex-end!important}
+  .main.chatmain .crow .inbox textarea{margin-bottom:1.5px!important;padding-top:9px!important;padding-bottom:9px!important;min-height:38px!important}
+}
+
+/* ===== Phones: settings-style screens are whole pages sliding in from the right ===== */
+@keyframes pageIn{from{transform:translate3d(100%,0,0)}to{transform:none}}
+@keyframes pageOut{from{transform:none}to{transform:translate3d(100%,0,0)}}
+@media (max-width:860px){
+  .scrim.page{background:var(--paper)!important;padding:0!important;display:block!important;place-items:initial!important;z-index:80!important;animation:pageIn .32s cubic-bezier(.2,.85,.25,1) both!important;box-shadow:-8px 0 24px rgba(0,0,0,.08)}
+  .scrim.page.out{animation:pageOut .23s cubic-bezier(.4,0,.7,1) both!important;pointer-events:none}
+  .scrim.page > .modal{position:absolute!important;inset:0!important;width:100%!important;max-width:none!important;max-height:none!important;min-height:0!important;border-radius:0!important;box-shadow:none!important;border:0!important;
+    background:var(--paper)!important;animation:none!important;padding:0 16px calc(28px + env(safe-area-inset-bottom,0px))!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex!important;flex-direction:column!important;gap:14px!important}
+  .scrim.page > .modal > *{flex-shrink:0}
+  .scrim.page .pagehead{position:sticky!important;top:0;z-index:5;margin:0 -16px!important;padding:calc(env(safe-area-inset-top,0px) + 6px) 10px 8px!important;display:grid!important;grid-template-columns:44px 1fr 44px!important;align-items:center!important;gap:0!important;
+    background:var(--g-top,rgba(247,247,250,.8))!important;-webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);border-bottom:.5px solid var(--g-edge,rgba(0,0,0,.08))}
+  .scrim.page .pagehead > .grow{display:none!important}
+  .scrim.page .pagehead > .sheettitle{grid-column:2;grid-row:1;text-align:center;font:600 17px var(--f-body)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0!important}
+  .scrim.page .pagehead > .pageback{grid-column:1;grid-row:1;justify-self:start;width:40px;height:40px;border-radius:999px;color:var(--cobalt)!important;background:var(--g-fill,rgba(255,255,255,.6))!important;border:.5px solid var(--g-line,rgba(255,255,255,.7))}
+  .scrim.page .pagehead > :not(.sheettitle):not(.pageback):not(.grow){grid-column:3;grid-row:1;justify-self:end}
+}
+.bkhero{display:flex;gap:12px;align-items:flex-start;padding:4px 2px}
+.bkhero .bkic{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--cobalt);color:#fff}
+.bkhero .bkic svg.i{width:22px;height:22px}
+@media (max-width:860px){
+  .scrim.page .pagedup{display:none!important}
+  .scrim.page .modalacts > .iconbtn[aria-label="Cancel"],.scrim.page .modalacts > .ghost:only-child{display:none!important}
+  .scrim.page .modalacts{justify-content:stretch}
+  .scrim.page .modalacts > .round,.scrim.page .modalacts > .primary{flex:1;width:100%;border-radius:14px!important;height:50px}
+}
+@media (max-width:860px){ .scrim.page .modalacts{display:flex!important;width:100%} .scrim.page .modalacts > .round{flex:1 1 auto!important;width:100%!important;height:50px!important;border-radius:14px!important} }
+/* anything opened from a page (a question, a menu, another page) appears on top of it */
+.scrim.page ~ .scrim:not(.page){z-index:90!important}
+.scrim.page ~ .scrim.page{z-index:85!important}
+.scrim.page ~ .scrim.page ~ .scrim:not(.page){z-index:95!important}
+@media (max-width:860px){ .scrim.page .modalacts > .pagesave{flex:1 1 auto!important;width:100%!important;height:50px!important;border-radius:14px!important;display:flex!important;align-items:center;justify-content:center;font:600 16px var(--f-body)!important} }

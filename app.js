@@ -939,7 +939,7 @@ function renderSettings(){
     row(ICF.drop, "Accent color", h("div",{class:"swatches"}, ACCENTS.map(([n,c])=>h("button",{class:"sw"+((p.accent||"#0A6CFF")===c?" on":""), style:`--sw:${c}`, title:n, "aria-label":n+" accent", onclick:()=>setPref("accent", c==="#0A6CFF"? "" : c)}))))));
   w.append(...group("Chats",
     row(ICF.image, "Chat wallpaper", h("button",{class:"iconbtn", title:"Change wallpaper", "aria-label":"Change wallpaper", onclick:openWallpaper}, svg(IC.arrow)), wpMode()==="photo"? "Your photo" : wpMode()==="plain"? "Plain" : "Tools"),
-    h("button",{class:"srow pick", onclick:openBackup}, h("span",{class:"sic"}, svg(ICF.lock)), h("span",{class:"stx"}, h("b",{},"Chat backup"), h("span",{}, "iCloud Drive or Google Drive")), h("span",{class:"sval"}, (S.prefs.backup||{}).last? fmtShort(S.prefs.backup.last) : "Never"), svg(IC.arrow)),
+    h("button",{class:"srow pick", onclick:openBackup}, h("span",{class:"sic"}, svg(ICF.lock)), h("span",{class:"stx"}, h("b",{},"Chat backup"), h("span",{}, NATIVE? (PLAT==="android"? "With your Google backup" : "With your iCloud Backup") : "Save your chats to a file")), h("span",{class:"sval"}, (S.prefs.backup||{}).last? fmtShort(S.prefs.backup.last) : "Never"), svg(IC.arrow)),
     h("button",{class:"srow pick", onclick:openStorage}, h("span",{class:"sic", style:"background:#34C759"}, svg(STORAGE_IC)), h("span",{class:"stx"}, h("b",{},"Storage and data"), h("span",{}, "Manage what's saved on this phone")), h("span",{class:"sval", id:"s-store"}, ""), svg(IC.arrow)),
     row(IC.send, "Enter key sends", toggle("enterSends", true)),
     row(IC.knot, "Swipe left to make task", h("div",{class:"segmini", role:"group", "aria-label":"Swipe left"}, [["open","Open task"],["silent","Just add"]].map(([v,l])=>h("button",{"aria-pressed":String((p.swipeTask||"open")===v), onclick:()=>setPref("swipeTask",v)}, l)))),
@@ -2306,6 +2306,33 @@ function sheet(title, build, opts={}){
     if (old && old.contains(document.activeElement) && document.activeElement.id) { const st=old.scrollTop; swapKids(old, [...m.childNodes]); old.scrollTop=st; old.__draw=draw; } else { const st=old? old.scrollTop : 0; scrim.replaceChildren(m); m.__draw=draw; if (st) m.scrollTop=st; } };
   draw(); document.body.append(scrim); return close;
 }
+// ---------- full pages on phones ----------
+// On a phone every settings-style screen opens as a whole page that slides in from the right, with a back
+// arrow and a centred title (like the iPhone's Settings app). Only short questions ("Delete task?") stay small.
+const ON_PHONE=()=>matchMedia("(max-width:860px)").matches;
+function isDialogModal(m){ const t=m.getAttribute("aria-label")||""; if (m.matches(".callsheet,.locsheet")) return true; return /\?\s*$/.test(t) || !!m.querySelector(":scope > .modalacts .danger-bg, :scope > .primary.danger, :scope > .modalacts .primary.danger"); }
+function pageify(scrim){
+  const m=scrim.querySelector(":scope > .modal"); if (!m) return;
+  if (!ON_PHONE() || isDialogModal(m)) { scrim.classList.remove("page"); return; }
+  scrim.classList.add("page");
+  let head=m.querySelector(":scope > .sheethead");
+  if (!head) { const t=m.getAttribute("aria-label")||""; head=h("div",{class:"sheethead"}, h("b",{class:"sheettitle"}, t));
+    const dup=[...m.querySelectorAll("h1,h2,h3,.mtitle,.sheettitle")].find(e=>e.textContent.trim()===t.trim()); if (dup) dup.classList.add("pagedup");
+    m.prepend(head); }
+  // a page's round ✓ button becomes a full-width labelled button, like the rest of the app's pages
+  m.querySelectorAll(":scope > .modalacts > .roundgo").forEach(b=>{ if (b.dataset.paged) return; b.dataset.paged="1"; b.classList.add("primary","wide","pagesave"); b.replaceChildren(b.title||b.getAttribute("aria-label")||"Done"); });
+  if (head.dataset.paged) return; head.dataset.paged="1"; head.classList.add("pagehead");
+  let back=head.querySelector('button[aria-label="Close"]');
+  if (!back) back=h("button",{class:"iconbtn", onclick:()=>scrim.remove()});
+  back.replaceChildren(svg(IC.back)); back.setAttribute("aria-label","Back"); back.title="Back"; back.classList.add("pageback"); head.prepend(back);
+}
+function hookPageRemove(scrim){
+  if (scrim.__hooked) return; scrim.__hooked=true; const real=Element.prototype.remove;
+  scrim.remove=function(){ if (!this.classList.contains("page") || this.classList.contains("out") || !this.isConnected) { real.call(this); return; }
+    this.classList.add("out"); setTimeout(()=>real.call(this), 230); };
+}
+new MutationObserver(ms=>{ for (const r of ms) for (const n of r.addedNodes) if (n.nodeType===1 && n.classList.contains("scrim") && !n.classList.contains("clear")) {
+  pageify(n); hookPageRemove(n); new MutationObserver(()=>pageify(n)).observe(n, {childList:true, subtree:true}); } }).observe(document.body, {childList:true});
 const pickList = (items, cur, pick) => h("div",{class:"ulist sgroup"}, items.map(([v,l,sub])=>h("button",{class:"srow pick1"+(v===cur?" on":""), onclick:()=>pick(v)}, h("span",{class:"stx"}, h("b",{}, l), sub? h("span",{}, sub):""), v===cur? svg(ICF.check) : "")));
 const toneItems = () => [...TN.TONES.map(t=>[t.id, t.name]), ["none","None"]];
 function openTonePicker({title, value, onPick}){
@@ -2635,17 +2662,29 @@ function openChatStorage(x, after){
   ]);
 }
 
-// ===================== chat backup to iCloud Drive / Google Drive =====================
-const BK_MAGIC="CNCPT1";
+// ===================== chat backup (works like WhatsApp: no password) =====================
+// Backups are locked with a key kept with your account, so you never type a password: sign in on a new
+// phone and your backup opens. In the iPhone/Android app the backup is kept in the app's own folder, which
+// the phone's iCloud Backup (iPhone) or Google backup (Android) carries to your next phone, and it can run
+// by itself (Auto backup). On the website you save the file yourself (Files / iCloud Drive / Drive).
+const BK_MAGIC="CNCPT1", BK2="CNCPT2", BK_FILE="Backups/TaskMessage-chats.taskmessage";
 async function bkKey(pw, salt){ const base=await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]); return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:250000, hash:"SHA-256"}, base, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]); }
+async function accountBackupKey(){
+  const p="data/users/"+S.me+"/backupkey"; let d=null;
+  try { d=await store.get(p); } catch {}
+  let raw=d && d.k? Uint8Array.from(atob(d.k), c=>c.charCodeAt(0)) : null;
+  if (!raw) { raw=crypto.getRandomValues(new Uint8Array(32)); await guarded(store.set(p, {k:b64Of(raw), at:now()})); }
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt","decrypt"]);
+}
 async function gz(bytes, dir){ if (!window.CompressionStream) return bytes; const s=new Blob([bytes]).stream().pipeThrough(dir==="d"? new DecompressionStream("gzip") : new CompressionStream("gzip")); return new Uint8Array(await new Response(s).arrayBuffer()); }
 const b64Of = buf => { const u=new Uint8Array(buf); let s=""; for (let i=0;i<u.length;i+=32768) s+=String.fromCharCode(...u.subarray(i,i+32768)); return btoa(s); };
-async function buildBackup(pw, withMedia, onp){
-  const out={v:1, app:"concept", at:now(), me:S.me, chats:[], msgs:{}, voice:{}, files:{}};
+const fromB64 = b64 => { const bin=atob(b64), u=new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; };
+async function buildBackup(withMedia, onp){
+  const out={v:2, app:"concept", at:now(), me:S.me, chats:[], msgs:{}, voice:{}, files:{}};
   const chans=S.channels.filter(c=>!(S.nt.cleared||{})[c.id] || ((c.last&&c.last.at)||0)>(S.nt.cleared||{})[c.id]);
   let i=0;
   for (const c of chans) {
-    onp && onp(`Chats ${++i}/${chans.length}`);
+    onp && onp(`Backing up chats ${++i}/${chans.length}`);
     out.chats.push({id:c.id, kind:c.kind, title:chanTitle(c), members:c.members||[]});
     const rows=mergeById((await LOCAL.load("m:"+c.id))||[], S.msgCache[c.id]||[]);
     await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
@@ -2660,60 +2699,97 @@ async function buildBackup(pw, withMedia, onp){
     }
     out.msgs[c.id]=list;
   }
-  onp && onp("Locking your backup…");
+  onp && onp("Finishing…");
   const raw=await gz(new TextEncoder().encode(JSON.stringify(out)));
-  const salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
-  const ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, await bkKey(pw, salt), raw));
-  const file=new Uint8Array(6+16+12+ct.length); file.set(new TextEncoder().encode(BK_MAGIC),0); file.set(salt,6); file.set(iv,22); file.set(ct,34);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, await accountBackupKey(), raw));
+  const file=new Uint8Array(6+12+ct.length); file.set(new TextEncoder().encode(BK2),0); file.set(iv,6); file.set(ct,18);
   const d=new Date(); const name=`TaskMessage-backup-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}.taskmessage`;
-  return {file:new File([file], name, {type:"application/octet-stream"}), count:Object.values(out.msgs).reduce((a,l)=>a+l.length,0)};
+  return {file:new File([file], name, {type:"application/octet-stream"}), bytes:file, count:Object.values(out.msgs).reduce((a,l)=>a+l.length,0)};
 }
 async function readBackup(f, pw){
-  const u=new Uint8Array(await f.arrayBuffer());
-  if (new TextDecoder().decode(u.slice(0,6))!==BK_MAGIC) throw new Error("notbackup");
-  let raw; try { raw=await crypto.subtle.decrypt({name:"AES-GCM", iv:u.slice(22,34)}, await bkKey(pw, u.slice(6,22)), u.slice(34)); } catch { throw new Error("password"); }
+  const u=f instanceof Uint8Array? f : new Uint8Array(await f.arrayBuffer()); const magic=new TextDecoder().decode(u.slice(0,6));
+  let raw;
+  if (magic===BK2) { try { raw=await crypto.subtle.decrypt({name:"AES-GCM", iv:u.slice(6,18)}, await accountBackupKey(), u.slice(18)); } catch { throw new Error("otheraccount"); } }
+  else if (magic===BK_MAGIC) { if (!pw) throw new Error("needpw"); try { raw=await crypto.subtle.decrypt({name:"AES-GCM", iv:u.slice(22,34)}, await bkKey(pw, u.slice(6,22)), u.slice(34)); } catch { throw new Error("password"); } }
+  else throw new Error("notbackup");
   return JSON.parse(new TextDecoder().decode(await gz(new Uint8Array(raw), "d")));
 }
 async function restoreBackup(data){
   let n=0;
   for (const [cid, list] of Object.entries(data.msgs||{})) { const merged=mergeById(list, (await LOCAL.load("m:"+cid))||[]); await kvSet(LOCAL.key("m:"+cid), merged.slice(-5000)); LOCAL.older[cid]=merged; n+=list.length; }
   for (const [vid, b64] of Object.entries(data.voice||{})) await kvSet(LOCAL.key("vd:"+vid), b64);
-  for (const [path, b64] of Object.entries(data.files||{})) { const bin=atob(b64), u=new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); await kvSet(LOCAL.key("fd:"+path), u.buffer); }
+  for (const [path, b64] of Object.entries(data.files||{})) await kvSet(LOCAL.key("fd:"+path), fromB64(b64).buffer);
   S.msgsFor=null; openMsgs(); render(true);
   return n;
 }
+const BK_DIR = () => PLAT==="ios"? "DOCUMENTS" : "DATA";
+// Keep the backup on the phone, in the folder the phone's own iCloud / Google backup includes.
+async function keepBackupOnPhone(bytes){ const FS=NP("Filesystem"); if (!FS) return false; await FS.writeFile({path:BK_FILE, data:b64Of(bytes), directory:BK_DIR(), recursive:true}); return true; }
+async function phoneBackup(){ const FS=NP("Filesystem"); if (!FS) return null; try { const r=await FS.readFile({path:BK_FILE, directory:BK_DIR()}); return typeof r.data==="string"? fromB64(r.data) : new Uint8Array(await r.data.arrayBuffer()); } catch { return null; } }
+let BK_RUNNING=false;
+async function runBackup(onp, quiet){
+  if (BK_RUNNING) return; BK_RUNNING=true;
+  const bk={...(S.prefs.backup||{})};
+  try {
+    const r=await buildBackup(bk.media!==false, onp);
+    if (await keepBackupOnPhone(r.bytes)) { bk.last=now(); bk.size=r.bytes.length; setPref("backup", bk); if (!quiet) toast("Chats backed up"); return r; }
+    if (quiet) return r;
+    await saveBackupFile(r.file); bk.last=now(); bk.size=r.bytes.length; setPref("backup", bk); toast("Backup saved"); return r;
+  } finally { BK_RUNNING=false; }
+}
+// Auto backup in the app (Daily / Weekly / Monthly), quietly, like WhatsApp.
+async function autoBackup(){
+  if (!NATIVE || S.mode!=="live" || BK_RUNNING) return;
+  const bk=S.prefs.backup||{}; const f=bk.freq||"week"; if (f==="off") return;
+  const span={day:864e5, week:7*864e5, month:30*864e5}[f]; if (bk.last && now()-bk.last<span) return;
+  if (!S.channels.some(c=>c.last)) return;
+  try { await runBackup(null, true); } catch {}
+}
+// New phone: if the phone's backup brought a Task Message backup along, offer to restore it once.
+async function offerRestore(){
+  if (!NATIVE || S.mode!=="live" || ls.get("bkOffered:"+S.me)) return;
+  const bytes=await phoneBackup(); if (!bytes) return;
+  const have=(await Promise.all(S.channels.slice(0,20).map(c=>LOCAL.load("m:"+c.id)))).some(l=>l && l.length);
+  if (have) { ls.set("bkOffered:"+S.me, 1); return; }
+  ls.set("bkOffered:"+S.me, 1);
+  sheet("Restore your chats?", (draw, close)=>[h("p",{class:"note", style:"margin:0 4px"}, "A backup of your chats was found on this phone. Restore your messages, photos and voice notes?"),
+    h("button",{class:"primary wide", onclick:async()=>{ close(); toast("Restoring…"); try { const n=await restoreBackup(await readBackup(bytes)); toast(n+" messages restored"); } catch { toast("Couldn't restore the backup."); } }}, "Restore"),
+    h("button",{class:"ghost wide", onclick:close}, "Skip")]);
+}
 function openBackup(){
-  const bk=S.prefs.backup||{};
-  let busy="", ready=null;
-  const close=sheet("Chat backup", (draw)=>{
+  let busy="";
+  sheet("Chat backup", (draw)=>{
+    const bk=S.prefs.backup||{};
     const last=bk.last? new Date(bk.last).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}) : "Never";
+    const where = !NATIVE? "Your backup is saved as a file you keep in Files, iCloud Drive or Google Drive." :
+      PLAT==="ios"? "Your chats are backed up on this iPhone and go along with your iPhone's iCloud Backup, so they come back when you sign in on a new iPhone. Make sure iCloud Backup is on in the iPhone's Settings → your name → iCloud → iCloud Backup." :
+      "Your chats are backed up on this phone and go along with your phone's Google backup, so they come back when you sign in on a new phone. Make sure Backup by Google One is on in the phone's Settings → Google → Backup.";
     return [
-      h("p",{class:"note", style:"margin:0"}, "Back up your chats to iCloud Drive or Google Drive. Messages are kept on your phone, so a backup is how you bring them to a new phone. The backup is locked with a password only you know."),
+      h("div",{class:"bkhero"}, h("span",{class:"bkic"}, svg(ICF.lock)), h("p",{class:"note", style:"margin:0"}, where)),
       h("div",{class:"ulist sgroup"},
-        h("div",{class:"srow"}, h("span",{class:"sic"}, svg(CLOCK)), h("span",{class:"stx"}, h("b",{}, "Last backup")), h("span",{class:"sval"}, last)),
-        h("div",{class:"srow"}, h("span",{class:"sic"}, svg(ICF.image)), h("span",{class:"stx"}, h("b",{}, "Include photos and videos")), h("button",{class:"switch"+(bk.media!==false?" on":""), role:"switch", "aria-checked":String(bk.media!==false), onclick:()=>{ bk.media=bk.media===false; setPref("backup", {...bk}); draw(); }}, h("i"))),
-        h("div",{class:"srow swrap"}, h("span",{class:"sic"}, svg(ICF.cal)), h("span",{class:"stx"}, h("b",{}, "Backup reminder")),
-          h("div",{class:"segmini wide", role:"group", "aria-label":"Backup reminder"}, [["off","Off"],["day","Daily"],["week","Weekly"],["month","Monthly"]].map(([v,l])=>h("button",{"aria-pressed":String((bk.freq||"week")===v), onclick:()=>{ bk.freq=v; setPref("backup", {...bk}); draw(); }}, l))))),
+        h("div",{class:"srow"}, h("span",{class:"sic"}, svg(CLOCK)), h("span",{class:"stx"}, h("b",{}, "Last backup"), bk.size? h("span",{}, fmtSize(bk.size)) : ""), h("span",{class:"sval"}, last)),
+        h("div",{class:"srow"}, h("span",{class:"sic"}, svg(ICF.image)), h("span",{class:"stx"}, h("b",{}, "Include photos and videos")), h("button",{class:"switch"+(bk.media!==false?" on":""), role:"switch", "aria-checked":String(bk.media!==false), onclick:()=>{ setPref("backup", {...bk, media:bk.media===false}); draw(); }}, h("i"))),
+        NATIVE? h("div",{class:"srow swrap"}, h("span",{class:"sic"}, svg(ICF.cal)), h("span",{class:"stx"}, h("b",{}, "Auto backup")),
+          h("div",{class:"segmini wide", role:"group", "aria-label":"Auto backup"}, [["off","Off"],["day","Daily"],["week","Weekly"],["month","Monthly"]].map(([v,l])=>h("button",{"aria-pressed":String((bk.freq||"week")===v), onclick:()=>{ setPref("backup", {...bk, freq:v}); draw(); }}, l)))) : ""),
       busy? h("div",{class:"bkbusy"}, h("span",{class:"spin dark"}), busy) :
-      ready? h("button",{class:"primary wide", onclick:async()=>{ const f=ready.file; try { await saveBackupFile(f); bk.last=now(); setPref("backup", {...bk}); ready=null; toast("Backup saved"); draw(); } catch (e) { if (e && e.name==="AbortError") return; toast("Couldn't save the backup."); } }}, svg(IC.send), "Save to iCloud Drive / Google Drive") :
-      h("button",{class:"primary wide", onclick:()=>askPassword(true, async pw=>{ busy="Preparing…"; draw(); try { ready=await buildBackup(pw, bk.media!==false, t=>{ busy=t; draw(); }); busy=""; draw(); toast(ready.count+" messages ready to save"); } catch { busy=""; draw(); toast("Couldn't make the backup."); } })}, svg(ICF.lock), "Back up now"),
-      ready? h("p",{class:"note", style:"margin:-4px 4px 0"}, PLAT==="android"? "Tap the button, then choose Drive." : "Tap the button, then Save to Files → iCloud Drive.") : "",
-      h("button",{class:"ghost", style:"align-self:center", onclick:()=>{
-        const inp=h("input",{type:"file", style:"position:fixed;left:-9999px;opacity:0", onchange:e=>{ const f=e.target.files&&e.target.files[0]; inp.remove(); if (!f) return;
-          askPassword(false, async pw=>{ busy="Restoring…"; draw(); try { const data=await readBackup(f, pw); const n=await restoreBackup(data); busy=""; draw(); toast(n+" messages restored"); } catch (err) { busy=""; draw(); toast(err && err.message==="password"? "Wrong password." : err && err.message==="notbackup"? "That isn't a Task Message backup file." : "Couldn't restore that backup."); } }); }});
-        document.body.append(inp); inp.click(); }}, svg(IC.arrow), "Restore from a backup")
+      h("button",{class:"primary wide", onclick:async()=>{ busy="Backing up…"; draw(); try { await runBackup(t=>{ busy=t; draw(); }); } catch (e) { if (!(e && e.name==="AbortError")) toast("Couldn't back up. Check your connection."); } busy=""; draw(); }}, "Back up now"),
+      h("button",{class:"ghost", style:"align-self:center", onclick:async()=>{
+        if (NATIVE) { const bytes=await phoneBackup(); if (bytes) { busy="Restoring…"; draw(); try { const n=await restoreBackup(await readBackup(bytes)); toast(n+" messages restored"); } catch { toast("Couldn't restore the backup."); } busy=""; draw(); return; } }
+        const inp=h("input",{type:"file", style:"position:fixed;left:-9999px;opacity:0", onchange:async e=>{ const f=e.target.files&&e.target.files[0]; inp.remove(); if (!f) return;
+          const go=async pw=>{ busy="Restoring…"; draw(); try { const n=await restoreBackup(await readBackup(f, pw)); busy=""; draw(); toast(n+" messages restored"); } catch (err) { busy=""; draw();
+            const m=err && err.message; if (m==="needpw") { askPassword(false, go); return; }
+            toast(m==="password"? "Wrong password." : m==="notbackup"? "That isn't a Task Message backup file." : m==="otheraccount"? "That backup belongs to a different account." : "Couldn't restore that backup."); } };
+          go(); }});
+        document.body.append(inp); inp.click(); }}, svg(IC.arrow), "Restore chats")
     ];
   });
 }
-// Saving the backup file. In the iPhone/Android app the phone's own share screen opens, where you pick
-// "Save to Files → iCloud Drive" (iPhone) or "Drive" (Android). On iPhone a copy is also kept in
-// Files → On My iPhone → Task Message, which the iPhone's own iCloud Backup includes.
+// Website (and a backup copy you want elsewhere): the phone's share screen opens — pick Save to Files → iCloud Drive, or Drive.
 async function saveBackupFile(f){
   const FS=NP("Filesystem"), SH=NP("Share");
   if (FS && SH) {
-    const data=b64Of(await f.arrayBuffer());
-    if (PLAT==="ios") { try { await FS.writeFile({path:"Backups/"+f.name, data, directory:"DOCUMENTS", recursive:true}); } catch {} }
-    const w=await FS.writeFile({path:f.name, data, directory:"CACHE"});
+    const w=await FS.writeFile({path:f.name, data:b64Of(await f.arrayBuffer()), directory:"CACHE"});
     try { await SH.share({title:"Task Message backup", files:[w.uri], dialogTitle:"Save your backup"}); }
     catch (e) { if (/cancel/i.test(String(e && (e.message||e)))) { const err=new Error("cancel"); err.name="AbortError"; throw err; } throw e; }
     return;
@@ -2721,20 +2797,13 @@ async function saveBackupFile(f){
   if (navigator.canShare && navigator.canShare({files:[f]})) { await navigator.share({files:[f], title:"Task Message backup"}); return; }
   const a=h("a",{href:URL.createObjectURL(f), download:f.name}); document.body.append(a); a.click(); a.remove();
 }
+// Only for opening an old backup made before backups stopped needing a password.
 function askPassword(isNew, done){
-  let a="", b="";
-  sheet(isNew? "Backup password" : "Enter backup password", (draw, close)=>[
-    h("p",{class:"note", style:"margin:0"}, isNew? "Choose a password for this backup. You'll need it to restore — we can't recover it for you." : "Type the password you used when you made the backup."),
-    h("input",{class:"inp", id:"bk-p1", type:"password", autocomplete:isNew?"new-password":"current-password", placeholder:"Password (at least 6 characters)", oninput:e=>a=e.target.value}),
-    isNew? h("input",{class:"inp", id:"bk-p2", type:"password", autocomplete:"new-password", placeholder:"Type it again", oninput:e=>b=e.target.value}) : "",
-    h("button",{class:"primary wide", onclick:()=>{ if (a.length<6) { toast("Use at least 6 characters."); return; } if (isNew && a!==b) { toast("The passwords don't match."); return; } close(); done(a); }}, "Continue")]);
-  setTimeout(()=>{ const i=$("#bk-p1"); if (i) i.focus(); }, 60);
-}
-function backupReminder(){
-  const bk=S.prefs.backup||{}; const f=bk.freq||"week"; if (f==="off" || S.mode!=="live") return;
-  const span={day:864e5, week:7*864e5, month:30*864e5}[f]; if (bk.last && now()-bk.last<span) return;
-  if (!S.channels.some(c=>c.last)) return;
-  toast(bk.last? "Time to back up your chats" : "Back up your chats to iCloud or Google Drive", {label:"Back up", fn:openBackup});
+  let a="";
+  sheet("Old backup password", (draw, close)=>[
+    h("p",{class:"note", style:"margin:0"}, "This backup was made with an older version that used a password. Type that password once to open it."),
+    h("input",{class:"inp", id:"bk-p1", type:"password", autocomplete:"current-password", placeholder:"Password", oninput:e=>a=e.target.value}),
+    h("button",{class:"primary wide", onclick:()=>{ if (!a) return; close(); done(a); }}, "Open backup")]);
 }
 
 // ===================== keep pop-up menus inside the screen =====================
@@ -2863,7 +2932,9 @@ async function nativeInit(){
     }
     kb.addListener("keyboardDidShow", ()=>{ const st=$("#stream"); if (st) st.scrollTop=st.scrollHeight; }); }
   const app=NP("App");
-  if (app) app.addListener("appStateChange", ({isActive})=>{ if (isActive && S.inThread && S.view==="chats") { markRead(); scheduleRender(); } });
+  if (app) app.addListener("appStateChange", ({isActive})=>{ if (isActive && S.inThread && S.view==="chats") { markRead(); scheduleRender(); } if (!isActive) autoBackup(); });
+  setTimeout(()=>{ offerRestore().catch(()=>{}); }, 6000);
+  setTimeout(()=>{ autoBackup(); }, 45000);
   const sb=NP("SystemBars"); const dark=matchMedia("(prefers-color-scheme: dark)").matches;
   if (sb) { try { sb.setStyle({style: "DEFAULT"}); } catch {} }
   void dark;
