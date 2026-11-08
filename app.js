@@ -1361,47 +1361,65 @@ function swipeTask(m){
   if (existing) { openTask(existing.id); return; }
   quickTask([m], {silent:mode==="silent", open:mode!=="silent"});
 }
-// Swipe right = reply. Swipe left = slide the bubble over and show Forward / Task buttons (like the chat list).
-// Touch events on phones (most reliable on iPhone), mouse/pen through pointer events.
+// A light tap felt in the hand: native haptics in the app, vibration on Android, and the iOS switch trick in Safari.
+const haptic=(()=>{ let lab=null; return ()=>{
+  try { const H=window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Haptics; if (H && H.impact) { H.impact({style:"LIGHT"}); return; } } catch {}
+  try { if (navigator.vibrate && navigator.vibrate(8)) return; } catch {}
+  try { if (!lab) { const inp=document.createElement("input"); inp.type="checkbox"; inp.setAttribute("switch",""); inp.id="tm-haptic"; inp.style.display="none"; lab=document.createElement("label"); lab.htmlFor="tm-haptic"; lab.style.display="none"; document.body.append(inp, lab); } lab.click(); } catch {}
+}; })();
+// Swipe right = reply. Swipe left = make a task (or open it). Like WhatsApp's swipe-to-reply:
+// the bubble follows the finger, an icon fills in, a little tap is felt when it's far enough, and letting go does it.
+// The swipe can start anywhere on the message's row, and a quick flick counts too.
 let OPEN_MSG=null;
-function closeMsgActions(){ if (!OPEN_MSG) return; const el=OPEN_MSG; OPEN_MSG=null; el.classList.remove("mopen"); el.style.setProperty("--sx","0px"); }
-document.addEventListener("touchstart", e=>{ if (OPEN_MSG && !OPEN_MSG.contains(e.target)) closeMsgActions(); }, {passive:true, capture:true});
-document.addEventListener("pointerdown", e=>{ if (OPEN_MSG && e.pointerType!=="touch" && !OPEN_MSG.contains(e.target)) closeMsgActions(); }, true);
-const MOPEN=-132;
+function closeMsgActions(){ OPEN_MSG=null; }
+const SW_REPLY=56, SW_TASK=60;
 function attachGestures(el, strip, m){
   if (m.deleted) return;
   const canAct = !m.pending && S.canWrite && plain(m)!==false;
-  if (canAct) (strip.parentElement||el).append(h("div",{class:"macts", "aria-hidden":"true"},
-    h("button",{class:"mact", tabindex:"-1", onclick:e=>{ e.stopPropagation(); closeMsgActions(); forwardMenu(m); }}, h("span",{class:"maci"}, svg(ICF.fwd)), "Forward"),
-    h("button",{class:"mact task", tabindex:"-1", onclick:e=>{ e.stopPropagation(); closeMsgActions(); swipeTask(m); }}, h("span",{class:"maci"}, svg(IC.knot)), m.taskId? "Open task" : "Task")));
-  let x0=0,y0=0,dx=0,base=0,active=false,decided=false,horiz=false,lp=null,endedAt=0;
-  const set=v=>{ el.style.setProperty("--sx", v+"px"); el.classList.toggle("swr", v>56); el.classList.toggle("swl", v<-40); el.style.setProperty("--mp", String(Math.min(1, Math.max(0, -v/ -MOPEN)))); };
-  const start=(x,y,target)=>{ if (S.selecting || target.closest("button,a,.vbars,input,.macts")) return false;
-    x0=x; y0=y; dx=0; base=OPEN_MSG===el? MOPEN : 0; active=true; decided=false; horiz=false;
+  const brow=strip.parentElement||el;
+  const ico = canAct? h("span",{class:"swi swi-l","aria-hidden":"true"}, svg(IC.knot)) : null;
+  if (ico) brow.append(ico);
+  let x0=0,y0=0,t0=0,mx=0,dx=0,trail=[],active=false,decided=false,horiz=false,lp=null,endedAt=0,armL=false,armR=false;
+  const band=(d,lim,cap)=>{ const a=Math.abs(d); const v=a<=lim? a : lim+(a-lim)*0.32; return Math.sign(d)*Math.min(cap, v); };
+  const set=v=>{
+    el.style.setProperty("--sx", v+"px");
+    el.style.setProperty("--o", String(Math.min(1, Math.max(0, v/SW_REPLY))));
+    el.style.setProperty("--p", String(Math.min(1, Math.max(0, -v/SW_TASK))));
+    const r=v>=SW_REPLY, l=v<=-SW_TASK;
+    if (r!==armR || l!==armL) { if ((r&&!armR) || (l&&!armL)) haptic(); armR=r; armL=l; }
+    el.classList.toggle("swr", r); el.classList.toggle("swl", l);
+  };
+  const start=(x,y,target)=>{ if (S.selecting || target.closest("button,a,.vbars,input,textarea,.reacts,.chip")) return false;
+    x0=x; y0=y; t0=performance.now(); mx=0; dx=0; trail=[[t0,0]]; active=true; decided=false; horiz=false; armL=armR=false;
+    if (ico) ico.style.left=Math.max(0, strip.offsetLeft+strip.offsetWidth-36)+"px";
     clearTimeout(lp); lp=setTimeout(()=>{ if (active && !decided){ active=false; holdMenu(m); } }, 430); return true; };
-  const move=(x,y)=>{ if (!active) return false; const mx=x-x0, my=y-y0;
-    if (!decided && (Math.abs(mx)>7 || Math.abs(my)>7)) { decided=true; clearTimeout(lp); horiz=Math.abs(mx)>Math.abs(my)*1.15; if (!horiz) { active=false; return false; } SW.drag=true; el.classList.add("swiping"); if (OPEN_MSG && OPEN_MSG!==el) closeMsgActions(); }
+  const move=(x,y)=>{ if (!active) return false; mx=x-x0; const my=y-y0; const tn=performance.now(); trail.push([tn,mx]); while (trail.length>2 && tn-trail[0][0]>90) trail.shift();
+    if (!decided && (Math.abs(mx)>6 || Math.abs(my)>6)) { decided=true; clearTimeout(lp); horiz=Math.abs(mx)>Math.abs(my); if (!horiz) { active=false; return false; } SW.drag=true; el.classList.add("swiping"); }
     if (!horiz) return false;
-    let v=base+mx; if (!canAct) v=Math.max(0,v);
-    v = v>0? Math.min(90, v) : Math.max(MOPEN-30, v);
-    dx=v; set(v); return true; };
+    let v=mx; if (!canAct) v=Math.max(0,v);
+    dx = v>0? band(v, SW_REPLY, 96) : band(v, SW_TASK, 104);
+    set(dx); return true; };
   const end=()=>{ clearTimeout(lp); if (!active) return; active=false; if (!horiz) return;
     el.classList.remove("swiping"); SW.drag=false; endedAt=Date.now();
-    if (dx>56) { set(0); S.replyTo=m.id; S.actFor=null; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); }
-    else if (dx < MOPEN/2.4 && canAct) { set(MOPEN); el.classList.add("mopen"); OPEN_MSG=el; if (navigator.vibrate) try{ navigator.vibrate(6); }catch{} }
-    else { set(0); el.classList.remove("mopen"); if (OPEN_MSG===el) OPEN_MSG=null; }
-    if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag && !OPEN_MSG) scheduleRender(); }, 300); } };
-  const cancel=()=>{ clearTimeout(lp); if (active && horiz) { el.classList.remove("swiping"); SW.drag=false; set(OPEN_MSG===el? MOPEN : 0); } active=false; };
+    const f=trail[0], vel=(mx-f[1])/Math.max(16, performance.now()-f[0]);  // speed over the last ~90ms, px per ms
+    const doReply = dx>=SW_REPLY || (mx>28 && vel>0.4);
+    const doTask = canAct && (dx<=-SW_TASK || (mx<-28 && vel<-0.4));
+    set(0); el.classList.remove("swr","swl");
+    if (doReply) { if (!armR) haptic(); S.replyTo=m.id; S.actFor=null; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); }
+    else if (doTask) { if (!armL) haptic(); el.classList.add("tasked"); setTimeout(()=>el.classList.remove("tasked"), 500); swipeTask(m); }
+    if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag) scheduleRender(); }, 300); } };
+  const cancel=()=>{ clearTimeout(lp); if (active && horiz) { el.classList.remove("swiping","swr","swl"); SW.drag=false; set(0); } active=false; };
   if ("ontouchstart" in window) {
-    strip.addEventListener("touchstart", e=>{ if (e.touches.length!==1) return; const t=e.touches[0]; start(t.clientX, t.clientY, e.target); }, {passive:true});
-    strip.addEventListener("touchmove", e=>{ const t=e.touches[0]; if (t) move(t.clientX, t.clientY); }, {passive:true}); // CSS touch-action keeps sideways moves for us, so scrolling stays smooth
-    strip.addEventListener("touchend", end); strip.addEventListener("touchcancel", cancel);
+    el.addEventListener("touchstart", e=>{ if (e.touches.length!==1) return; const t=e.touches[0]; start(t.clientX, t.clientY, e.target); }, {passive:true});
+    // once the finger is clearly going sideways, the chat stops scrolling so the swipe feels steady
+    el.addEventListener("touchmove", e=>{ const t=e.touches[0]; if (t && move(t.clientX, t.clientY) && e.cancelable) e.preventDefault(); }, {passive:false});
+    el.addEventListener("touchend", end); el.addEventListener("touchcancel", cancel);
   }
-  strip.addEventListener("pointerdown", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; if (e.button>0) return; if (start(e.clientX, e.clientY, e.target)) { try { strip.setPointerCapture(e.pointerId); } catch {} } });
-  strip.addEventListener("pointermove", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; move(e.clientX, e.clientY); });
-  strip.addEventListener("pointerup", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; end(); });
-  strip.addEventListener("pointercancel", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; cancel(); });
-  strip.addEventListener("click", e=>{ if (Date.now()-endedAt<400) { e.stopPropagation(); e.preventDefault(); return; } if (OPEN_MSG===el) { e.stopPropagation(); closeMsgActions(); } }, true);
+  el.addEventListener("pointerdown", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; if (e.button>0) return; if (start(e.clientX, e.clientY, e.target)) { try { el.setPointerCapture(e.pointerId); } catch {} } });
+  el.addEventListener("pointermove", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; move(e.clientX, e.clientY); });
+  el.addEventListener("pointerup", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; end(); });
+  el.addEventListener("pointercancel", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; cancel(); });
+  el.addEventListener("click", e=>{ if (Date.now()-endedAt<400) { e.stopPropagation(); e.preventDefault(); } }, true);
   strip.addEventListener("contextmenu", e=>{ e.preventDefault(); if (!horiz) holdMenu(m); });
 }
 async function copyMsg(m){ const t=plain(m); S.actFor=null; render(true); try { await navigator.clipboard.writeText(t||""); toast("Copied"); } catch { toast("Couldn't copy here"); } }
@@ -3095,7 +3113,7 @@ function renderMsg(m, cont, chan){
   const el = h("div",{style:mine?null:`--tint:${(S.people[m.by]&&S.people[m.by].color)||colorFor(m.by)}`, class:`msg${mine?" mine":""}${cont?" cont":""}${task?" knotted":""}${m.pending?" pending":""}${rich?" rich k-"+m.kind:""}${S.justTied===m.id?" justtied":""}${S.selecting?" selmode":""}${sel?" selected":""}`, id:"msg-"+m.id, onclick:e=>{ if (S.selecting && !m.deleted){ e.stopPropagation(); toggleSel(m.id); } }});
   if (S.selecting) el.append(h("span",{class:"selck"}, sel? svg(ICF.check):""));
   if (!cont && !mine && ch.kind!=="dm") el.append(h("div",{class:"who"}, nameOf(m.by).replace(/^Example:\s*/,"")));
-  const strip = h("div",{class:"strip", tabindex:"0", "aria-label":"Message. Hold for options, swipe right to reply, swipe left to forward or make a task", onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); holdMenu(m); } }});
+  const strip = h("div",{class:"strip", tabindex:"0", "aria-label":"Message. Hold for options, swipe right to reply, swipe left to make a task", onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); holdMenu(m); } }});
   if (m.fwd) strip.append(h("div",{class:"fwdlabel"}, svg(m.fwd>=5? ICF.fwd2 : ICF.fwd), m.fwd>=5? "Forwarded many times" : "Forwarded"));
   if (m.replyTo) { const r=S.msgs.find(x=>x.id===m.replyTo); if (r) strip.append(h("div",{class:"quote", onclick:e=>{e.stopPropagation(); jumpToMessage(S.active, r.id);}}, h("b",{},nameOf(r.by)), (r.deleted?"Message deleted": msgText(r)).slice(0,140))); }
   if (m.statusQuote) strip.append(h("div",{class:"quote"}, h("b",{}, "Status · "+nameOf(m.statusQuote.by).replace(/^Example:\s*/,"")), String(m.statusQuote.text).slice(0,140)));

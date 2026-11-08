@@ -2290,3 +2290,16 @@ button:active{opacity:1}
   .main.chatmain .compose .replybar,.main.chatmain .compose .recbar,.main.chatmain .compose .vdraft,.main.chatmain .compose .blockedbar,.main.chatmain .compose .hint,.main.chatmain .compose .emojipanel{
     background:var(--g-fill)!important;border:.5px solid var(--g-line)!important;border-radius:20px!important;box-shadow:var(--g-shadow);-webkit-backdrop-filter:blur(18px) saturate(180%);backdrop-filter:blur(18px) saturate(180%)}
 }
+
+/* Swipe left on a message = make a task. The icon fills in as you swipe, turns green and pops when letting go will do it. */
+.brow .swi-l{right:auto;top:50%;margin-top:-17px;width:34px;height:34px;z-index:0;opacity:var(--p,0);transform:scale(calc(.55 + .45 * var(--p,0)));transition:opacity .2s,transform .2s cubic-bezier(.2,.9,.3,1.4),background .15s,color .15s;background:var(--surface);color:var(--ok,#34C759);box-shadow:0 1px 4px rgba(0,0,0,.14)}
+.brow .swi-l svg.i{width:18px;height:18px}
+.msg.swiping .brow .swi-l{transition:transform .14s cubic-bezier(.2,.9,.3,1.4),background .12s,color .12s}
+.msg.swl .brow .swi-l{opacity:1;transform:scale(1.12);background:#34C759;color:#fff}
+.msg.swiping .swi-r{transform:scale(calc(.55 + .45 * var(--o,0)))}
+.msg.swr .swi-r{transform:scale(1.12)!important}
+.brow .strip{position:relative;z-index:1}
+.msg.swiping .fwdbtn,.msg.swiping .mchev{opacity:0!important;transition:opacity .1s}
+.msg.tasked .brow .strip{animation:taskedPop .45s cubic-bezier(.2,.9,.3,1)}
+@keyframes taskedPop{0%{filter:none}30%{filter:drop-shadow(0 0 0 rgba(52,199,89,0)) brightness(1.04)}100%{filter:none}}
+.msg{touch-action:pan-y}
