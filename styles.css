@@ -2430,3 +2430,13 @@ button:active{opacity:1}
 .scrim.page ~ .scrim.page{z-index:85!important}
 .scrim.page ~ .scrim.page ~ .scrim:not(.page){z-index:95!important}
 @media (max-width:860px){ .scrim.page .modalacts > .pagesave{flex:1 1 auto!important;width:100%!important;height:50px!important;border-radius:14px!important;display:flex!important;align-items:center;justify-content:center;font:600 16px var(--f-body)!important} }
+@media (max-width:860px){
+  /* the stage column runs to the bottom edge of the screen; the floating Chats/Tasks bar sits on top of it */
+  .boardwrap{margin-bottom:calc(-1 * env(safe-area-inset-bottom,0px))!important}
+  .board{margin-bottom:-28px!important}
+  .board .cards{padding-bottom:calc(var(--dock-b,8px) + var(--dock-h,60px) + 52px)!important}
+}
+/* the page itself never scrolls; letting the body paint into the screen edges lets the chat and the task board run
+   all the way to the bottom of the screen (under the home bar) instead of stopping short of it */
+html{overflow:hidden!important}
+body{overflow:visible!important}
