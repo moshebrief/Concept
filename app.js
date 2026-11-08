@@ -3004,6 +3004,18 @@ addEventListener("resize", queueEdges);
 document.addEventListener("animationend", queueEdges, true);
 new MutationObserver(queueEdges).observe(document.body, {childList:true});
 setTimeout(()=>{ const app=document.getElementById("app"); if (app) new MutationObserver(queueEdges).observe(app, {childList:true, attributes:true, attributeFilter:["class"]}); }, 0);
+// Any scrolled area (settings, task list, a task, board columns…) stays where it was when the screen redraws,
+// e.g. after flipping a switch in Settings. Areas are matched by their class names and order on the page.
+function keepScrolls(root){
+  const skip=e=>e.id==="stream"||e.id==="list"||e.id==="board";
+  const key=e=>e.tagName+"."+[...e.classList].filter(c=>!/^(enter|anim|over|tap|tapped|swiping)$/.test(c)).sort().join(".");
+  const seen={}, saved=[];
+  for (const e of root.querySelectorAll("*")) { if (skip(e) || (e.scrollHeight<=e.clientHeight && e.scrollWidth<=e.clientWidth)) continue;
+    const k=key(e), n=seen[k]=(seen[k]||0)+1; if (e.scrollTop || e.scrollLeft) saved.push([k, n, e.scrollTop, e.scrollLeft]); }
+  return ()=>{ if (!saved.length) return; const seen2={}, found={};
+    for (const e of root.querySelectorAll("*")) { if (skip(e) || (e.scrollHeight<=e.clientHeight && e.scrollWidth<=e.clientWidth)) continue; const k=key(e); seen2[k]=(seen2[k]||0)+1; found[k+"#"+seen2[k]]=e; }
+    for (const [k,n,t,l] of saved) { const e=found[k+"#"+n]; if (e) { e.scrollTop=t; e.scrollLeft=l; } } };
+}
 function render(keepComposer){
   queueEdges();
   if (RQ) { cancelAnimationFrame(RQ); RQ=0; }
@@ -3016,6 +3028,7 @@ function render(keepComposer){
   const listScroll = $("#list")? $("#list").scrollTop: 0;
   const boardScroll = $("#board")? [$("#board").scrollLeft, $("#board").scrollTop]: null;
   const focusId = document.activeElement && document.activeElement.id && $("#drawer")?.contains(document.activeElement) ? document.activeElement.id : null;
+  const kept=keepScrolls(app);
 
   [...app.children].forEach(c => { if (!c.matches(".rail,.banner")) c.remove(); });
   document.querySelectorAll(".navb").forEach(b => b.setAttribute("aria-current", String(b.dataset.view===S.view)));
@@ -3042,6 +3055,7 @@ function render(keepComposer){
   if ($("#list")) $("#list").scrollTop=listScroll;
   if (boardScroll && $("#board")) { $("#board").scrollLeft=boardScroll[0]; $("#board").scrollTop=boardScroll[1]; }
   if (focusId && $("#"+focusId)) $("#"+focusId).focus();
+  kept();
   S.justTied=null;
   if (playing) syncPlayer();
   updateTypingUI();
