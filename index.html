@@ -14,9 +14,11 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=202611081150">
 </head>
 <body>
+<!-- iPhone Safari colours its top and bottom bars from fixed strips at the screen edges; these hidden strips carry the colour of the bar next to each edge -->
+<div id="tint-top" aria-hidden="true"></div><div id="tint-bot" aria-hidden="true"></div>
 <div id="boot" aria-hidden="true"><img src="icon.svg" alt="" width="88" height="88"></div>
 <div class="app" id="app">
   <div class="banner" id="banner" hidden></div>
@@ -30,9 +32,9 @@
   </nav>
   <!-- views injected -->
 </div>
-<script src="config.js"></script>
-<script src="supabase.js"></script>
-<script src="tones.js"></script>
-<script src="app.js"></script>
+<script src="config.js?v=202611081150"></script>
+<script src="supabase.js?v=202611081150"></script>
+<script src="tones.js?v=202611081150"></script>
+<script src="app.js?v=202611081150"></script>
 </body>
 </html>

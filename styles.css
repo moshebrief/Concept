@@ -2303,3 +2303,9 @@ button:active{opacity:1}
 .msg.tasked .brow .strip{animation:taskedPop .45s cubic-bezier(.2,.9,.3,1)}
 @keyframes taskedPop{0%{filter:none}30%{filter:drop-shadow(0 0 0 rgba(52,199,89,0)) brightness(1.04)}100%{filter:none}}
 .msg{touch-action:pan-y}
+
+/* iPhone Safari (iOS 26+) tints its status bar and bottom bar from full-width fixed strips touching the edges.
+   These strips are invisible (visibility:hidden is still sampled) and carry the colour of the bar next to each edge. */
+#tint-top,#tint-bot{position:fixed;left:0;right:0;width:100%;height:12px;visibility:hidden;pointer-events:none;z-index:2147483000}
+#tint-top{top:0;background-color:var(--edge-top,var(--paper))}
+#tint-bot{bottom:0;background-color:var(--edge-bot,var(--paper))}
