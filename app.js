@@ -1062,20 +1062,31 @@ async function savePrefsDoc(){
   else { ls.set("pins", S.pins); ls.set("stages", doc.stages); }
 }
 function addStage(name){ name=name.trim(); if (!name) return; const used=STATUSES.map(s=>s.c); const c=STAGE_COLORS.find(x=>!used.includes(x))||STAGE_COLORS[STATUSES.length%STAGE_COLORS.length]; STATUSES.splice(STATUSES.length-1,0,{id:"s"+uidShort().slice(0,6), name:name.slice(0,24), c}); S.addingStage=false; savePrefsDoc(); render(); }
-function stageMenu(s, x, y){
-  const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
-  const i=STATUSES.findIndex(z=>z.id===s.id); const locked=s.id==="todo"||s.id==="done";
-  const done=()=>{ scrim.remove(); savePrefsDoc(); render(); };
-  const m=h("div",{class:"popmenu stagemenu", style:`left:${Math.max(8,Math.min(x-120, innerWidth-248))}px;top:${Math.min(y+8, innerHeight-230)}px`},
-    h("input",{class:"sinp full", id:"stg-name", value:s.name, maxlength:"24", "aria-label":"Stage name", onkeydown:e=>{ if (e.key==="Enter"){ const v=e.target.value.trim(); if (v) s.name=v; done(); } }, onchange:e=>{ const v=e.target.value.trim(); if (v) s.name=v; }}),
-    h("div",{class:"swatches left"}, STAGE_COLORS.map(c=>h("button",{class:"sw"+(s.c===c?" on":""), style:`--sw:${c}`, "aria-label":"Color", onclick:()=>{ s.c=c; done(); }}))),
-    h("div",{class:"menuicons"},
-      !locked && i>1? h("button",{class:"iconbtn", title:"Move left", "aria-label":"Move left", onclick:()=>{ STATUSES.splice(i,1); STATUSES.splice(i-1,0,s); done(); }}, svg(IC.back)) : h("span"),
-      !locked && i<STATUSES.length-2? h("button",{class:"iconbtn", title:"Move right", "aria-label":"Move right", onclick:()=>{ STATUSES.splice(i,1); STATUSES.splice(i+1,0,s); done(); }}, svg(IC.arrow)) : h("span"),
-      h("span",{class:"grow"}),
-      !locked? h("button",{class:"iconbtn dangerbtn", title:"Delete stage", "aria-label":"Delete stage", onclick:()=>{ for (const t of S.tasks.filter(t=>t.status===s.id && canSeeTask(t))) store.update("tasks/"+t.id,{status:"todo"}).catch(()=>{}); STATUSES.splice(i,1); done(); }}, svg(IC.trash)) : "",
-      h("button",{class:"iconbtn", title:"Done", "aria-label":"Done", onclick:()=>{ const v=$("#stg-name").value.trim(); if (v) s.name=v; done(); }}, svg(ICF.check))));
-  scrim.append(m); document.body.append(scrim); setTimeout(()=>{ const n=$("#stg-name"); if (n) n.select(); });
+// Edit a stage (name, colour, order, delete) in a proper sheet, like the other settings screens.
+function stageMenu(s){
+  const locked=s.id==="todo"||s.id==="done";
+  let name=s.name, color=s.c;
+  const idx=()=>STATUSES.findIndex(z=>z.id===s.id);
+  const apply=()=>{ const v=name.trim(); if (v) s.name=v.slice(0,24); s.c=color; savePrefsDoc(); render(); };
+  sheet("Edit stage", (draw, close)=>{ const i=idx(); return [
+    h("label",{class:"eplbl"}, "Name"),
+    h("input",{class:"inp", id:"stg-name", maxlength:"24", value:name, autocomplete:"off", "aria-label":"Stage name", oninput:e=>name=e.target.value,
+      onkeydown:e=>{ if (e.key==="Enter") { e.preventDefault(); apply(); close(); } }}),
+    h("label",{class:"eplbl"}, "Color"),
+    h("div",{class:"stgsw"}, STAGE_COLORS.map(c=>h("button",{class:"sw"+(color===c?" on":""), style:`--sw:${c}`, "aria-label":"Color", "aria-pressed":String(color===c), onclick:()=>{ color=c; draw(); }}))),
+    !locked? h("label",{class:"eplbl"}, "Position") : "",
+    !locked? h("div",{class:"stgmove"},
+      h("button",{class:"ghost", disabled:!(i>1), onclick:()=>{ const j=idx(); if (j>1) { STATUSES.splice(j,1); STATUSES.splice(j-1,0,s); savePrefsDoc(); render(); draw(); } }}, svg(IC.back), "Earlier"),
+      h("button",{class:"ghost", disabled:!(i<STATUSES.length-2), onclick:()=>{ const j=idx(); if (j<STATUSES.length-2) { STATUSES.splice(j,1); STATUSES.splice(j+1,0,s); savePrefsDoc(); render(); draw(); } }}, "Later", svg(IC.arrow))) : "",
+    h("button",{class:"primary wide", onclick:()=>{ apply(); close(); }}, "Save"),
+    !locked? h("button",{class:"ghost wide dangertxt", onclick:()=>{ close(); confirmDeleteStage(s); }}, svg(IC.trash), "Delete stage") : ""
+  ]; });
+}
+function confirmDeleteStage(s){
+  const n=S.tasks.filter(t=>t.status===s.id && canSeeTask(t)).length;
+  sheet("Delete "+s.name+"?", (draw, close)=>[h("p",{class:"note", style:"margin:0 4px"}, n? `The ${n} task${n>1?"s":""} in ${s.name} will move to ${STATUSES[0].name}.` : "This stage has no tasks."),
+    h("button",{class:"primary wide danger", onclick:()=>{ close(); for (const t of S.tasks.filter(t=>t.status===s.id && canSeeTask(t))) store.update("tasks/"+t.id,{status:"todo"}).catch(()=>{}); const i=STATUSES.findIndex(z=>z.id===s.id); if (i>=0) STATUSES.splice(i,1); savePrefsDoc(); render(); }}, svg(IC.trash), "Delete stage"),
+    h("button",{class:"ghost wide", onclick:close}, "Cancel")]);
 }
 function stagePicker(t, x, y){
   const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
@@ -3295,7 +3306,7 @@ function renderBoard(){
       ondrop:e=>{e.preventDefault(); col.classList.remove("over"); const id=e.dataTransfer.getData("text/plain"); if (id) moveTask(id, s.id);}});
     col.append(h("div",{class:"colh"}, h("span",{class:"colpill"}, s.name, h("i",{}, list.length)), h("span",{class:"grow"}),
       S.canWrite? h("button",{class:"iconbtn sm coladd", title:"New task in "+s.name, "aria-label":"New task in "+s.name, onclick:()=>newBlankTask(s.id)}, svg(IC.plus)) : "",
-      S.canWrite? h("button",{class:"iconbtn sm", title:"Edit stage", "aria-label":"Edit stage "+s.name, onclick:e=>stageMenu(s, e.clientX, e.clientY)}, svg(ICF.more)) : ""));
+      S.canWrite? h("button",{class:"iconbtn sm", title:"Edit stage", "aria-label":"Edit stage "+s.name, onclick:()=>stageMenu(s)}, svg(ICF.more)) : ""));
     const cards=h("div",{class:"cards"});
     if (!list.length) cards.append(h("div",{class:"colempty"}, h("span",{}, "No tasks in "+s.name)));
     list.forEach(t=>{
