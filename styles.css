@@ -2326,3 +2326,61 @@ button:active{opacity:1}
 }
 /* whatever peeks out around the keyboard's rounded corners is the colour of the screen right above it */
 :root.kb-open body{background:var(--edge-bot,var(--paper))}
+
+/* ===== Task board on phones: one stage fills the screen, tabs on top, swipe between stages ===== */
+.stagetabs{display:none}
+@media (max-width:860px){
+  .boardwrap{display:flex!important;flex-direction:column!important;min-height:0;overflow:hidden}
+  .boardwrap > .bhead{flex:none}
+  .stagetabs{display:flex;flex:none;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 16px 10px;-webkit-overflow-scrolling:touch}
+  .stagetabs::-webkit-scrollbar{display:none}
+  .stab{flex:none;display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:999px;border:0;background:var(--fill);color:var(--ink);font:600 14px var(--f-body);white-space:nowrap}
+  .stab i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+  .stab b{font:600 12px var(--f-body);min-width:20px;height:20px;padding:0 6px;border-radius:999px;display:grid;place-items:center;background:color-mix(in srgb,var(--ink) 9%,transparent);color:var(--muted)}
+  .stab[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+  .stab[aria-selected="true"] b{background:color-mix(in srgb,var(--paper) 22%,transparent);color:var(--paper)}
+  .board{flex:1 1 auto!important;min-height:0!important;display:grid!important;grid-auto-flow:column!important;grid-template-columns:none!important;grid-auto-columns:calc(100vw - 32px)!important;gap:12px!important;
+    overflow-x:auto!important;overflow-y:hidden!important;scroll-snap-type:x mandatory!important;scroll-padding:0 16px;padding:0 16px!important;align-items:stretch!important;scrollbar-width:none;overscroll-behavior-x:contain}
+  .board::-webkit-scrollbar{display:none}
+  .board .col{scroll-snap-align:start!important;scroll-snap-stop:always;display:flex!important;flex-direction:column!important;min-height:0!important;height:auto!important;border-radius:20px!important;
+    background:color-mix(in srgb,var(--c) 6%,var(--fill))!important;overflow:hidden}
+  .board .colh{flex:none;padding:12px 8px 6px 14px!important;gap:2px}
+  .board .colpill{background:none!important;color:var(--ink)!important;padding:0!important;font:700 17px var(--f-body)!important;display:flex;align-items:center;gap:8px}
+  .board .colpill::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--c)}
+  .board .colpill i{font:600 13px var(--f-body)!important;font-style:normal;color:var(--muted);background:none!important;padding:0!important}
+  .board .colh .iconbtn{width:34px;height:34px;color:var(--muted)}
+  .board .cards{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex!important;flex-direction:column;gap:8px!important;padding:4px 10px calc(110px + env(safe-area-inset-bottom,0px))!important}
+  .board .card{flex:none;width:100%;text-align:left;border-radius:14px!important;padding:12px 14px!important;background:var(--surface)!important;box-shadow:0 1px 2px rgba(0,0,0,.06)!important;border:0!important}
+  .board .card .ttl{font:600 15px/1.3 var(--f-body)!important;margin-bottom:8px}
+  .board .colempty{flex:none;display:grid;place-items:center;padding:36px 12px!important;opacity:1!important;font:500 14px var(--f-body)!important;color:var(--muted)}
+}
+@media (max-width:860px){
+  .board .colh{display:flex!important;align-items:center!important;width:100%}
+  .board .colh > .grow{flex:1 1 auto}
+  /* the board ends just above the floating tab bar */
+  .board{margin-bottom:calc(var(--dock-b,8px) + var(--dock-h,58px) + 10px)!important}
+  .board .cards{padding-bottom:14px!important}
+
+  /* ===== Bottom tab bar: one floating glass capsule with icon + label, like iOS ===== */
+  :root{--dock-h:60px}
+  html .app .rail{left:50%!important;right:auto!important;transform:translateX(-50%);width:min(300px,calc(100% - 32px))!important;height:var(--dock-h)!important;padding:4px!important;gap:0!important;border-radius:999px!important;
+    background:var(--g-fill,rgba(255,255,255,.7))!important;-webkit-backdrop-filter:blur(24px) saturate(190%)!important;backdrop-filter:blur(24px) saturate(190%)!important;
+    border:.5px solid var(--g-line,rgba(255,255,255,.75))!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important;display:flex!important}
+  html .app .navb{flex:1 1 0!important;height:100%!important;border-radius:999px!important;background:transparent!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border:0!important;
+    display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:2px!important;font:600 10.5px var(--f-body)!important;letter-spacing:0!important;color:var(--muted)!important}
+  html .app .navb .pill{width:26px!important;height:24px!important;background:none!important}
+  html .app .navb .pill svg.i{width:24px;height:24px}
+  html .app .navb[aria-current="true"]{color:var(--cobalt)!important}
+  html .app .navb[aria-current="true"]::after{inset:0!important;background:color-mix(in srgb,var(--ink) 8%,transparent)!important}
+  html .app .navb .dot{top:5px!important;right:calc(50% - 22px)!important}
+}
+@media (max-width:860px){ html .app.in-thread .rail,html .app.with-drawer .rail{display:none!important} }
+@media (max-width:860px){
+  /* task screen: its own top bar reaches up under the clock, so the top of the screen is one colour */
+  .drawer.td2{padding-top:0!important}
+  .drawer.td2 > .td2head{padding-top:calc(env(safe-area-inset-top,0px) + 8px)!important}
+}
+/* a settings row whose control sits on its own line under the label (e.g. Backup reminder) */
+.srow.swrap{display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;row-gap:10px!important}
+.srow.swrap > .stx{flex:1 1 0;min-width:0;text-align:left}
+.srow.swrap > .segmini,.srow.swrap > .segmini.wide{flex:1 0 100%;width:100%}

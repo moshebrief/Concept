@@ -272,7 +272,7 @@ function oldStartTaskFromMessage(m){
   S.openTask="new"; S.actFor=null; render();
   setTimeout(()=>{ const i=$("#t-title"); if (i){ i.focus(); i.select(); } }, 30);
 }
-function newBlankTask(){ S.draftTask={subtasks:[], title:"", notes:"", status:STATUSES[0].id, assignee:S.filter!=="all"&&S.filter!=="me"?S.filter:(S.filter==="me"?S.me:""), due:"", priority:"normal", channel:""}; S.openTask="new"; render(); setTimeout(()=>{ const i=$("#t-title"); if(i) i.focus(); },30); }
+function newBlankTask(status){ S.draftTask={subtasks:[], title:"", notes:"", status:(typeof status==="string" && STATUSES.some(x=>x.id===status))? status : STATUSES[0].id, assignee:S.filter!=="all"&&S.filter!=="me"?S.filter:(S.filter==="me"?S.me:""), due:"", priority:"normal", channel:""}; S.openTask="new"; render(); setTimeout(()=>{ const i=$("#t-title"); if(i) i.focus(); },30); }
 async function saveTask(){
   const d=S.draftTask; if (!d.title.trim()) { toast("Give the task a title first."); return; }
   if (S.openTask==="new") {
@@ -2681,7 +2681,7 @@ function openBackup(){
       h("div",{class:"ulist sgroup"},
         h("div",{class:"srow"}, h("span",{class:"sic"}, svg(CLOCK)), h("span",{class:"stx"}, h("b",{}, "Last backup")), h("span",{class:"sval"}, last)),
         h("div",{class:"srow"}, h("span",{class:"sic"}, svg(ICF.image)), h("span",{class:"stx"}, h("b",{}, "Include photos and videos")), h("button",{class:"switch"+(bk.media!==false?" on":""), role:"switch", "aria-checked":String(bk.media!==false), onclick:()=>{ bk.media=bk.media===false; setPref("backup", {...bk}); draw(); }}, h("i"))),
-        h("div",{class:"srow col"}, h("span",{class:"sic"}, svg(ICF.cal)), h("span",{class:"stx"}, h("b",{}, "Backup reminder")),
+        h("div",{class:"srow swrap"}, h("span",{class:"sic"}, svg(ICF.cal)), h("span",{class:"stx"}, h("b",{}, "Backup reminder")),
           h("div",{class:"segmini wide", role:"group", "aria-label":"Backup reminder"}, [["off","Off"],["day","Daily"],["week","Weekly"],["month","Monthly"]].map(([v,l])=>h("button",{"aria-pressed":String((bk.freq||"week")===v), onclick:()=>{ bk.freq=v; setPref("backup", {...bk}); draw(); }}, l))))),
       busy? h("div",{class:"bkbusy"}, h("span",{class:"spin dark"}), busy) :
       ready? h("button",{class:"primary wide", onclick:async()=>{ const f=ready.file; try { await saveBackupFile(f); bk.last=now(); setPref("backup", {...bk}); ready=null; toast("Backup saved"); draw(); } catch (e) { if (e && e.name==="AbortError") return; toast("Couldn't save the backup."); } }}, svg(IC.send), "Save to iCloud Drive / Google Drive") :
@@ -2989,6 +2989,8 @@ function syncEdges(){
 }
 function queueEdges(){ if (!EDGE_Q) EDGE_Q=requestAnimationFrame(()=>requestAnimationFrame(syncEdges)); }
 addEventListener("resize", queueEdges);
+// screens that slide in are only in place once their animation ends
+document.addEventListener("animationend", queueEdges, true);
 new MutationObserver(queueEdges).observe(document.body, {childList:true});
 setTimeout(()=>{ const app=document.getElementById("app"); if (app) new MutationObserver(queueEdges).observe(app, {childList:true, attributes:true, attributeFilter:["class"]}); }, 0);
 function render(keepComposer){
@@ -3275,14 +3277,27 @@ function renderBoard(){
   const tasks=filteredTasks();
   if (S.taskView==="list") { wrap.append(renderTaskList(tasks)); if (S.canWrite) wrap.append(h("button",{class:"fab vfab", "aria-label":"New task", title:"New task", onclick:newBlankTask}, svg(IC.plus))); return wrap; }
   const board=h("div",{class:"board", id:"board"});
+  // phones: one stage fills the screen; these tabs jump between stages and follow the swipe
+  const counts=STATUSES.map(s=>tasks.filter(t=>stOf(t)===s.id).length);
+  const tabs=h("div",{class:"stagetabs", role:"tablist", "aria-label":"Stages"}, STATUSES.map((s,i)=>h("button",{class:"stab", role:"tab", style:`--c:${s.c}`, "aria-selected":String(i===(S.stageIdx||0)),
+    onclick:()=>{ const c=board.children[i]; if (c) board.scrollTo({left:c.offsetLeft-board.firstElementChild.offsetLeft, behavior:"smooth"}); }},
+    h("i"), s.name, h("b",{}, counts[i]))));
+  let stq=0;
+  board.addEventListener("scroll", ()=>{ if (stq) return; stq=requestAnimationFrame(()=>{ stq=0;
+    const w=board.firstElementChild? board.firstElementChild.offsetWidth+12 : 1, i=Math.max(0, Math.min(STATUSES.length-1, Math.round(board.scrollLeft/w)));
+    if (i!==(S.stageIdx||0)) { S.stageIdx=i; [...tabs.children].forEach((b,j)=>b.setAttribute("aria-selected", String(j===i))); const a=tabs.children[i]; if (a && a.scrollIntoView) a.scrollIntoView({block:"nearest", inline:"nearest"}); } }); }, {passive:true});
+  wrap.append(tabs);
+  requestAnimationFrame(()=>{ const i=S.stageIdx||0, c=board.children[i]; if (i && c && board.scrollLeft===0) board.scrollLeft=c.offsetLeft-board.firstElementChild.offsetLeft; });
   STATUSES.forEach((s,si)=>{
     const list=tasks.filter(t=>stOf(t)===s.id);
     const col=h("div",{class:"col", style:`--c:${s.c}`, "data-status":s.id,
       ondragover:e=>{e.preventDefault(); col.classList.add("over");}, ondragleave:()=>col.classList.remove("over"),
       ondrop:e=>{e.preventDefault(); col.classList.remove("over"); const id=e.dataTransfer.getData("text/plain"); if (id) moveTask(id, s.id);}});
-    col.append(h("div",{class:"colh"}, h("span",{class:"colpill"}, s.name, h("i",{}, list.length)), h("span",{class:"grow"}), S.canWrite? h("button",{class:"iconbtn sm", title:"Edit stage", "aria-label":"Edit stage "+s.name, onclick:e=>stageMenu(s, e.clientX, e.clientY)}, svg(ICF.more)) : ""));
+    col.append(h("div",{class:"colh"}, h("span",{class:"colpill"}, s.name, h("i",{}, list.length)), h("span",{class:"grow"}),
+      S.canWrite? h("button",{class:"iconbtn sm coladd", title:"New task in "+s.name, "aria-label":"New task in "+s.name, onclick:()=>newBlankTask(s.id)}, svg(IC.plus)) : "",
+      S.canWrite? h("button",{class:"iconbtn sm", title:"Edit stage", "aria-label":"Edit stage "+s.name, onclick:e=>stageMenu(s, e.clientX, e.clientY)}, svg(ICF.more)) : ""));
     const cards=h("div",{class:"cards"});
-    if (!list.length) cards.append(h("div",{class:"colempty"}, "—"));
+    if (!list.length) cards.append(h("div",{class:"colempty"}, h("span",{}, "No tasks in "+s.name)));
     list.forEach(t=>{
       const late=isLate(t.due,t.status);
       cards.append(h("button",{class:"card pri-"+(t.priority||"normal"), draggable:S.canWrite?"true":null, onclick:()=>openTask(t.id),
@@ -3558,6 +3573,6 @@ $("#meAv").addEventListener("click", ()=>openSettings());
 document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S.view=b.dataset.view; ls.set("view",S.view); if (S.view==="chats") S.inThread=false; else S.newFlow=null; if (S.view==="calls") ls.set("callsSeen", now()); if (S.view!=="calls") S.dial.on=false; if (S.view==="board" && S.filter.startsWith("chan:")) {} render(); }));
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
