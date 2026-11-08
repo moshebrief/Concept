@@ -2309,3 +2309,20 @@ button:active{opacity:1}
 #tint-top,#tint-bot{position:fixed;left:0;right:0;width:100%;height:12px;visibility:hidden;pointer-events:none;z-index:2147483000}
 #tint-top{top:0;background-color:var(--edge-top,var(--paper))}
 #tint-bot{bottom:0;background-color:var(--edge-bot,var(--paper))}
+
+/* ===== Keyboard open (iPhone): nothing jumps; the app ends just above the keyboard ===== */
+:root.kb-open{padding-bottom:0!important}
+:root.kb-open .app{height:calc(100% - var(--kb,0px))!important}
+:root.kb-open .scrim{bottom:var(--kb,0px)!important}
+@media (max-width:860px){
+  :root.kb-open .drawer{bottom:var(--kb,0px)!important}
+  /* in a chat the wallpaper and messages carry on behind the keyboard's rounded corners; only the message box rides up */
+  :root.kb-open .app.in-thread .main.chatmain{margin-bottom:calc(-1 * var(--kb,0px))!important}
+  :root.kb-open .main.chatmain > .compose{bottom:var(--kb,0px)!important;padding-bottom:8px!important}
+  :root.kb-open .main.chatmain > .stream{padding-bottom:calc(var(--ch,60px) + var(--kb,0px) + 8px)!important}
+  :root.kb-open .main.chatmain > .compose::before{bottom:calc(-1 * var(--kb,0px))}
+  /* in the app the keyboard tells us before it moves, so the message box glides up with it */
+  :root.kb-anim .main.chatmain > .compose{transition:bottom .32s cubic-bezier(.2,.85,.25,1),padding-bottom .32s cubic-bezier(.2,.85,.25,1)}
+}
+/* whatever peeks out around the keyboard's rounded corners is the colour of the screen right above it */
+:root.kb-open body{background:var(--edge-bot,var(--paper))}

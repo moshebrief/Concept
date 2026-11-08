@@ -21,7 +21,7 @@
       "launchFadeOutDuration": 220
     },
     "Keyboard": {
-      "resize": "native",
+      "resize": "none",
       "resizeOnFullScreen": true
     },
     "SystemBars": {

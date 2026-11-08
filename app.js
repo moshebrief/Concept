@@ -2795,6 +2795,30 @@ const CAP = window.Capacitor;
 const NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
 const IOS = NATIVE ? (CAP.getPlatform && CAP.getPlatform()==="ios") : /iPhone|iPad|iPod/.test(navigator.userAgent);
 const PLAT = NATIVE ? CAP.getPlatform() : "web";
+// ---------- keyboard ----------
+// On iPhone the keyboard is a rounded panel floating over the bottom of the screen. Instead of the whole page
+// jumping or shrinking, the app keeps still: lists and sheets end just above the keyboard, and in a chat the
+// messages and wallpaper carry on behind the keyboard while only the message box rides up on top of it.
+const KB={h:0, native:false};
+function setKb(px){
+  px=Math.max(0, Math.round(px)); if (Math.abs(px-KB.h)<2) return;
+  const st=$("#stream"), atEnd=st && st.scrollHeight-st.scrollTop-st.clientHeight<80;
+  KB.h=px; const r=document.documentElement;
+  r.style.setProperty("--kb", px+"px"); r.classList.toggle("kb-open", px>0);
+  if (window.scrollY || (window.visualViewport && visualViewport.offsetTop)) window.scrollTo(0,0);
+  if (st && atEnd) { st.scrollTop=st.scrollHeight; requestAnimationFrame(()=>{ st.scrollTop=st.scrollHeight; }); }
+  queueEdges();
+}
+(function webKeyboard(){
+  if (!window.visualViewport || !/iP(hone|ad|od)/.test(navigator.userAgent) && !(navigator.maxTouchPoints>1 && /Mac/.test(navigator.platform))) return;
+  const vv=visualViewport;
+  const upd=()=>{ if (KB.native) return;
+    const kb=document.documentElement.clientHeight - vv.height;
+    setKb(kb>80? kb : 0);
+    if (vv.offsetTop>0 || window.scrollY>0) window.scrollTo(0,0); };  // stop Safari from sliding the page up
+  vv.addEventListener("resize", upd); vv.addEventListener("scroll", upd);
+  document.addEventListener("focusin", e=>{ if (KB.native || !e.target.matches("input,textarea,[contenteditable]")) return; setTimeout(()=>window.scrollTo(0,0), 0); setTimeout(upd, 300); });
+})();
 const NP = name => (NATIVE && CAP.Plugins && CAP.Plugins[name]) || null;
 const siteLink = file => (NATIVE || CFG.siteUrl? (CFG.siteUrl||"https://concept-rnmb.onrender.com").replace(/\/$/,"")+"/" : "") + file;
 let PUSH_READY=false;
@@ -2803,6 +2827,11 @@ async function nativeInit(){
   document.documentElement.classList.add("native", "plat-"+PLAT);
   const kb=NP("Keyboard");
   if (kb) { try { kb.setAccessoryBarVisible && kb.setAccessoryBarVisible({isVisible:false}); } catch {}
+    if (PLAT==="ios") {  // the keyboard floats over the app; we move things up ourselves (see "keyboard" below)
+      KB.native=true; document.documentElement.classList.add("kb-anim");
+      kb.addListener("keyboardWillShow", info=>setKb(info && info.keyboardHeight || 0));
+      kb.addListener("keyboardWillHide", ()=>setKb(0));
+    }
     kb.addListener("keyboardDidShow", ()=>{ const st=$("#stream"); if (st) st.scrollTop=st.scrollHeight; }); }
   const app=NP("App");
   if (app) app.addListener("appStateChange", ({isActive})=>{ if (isActive && S.inThread && S.view==="chats") { markRead(); scheduleRender(); } });
@@ -2936,7 +2965,7 @@ function setBars(m,th,cp){
 function syncEdges(){
   EDGE_Q=0; syncChatBars(); const root=document.documentElement, cs=getComputedStyle(root);
   const pt=parseFloat(cs.paddingTop)||0, pb=parseFloat(cs.paddingBottom)||0, H=window.innerHeight;
-  const top=edgeColor(pt+1), bot=edgeColor(H-pb-2);
+  const top=edgeColor(pt+1), bot=edgeColor(H-pb-2-(KB.h||0));
   root.style.setProperty("--edge-top", top); root.style.setProperty("--edge-bot", bot);
   document.querySelectorAll('meta[name="theme-color"]').forEach(m=>m.setAttribute("content", top));
 }
