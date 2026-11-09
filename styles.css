@@ -2440,3 +2440,37 @@ button:active{opacity:1}
    all the way to the bottom of the screen (under the home bar) instead of stopping short of it */
 html{overflow:hidden!important}
 body{overflow:visible!important}
+
+/* ===== Photo viewer, like iMessage ===== */
+.imv{position:fixed;inset:0;z-index:120;background:color-mix(in srgb,var(--imv-bg) calc(var(--fade,1)*100%),transparent);color:var(--ink);--imv-bg:var(--surface,#fff);
+  opacity:0;transition:opacity .22s;outline:none;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+.imv.in{opacity:1}
+.imv.out{opacity:0;transition:opacity .26s .04s}
+.imv.bare{--imv-bg:#000}
+.imv-stage{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}
+.imv-media{grid-area:1/1;max-width:100%;max-height:100%;object-fit:contain;transform-origin:50% 50%;will-change:transform;-webkit-user-drag:none}
+video.imv-media{width:100%;background:#000}
+.imv-err{color:var(--muted)}
+.imv-top{position:absolute;top:0;left:0;right:0;z-index:2;display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:8px;
+  padding:calc(env(safe-area-inset-top,0px) + 6px) 12px 10px;background:var(--g-top,rgba(247,247,250,.8));-webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);
+  border-bottom:.5px solid var(--g-edge,rgba(0,0,0,.08));transition:opacity .2s,transform .2s}
+.imv-title{text-align:center;display:flex;flex-direction:column;line-height:1.2;min-width:0}
+.imv-title b{font:600 16px var(--f-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imv-title span{font:400 12.5px var(--f-body);color:var(--muted)}
+.imv-btn{width:42px;height:42px;border-radius:999px;border:0;display:grid;place-items:center;color:var(--cobalt);background:var(--g-fill,rgba(255,255,255,.6));box-shadow:inset 0 0 0 .5px var(--g-line,rgba(0,0,0,.06))}
+.imv-btn svg.i,.imv-btn svg{width:22px;height:22px}
+.imv-btn[hidden]{display:none}
+.imv-bot{position:absolute;left:0;right:0;bottom:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
+  background:var(--g-top,rgba(247,247,250,.8));-webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);border-top:.5px solid var(--g-edge,rgba(0,0,0,.08));transition:opacity .2s,transform .2s}
+.imv-count{flex:1;text-align:center;font:500 13px var(--f-body);color:var(--muted);font-variant-numeric:tabular-nums}
+.imv-cap{position:absolute;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:2;padding:10px 18px;text-align:center;font:400 15px/1.35 var(--f-body);
+  background:color-mix(in srgb,var(--imv-bg) 80%,transparent);transition:opacity .2s}
+.imv-cap[hidden]{display:none}
+.imv.bare .imv-top{opacity:0;transform:translateY(-8px);pointer-events:none}
+.imv.bare .imv-bot,.imv.bare .imv-cap,.imv.bare .imv-nav{opacity:0;pointer-events:none}
+.imv.bare .imv-cap{transform:translateY(8px)}
+.imv[style*="--fade"] .imv-top,.imv[style*="--fade"] .imv-bot,.imv[style*="--fade"] .imv-cap{opacity:0}
+.imv-nav{position:absolute;top:50%;z-index:3;width:44px;height:44px;margin-top:-22px;border-radius:50%;border:0;display:grid;place-items:center;color:var(--ink);background:var(--g-fill,rgba(255,255,255,.7));box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.imv-nav.l{left:14px}.imv-nav.r{right:14px}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .imv{--imv-bg:#000}}
+:root[data-theme="dark"] .imv{--imv-bg:#000}

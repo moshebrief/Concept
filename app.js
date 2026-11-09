@@ -1426,8 +1426,9 @@ function attachGestures(el, strip, m){
     el.addEventListener("touchmove", e=>{ const t=e.touches[0]; if (t && move(t.clientX, t.clientY) && e.cancelable) e.preventDefault(); }, {passive:false});
     el.addEventListener("touchend", end); el.addEventListener("touchcancel", cancel);
   }
-  el.addEventListener("pointerdown", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; if (e.button>0) return; if (start(e.clientX, e.clientY, e.target)) { try { el.setPointerCapture(e.pointerId); } catch {} } });
-  el.addEventListener("pointermove", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; move(e.clientX, e.clientY); });
+  // the pointer is only captured once a sideways drag has really started, so plain clicks (opening a photo, links) still work
+  el.addEventListener("pointerdown", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; if (e.button>0) return; start(e.clientX, e.clientY, e.target); });
+  el.addEventListener("pointermove", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; const was=horiz; if (move(e.clientX, e.clientY) && !was && horiz) { try { el.setPointerCapture(e.pointerId); } catch {} } });
   el.addEventListener("pointerup", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; end(); });
   el.addEventListener("pointercancel", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; cancel(); });
   el.addEventListener("click", e=>{ if (Date.now()-endedAt<400) { e.stopPropagation(); e.preventDefault(); } }, true);
@@ -2117,15 +2118,118 @@ function openMediaPreview(files){
   function send(){ const fs=items.map(x=>x.f); close(); sendMedia(cid, fs, cap.trim()); }
   draw();
 }
-function openViewer(items, idx, caption){
-  let i=idx||0; const o=overlay("viewer","Media");
-  const draw=()=>{ const it=items[i]; const box=h("div",{class:"vw-main"}, h("span",{class:"spin big"}));
-    o.replaceChildren(h("div",{class:"vw-top"}, h("button",{class:"sc-ic","aria-label":"Close", title:"Close", onclick:()=>o.remove()}, svg(IC.x)), h("span",{class:"grow"}), items.length>1? h("span",{class:"vw-count"}, (i+1)+" / "+items.length) : ""),
-      box, items.length>1? h("button",{class:"vw-nav l","aria-label":"Previous", onclick:()=>{ i=(i-1+items.length)%items.length; draw(); }}, svg(IC.back)) : "", items.length>1? h("button",{class:"vw-nav r","aria-label":"Next", onclick:()=>{ i=(i+1)%items.length; draw(); }}, svg(IC.arrow)) : "",
-      caption? h("div",{class:"vw-cap"}, caption) : "");
-    ensureMedia(it).then(url=>{ box.replaceChildren(it.t==="video"? h("video",{src:url, controls:true, autoplay:true, playsinline:true}) : h("img",{src:url, alt:""})); }).catch(()=>box.replaceChildren(h("p",{},"This couldn't be loaded.")));
-  };
-  o.addEventListener("keydown", e=>{ if (e.key==="Escape") o.remove(); }); draw();
+// ---------- photo viewer, like iMessage ----------
+// Full screen, white (black in dark mode); the name and time on top, Share / Reply / Task at the bottom.
+// Tap to hide the bars (the background turns black); swipe left/right through every photo in the chat;
+// pinch or double-tap to zoom; drag down to close. Opens and closes by growing out of / back into the bubble.
+const SHARE_SVG='<path d="M12 3.5v11"/><path d="M8 7.5l4-4 4 4"/><path d="M7 10.5H5.8a1.3 1.3 0 0 0-1.3 1.3v7.4a1.3 1.3 0 0 0 1.3 1.3h12.4a1.3 1.3 0 0 0 1.3-1.3v-7.4a1.3 1.3 0 0 0-1.3-1.3H17"/>';
+function chatMediaList(){
+  const out=[];
+  for (const m of (S.msgs||[])) { if (m.deleted || m.kind!=="media") continue; const p=plainP(m); const items=(p&&p.items)||[];
+    items.forEach((it,i)=>{ if (it.t==="image"||it.t==="video"||(!it.t && it.path)) out.push({it, m, i, cap:plain(m)||""}); }); }
+  return out;
+}
+function whenLabel(t){ const d=new Date(t), n=new Date(); const y=new Date(n); y.setDate(n.getDate()-1);
+  const day = d.toDateString()===n.toDateString()? "Today" : d.toDateString()===y.toDateString()? "Yesterday" : d.toLocaleDateString([], {month:"short", day:"numeric", ...(d.getFullYear()!==n.getFullYear()? {year:"numeric"}:{})});
+  return day+" at "+fmtTime(t); }
+async function shareMedia(it){
+  try {
+    const url=await ensureMedia(it); const blob=await (await fetch(url)).blob();
+    const ext=(it.t==="video"? "mp4" : (blob.type.split("/")[1]||"jpg").replace("jpeg","jpg")), name=it.name||("photo."+ext);
+    const FS=NP("Filesystem"), SH=NP("Share");
+    if (FS && SH) { const w=await FS.writeFile({path:name, data:b64Of(await blob.arrayBuffer()), directory:"CACHE"}); await SH.share({files:[w.uri]}); return; }
+    const f=new File([blob], name, {type:blob.type});
+    if (navigator.canShare && navigator.canShare({files:[f]})) { await navigator.share({files:[f]}); return; }
+    const a=h("a",{href:url, download:name}); document.body.append(a); a.click(); a.remove();
+  } catch (e) { if (!/abort|cancel/i.test(String(e && (e.name||e.message||e)))) toast("Couldn't share this."); }
+}
+function openViewer(items, idx, caption, ctx){
+  // when opened from a chat bubble, browse every photo in the chat (like iMessage)
+  let list = ctx && ctx.m? chatMediaList() : items.map((it,i)=>({it, m:null, i, cap:caption||""}));
+  let i = ctx && ctx.m? Math.max(0, list.findIndex(x=>x.m.id===ctx.m.id && x.i===idx)) : (idx||0);
+  if (!list.length) { list=items.map((it,k)=>({it, m:null, i:k, cap:caption||""})); i=idx||0; }
+  const o=overlay("imv","Photo"); o.tabIndex=-1;
+  const back=h("button",{class:"imv-btn imv-back","aria-label":"Back", title:"Back", onclick:()=>close()}, svg(IC.back));
+  const who=h("b"), when=h("span"); const title=h("div",{class:"imv-title"}, who, when);
+  const top=h("div",{class:"imv-top"}, back, title, h("span",{class:"imv-sp"}));
+  const stage=h("div",{class:"imv-stage"}); const cap=h("div",{class:"imv-cap"});
+  const bShare=h("button",{class:"imv-btn","aria-label":"Share", title:"Share", onclick:()=>shareMedia(list[i].it)}, svg(SHARE_SVG));
+  const bReply=h("button",{class:"imv-btn","aria-label":"Reply", title:"Reply", onclick:()=>{ const m=list[i].m; close(true); if (m) setTimeout(()=>startReply(m), 0); }}, svg(IC.reply));
+  const bTask=h("button",{class:"imv-btn","aria-label":"Make a task", title:"Make a task", onclick:()=>{ const m=list[i].m; close(true); if (m) swipeTask(m); }}, svg(IC.knot));
+  const bot=h("div",{class:"imv-bot"}, bShare, h("span",{class:"imv-count"}), bReply, bTask);
+  o.append(stage, top, cap, bot);
+  let cur=null, scale=1, tx=0, ty=0;   // current media element and its zoom/pan
+  const apply=(anim)=>{ if (!cur) return; cur.style.transition=anim? "transform .28s cubic-bezier(.2,.85,.25,1)" : "none"; cur.style.transform=`translate3d(${tx}px,${ty}px,0) scale(${scale})`; };
+  const fitRect=(w,h0)=>{ const W=stage.clientWidth, H=stage.clientHeight, k=Math.min(W/w, H/h0); return {w:w*k, h:h0*k, x:(W-w*k)/2, y:(H-h0*k)/2}; };
+  const thumbOf=x=>x && x.m && document.querySelector(`.mcell[data-mk="${x.m.id}:${x.i}"]`);
+  function show(dir){
+    const x=list[i]; const m=x.m;
+    who.textContent = m? (m.by===S.me? "You" : nameOf(m.by).replace(/^Example:\s*/,"")) : ""; when.textContent = m && m.at? whenLabel(m.at) : "";
+    cap.textContent=x.cap||""; cap.hidden=!x.cap;
+    bot.querySelector(".imv-count").textContent = list.length>1? `${i+1} of ${list.length}` : "";
+    bReply.hidden=bTask.hidden=!m || !S.canWrite;
+    scale=1; tx=0; ty=0;
+    const el = x.it.t==="video"? h("video",{class:"imv-media", controls:true, playsinline:true, autoplay:true}) : h("img",{class:"imv-media", alt:"", draggable:"false"});
+    const cached = x.it.local || (x.it.path && MEDIA_CACHE[x.it.path]) || x.it.thumb;
+    if (cached && el.tagName==="IMG") el.src=cached;
+    const old=cur; cur=el; stage.append(el);
+    if (old) { if (dir) { old.style.transition="transform .26s cubic-bezier(.2,.85,.25,1), opacity .26s"; old.style.transform=`translate3d(${dir<0? stage.clientWidth : -stage.clientWidth}px,0,0)`; setTimeout(()=>old.remove(), 270);
+                el.style.transform=`translate3d(${dir<0? -stage.clientWidth : stage.clientWidth}px,0,0)`; requestAnimationFrame(()=>requestAnimationFrame(()=>apply(true))); }
+              else old.remove(); }
+    ensureMedia(x.it).then(u=>{ if (el.src!==u) el.src=u; }).catch(()=>{ if (cur===el) { const p=h("p",{class:"imv-err"}, "This couldn't be loaded."); el.replaceWith(p); cur=null; } });
+  }
+  // grow out of the bubble
+  function openAnim(){
+    const th=thumbOf(list[i]); if (!th || !cur || cur.tagName!=="IMG") { o.classList.add("in"); return; }
+    const r=th.getBoundingClientRect(), sr=stage.getBoundingClientRect();
+    const go=()=>{ const f=fitRect(cur.naturalWidth||r.width, cur.naturalHeight||r.height); const k=Math.max(r.width/f.w, r.height/f.h);
+      tx=(r.left+r.width/2)-(sr.left+f.x+f.w/2); ty=(r.top+r.height/2)-(sr.top+f.y+f.h/2); scale=k; apply(false);
+      requestAnimationFrame(()=>{ o.classList.add("in"); scale=1; tx=0; ty=0; apply(true); }); };
+    if (cur.complete && cur.naturalWidth) go(); else { o.classList.add("in"); }
+  }
+  let closing=false;
+  function close(quick){
+    if (closing) return; closing=true; o.classList.remove("in"); o.classList.add("out");
+    const th=!quick && thumbOf(list[i]);
+    if (th && cur && cur.tagName==="IMG" && cur.naturalWidth && scale<=1.01) {
+      const r=th.getBoundingClientRect(), sr=stage.getBoundingClientRect(), f=fitRect(cur.naturalWidth, cur.naturalHeight);
+      scale=Math.max(r.width/f.w, r.height/f.h); tx=(r.left+r.width/2)-(sr.left+f.x+f.w/2); ty=(r.top+r.height/2)-(sr.top+f.y+f.h/2); apply(true);
+    }
+    setTimeout(()=>o.remove(), quick? 120 : 280);
+  }
+  const go=d=>{ if (list.length<2) return; const n=i+d; if (n<0 || n>=list.length) { tx=0; apply(true); return; } i=n; show(d); };
+  // ----- gestures -----
+  let pts=new Map(), start=null, mode="", lastTap=0, tapTimer=0, moved=false, t0=0;
+  const dist=(a,b)=>Math.hypot(a.x-b.x, a.y-b.y), mid=(a,b)=>({x:(a.x+b.x)/2, y:(a.y+b.y)/2});
+  stage.addEventListener("pointerdown", e=>{ if (e.target.closest("video") && e.offsetY>e.target.clientHeight-60) return;
+    stage.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pts.size===1) { start={x:e.clientX, y:e.clientY, tx, ty, scale}; mode=""; moved=false; t0=performance.now(); }
+    if (pts.size===2) { const [a,b]=[...pts.values()]; start={d:dist(a,b), c:mid(a,b), tx, ty, scale}; mode="pinch"; moved=true; } });
+  stage.addEventListener("pointermove", e=>{ if (!pts.has(e.pointerId) || !start) return; pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (mode==="pinch" && pts.size===2) { const [a,b]=[...pts.values()], c=mid(a,b), k=Math.max(.6, Math.min(5, start.scale*dist(a,b)/start.d));
+      const sr=stage.getBoundingClientRect(), ox=start.c.x-sr.left-sr.width/2, oy=start.c.y-sr.top-sr.height/2;
+      tx=start.tx + (c.x-start.c.x) - (ox-start.tx)*(k/start.scale-1); ty=start.ty + (c.y-start.c.y) - (oy-start.ty)*(k/start.scale-1); scale=k; apply(false); return; }
+    const dx=e.clientX-start.x, dy=e.clientY-start.y;
+    if (!mode && Math.hypot(dx,dy)>8) { moved=true; mode = scale>1.01? "pan" : Math.abs(dx)>Math.abs(dy)? "swipe" : (dy>0? "down" : "pan0"); }
+    if (mode==="pan") { tx=start.tx+dx; ty=start.ty+dy; apply(false); }
+    else if (mode==="swipe") { tx=dx*(list.length>1 && ((i===0&&dx>0)||(i===list.length-1&&dx<0))? .35 : 1); apply(false); }
+    else if (mode==="down") { tx=dx; ty=Math.max(0,dy); scale=Math.max(.7, 1-ty/1400); apply(false); o.style.setProperty("--fade", String(Math.max(0, 1-ty/420))); } });
+  const up=e=>{ pts.delete(e.pointerId); if (pts.size) { if (mode==="pinch") { const [a]=[...pts.values()]; start={x:a.x, y:a.y, tx, ty, scale}; mode="pan"; } return; }
+    if (!start) return; const dt=performance.now()-t0, dx=e.clientX-start.x, dy=e.clientY-start.y;
+    if (mode==="pinch"||mode==="pan") { if (scale<1) { scale=1; tx=0; ty=0; } apply(true); }
+    else if (mode==="swipe") { if (Math.abs(dx)>stage.clientWidth*.22 || Math.abs(dx)/dt>.5) go(dx<0? 1 : -1); else { tx=0; apply(true); } }
+    else if (mode==="down") { if (dy>110 || dy/dt>.6) close(); else { tx=0; ty=0; scale=1; apply(true); o.style.removeProperty("--fade"); } }
+    else if (!moved) { const now=Date.now();
+      if (now-lastTap<300) { clearTimeout(tapTimer); lastTap=0; // double tap: zoom in where tapped, or back out
+        if (scale>1.01) { scale=1; tx=0; ty=0; } else { const sr=stage.getBoundingClientRect(), k=2.5, ox=e.clientX-sr.left-sr.width/2, oy=e.clientY-sr.top-sr.height/2; scale=k; tx=-ox*(k-1); ty=-oy*(k-1); }
+        apply(true); }
+      else { lastTap=now; tapTimer=setTimeout(()=>o.classList.toggle("bare"), 260); } }
+    start=null; mode=""; };
+  stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
+  o.addEventListener("keydown", e=>{ if (e.key==="Escape") close(); if (e.key==="ArrowRight") go(1); if (e.key==="ArrowLeft") go(-1); });
+  if (matchMedia("(hover:hover)").matches && list.length>1) o.append(h("button",{class:"imv-nav l","aria-label":"Previous", onclick:()=>go(-1)}, svg(IC.back)), h("button",{class:"imv-nav r","aria-label":"Next", onclick:()=>go(1)}, svg(IC.arrow)));
+  show(0); o.focus();
+  requestAnimationFrame(openAnim);
 }
 function openFile(it){ toast("Opening…"); ensureMedia(it).then(url=>{ const a=h("a",{href:url, download:it.name||"file", target:"_blank", rel:"noopener"}); document.body.append(a); a.click(); a.remove(); }).catch(()=>toast("This file couldn't be loaded.")); }
 function renderMedia(m, p){
@@ -2136,7 +2240,7 @@ function renderMedia(m, p){
   const shownItems=items.slice(0,4);
   shownItems.forEach((it,i)=>{
     const ar = items.length===1 && it.w && it.h? `aspect-ratio:${Math.max(.56,Math.min(1.8,it.w/it.h))}` : "";
-    const cell=h("div",{class:"mcell"+(it.t==="video"?" vid":""), style:ar, onclick:e=>{ e.stopPropagation(); if (S.selecting || m.pending) return; openViewer(items, i, plain(m)||""); }});
+    const cell=h("div",{class:"mcell"+(it.t==="video"?" vid":""), style:ar, "data-mk":m.id+":"+i, onclick:e=>{ e.stopPropagation(); if (S.selecting || m.pending) return; openViewer(items, i, plain(m)||"", {m}); }});
     const cached = it.local || (it.path && MEDIA_CACHE[it.path]);
     if (it.t==="video") { cell.append(it.thumb? h("img",{src:it.thumb, alt:""}) : it.local? h("video",{src:it.local, muted:true, playsinline:true, preload:"metadata"}) : h("span"), h("span",{class:"playo"}, svg(IC.play)), it.dur? h("span",{class:"vdurb"}, fmtDur(it.dur)) : ""); }
     else { const img=h("img",{alt:"", src: cached || it.thumb || "", class: cached? "" : "blur"}); cell.append(img); if (!cached) ensureMedia(it).then(u=>{ img.src=u; img.classList.remove("blur"); }).catch(()=>{}); }
