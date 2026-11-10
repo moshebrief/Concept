@@ -2474,3 +2474,8 @@ video.imv-media{width:100%;background:#000}
 .imv-nav.l{left:14px}.imv-nav.r{right:14px}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .imv{--imv-bg:#000}}
 :root[data-theme="dark"] .imv{--imv-bg:#000}
+/* Sign-in screens: keep the Continue / Verify button above the keyboard */
+html.kb-open .ob2{min-height:0;height:100%;overflow-y:auto;padding-bottom:calc(var(--kb,0px) + 12px)}
+html.kb-open .ob2main{padding-top:8px}
+html.kb-open .ob2icon{width:56px;height:56px;margin-bottom:6px}
+html.kb-anim .ob2{transition:padding-bottom .25s ease}
