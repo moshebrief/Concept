@@ -1,6 +1,6 @@
 {
   "name": "concept",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Task Message \u2014 chat with anyone and turn messages into tasks",
   "scripts": {
