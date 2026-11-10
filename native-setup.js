@@ -65,7 +65,7 @@ function android() {
   // Version + signing (Codemagic provides the keystore through environment variables)
   const gradleP = path.join(app, "build.gradle");
   let g = read(gradleP);
-  g = g.replace(/versionCode \d+/, `versionCode ${BUILD}`).replace(/versionName "[^"]*"/, `versionName "${VERSION}"`);
+  g = g.replace(/versionCode \d+/, `versionCode ${parseInt(BUILD,10)+100}`).replace(/versionName "[^"]*"/, `versionName "${VERSION}"`);
   if (!g.includes("signingConfigs {")) {
     g = g.replace(/\n    buildTypes \{/, `
     signingConfigs {
