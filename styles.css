@@ -2541,3 +2541,8 @@ html body .scrim .modal.nc-purple,html body .scrim.page .modal.nc-purple{backgro
 html body .scrim .modal.nc-sand,html body .scrim.page .modal.nc-sand{background:var(--n-sand)!important}
 html body .scrim .modal.nc-gray,html body .scrim.page .modal.nc-gray{background:var(--n-gray)!important}
 html body .scrim .modal[class*="nc-"] .sheethead,html body .scrim .modal[class*="nc-"] .pagehead{background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+/* iPhone zooms the page into any text box smaller than 16px and leaves it stuck there; keep every typing field at 16px on touch screens */
+@media (pointer:coarse){
+  html body .td2notes,html body .metabox input{font-size:16px!important}
+  html body .td2subs .subrow input.subtx{font-size:16px!important}
+}

@@ -3021,6 +3021,19 @@ function setKb(px){
   vv.addEventListener("resize", upd); vv.addEventListener("scroll", upd);
   document.addEventListener("focusin", e=>{ if (KB.native || !e.target.matches("input,textarea,[contenteditable]")) return; setTimeout(()=>window.scrollTo(0,0), 0); setTimeout(upd, 300); });
 })();
+// iOS sometimes slides the whole web page up to show a text box. Our page never scrolls, so put it straight back,
+// and instead scroll the text box into view inside its own panel (task notes, settings, sheets...).
+function unpan(){ const se=document.scrollingElement||document.documentElement; if (window.scrollY || se.scrollTop || document.body.scrollTop) { window.scrollTo(0,0); se.scrollTop=0; document.body.scrollTop=0; } }
+function revealFocused(){
+  const el=document.activeElement; if (!el || !el.matches || !el.matches("input,textarea,[contenteditable]") || el.closest(".compose")) return;
+  let sc=el.parentElement; while (sc && sc!==document.body) { const o=getComputedStyle(sc).overflowY; if ((o==="auto"||o==="scroll") && sc.scrollHeight>sc.clientHeight+2) break; sc=sc.parentElement; }
+  if (!sc || sc===document.body) return;
+  const r=el.getBoundingClientRect(), b=sc.getBoundingClientRect(), bottom=Math.min(b.bottom, window.innerHeight-(KB.h||0)) - 16;
+  const caret=el.tagName==="TEXTAREA"? Math.min(r.bottom, r.top+120) : r.bottom;
+  if (caret>bottom) sc.scrollTop+=caret-bottom; else if (r.top<b.top+8) sc.scrollTop-=b.top+8-r.top;
+}
+window.addEventListener("scroll", ()=>{ if (KB.native) unpan(); }, {passive:true});
+document.addEventListener("focusin", e=>{ if (!KB.native || !e.target.matches || !e.target.matches("input,textarea,[contenteditable]")) return; requestAnimationFrame(unpan); setTimeout(()=>{ unpan(); revealFocused(); }, 380); });
 const NP = name => (NATIVE && CAP.Plugins && CAP.Plugins[name]) || null;
 const siteLink = file => (NATIVE || CFG.siteUrl? (CFG.siteUrl||"https://concept-rnmb.onrender.com").replace(/\/$/,"")+"/" : "") + file;
 let PUSH_READY=false;
@@ -3034,7 +3047,8 @@ async function nativeInit(){
       kb.addListener("keyboardWillShow", info=>setKb(info && info.keyboardHeight || 0));
       kb.addListener("keyboardWillHide", ()=>setKb(0));
     }
-    kb.addListener("keyboardDidShow", ()=>{ const st=$("#stream"); if (st) st.scrollTop=st.scrollHeight; }); }
+    kb.addListener("keyboardDidShow", ()=>{ const st=$("#stream"); if (st && document.activeElement && document.activeElement.closest(".compose")) st.scrollTop=st.scrollHeight; unpan(); revealFocused(); });
+    kb.addListener("keyboardDidHide", ()=>unpan()); }
   const app=NP("App");
   if (app) app.addListener("appStateChange", ({isActive})=>{ if (isActive && S.inThread && S.view==="chats") { markRead(); scheduleRender(); } if (!isActive) autoBackup(); });
   setTimeout(()=>{ offerRestore().catch(()=>{}); }, 6000);
