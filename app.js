@@ -181,7 +181,7 @@ function startDemo(msg){ S.mode="demo"; S.me="me"; demo.seed(); if (!S.active) S
 function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(h("span",{style:"width:9px;height:9px;background:var(--knot);transform:rotate(45deg);flex:none"}), h("span",{},t)); }
 
 function subscribeAll(){
-  loadPins(); loadAddr(); startE2E();
+  loadPins(); loadNotes(); loadAddr(); startE2E();
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
   store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
@@ -3222,6 +3222,7 @@ function render(keepComposer){
   else if (S.view==="updates") app.append(renderUpdates());
   else if (S.view==="calls") app.append(renderCalls());
   else if (S.view==="settings") app.append(renderSettings());
+  else if (S.view==="notes") app.append(renderNotes());
   else app.append(renderTeam());
   if (S.openTask) app.append(renderDrawer()); else LAST_DRAWER=null;
 
@@ -3397,6 +3398,7 @@ function renderMsg(m, cont, chan){
         task? h("button",{class:"tie", title:"Open task", "aria-label":"Open task", onclick:()=>openTask(task.id)}, svg(IC.knot)) : h("button",{class:"tie", title:"Make task", "aria-label":"Make task", onclick:()=>quickTask([m], {open:(S.prefs.swipeTask||"open")!=="silent"})}, svg(IC.knot)),
         h("button",{title:"Select", "aria-label":"Select messages", onclick:e=>{ e.stopPropagation(); S.selecting=true; S.sel=[m.id]; S.actFor=null; render(true); }}, svg(ICF.selm)),
         plain(m)? h("button",{title:"Copy", "aria-label":"Copy", onclick:()=>copyMsg(m)}, svg(ICF.copy)) : "",
+        plain(m)? h("button",{title:"Save to Notes", "aria-label":"Save to Notes", onclick:()=>saveMsgToNotes(m)}, svg(ICN.note)) : "",
         mine && !m.kind && plain(m)!==false? h("button",{title:"Edit", onclick:()=>{S.editing=m.id; S.actFor=null; render(true);}, "aria-label":"Edit"}, svg(IC.edit)):"",
         mine? h("button",{title:"Delete", onclick:()=>deleteMsg(m), "aria-label":"Delete message"}, svg(IC.trash)) : h("button",{title:"Report", "aria-label":"Report message", onclick:()=>{ S.actFor=null; render(true); openReport({title:"Report message", user:m.by, channel:S.active, message:m.id, text:msgText(m)}); }}, svg(ICF.flag2)))));
   }
@@ -3457,6 +3459,131 @@ function filteredTasks(){
   return visibleTasks().filter(t => f==="all" || (f==="me" && t.assignee===S.me) || (f==="none" && !t.assignee) || (f.startsWith("chan:") && t.channel===f.slice(5)) || t.assignee===f);
 }
 function needTeam(){ if (curTeam()) return false; toast("Create your team first, then you can add tasks."); S.view="team"; ls.set("view","team"); render(); return true; }
+// ---------- Notes: a private place to keep important things (like Google Keep) ----------
+const NOTE_COLORS = [["","Default"],["yellow","Yellow"],["green","Green"],["blue","Blue"],["pink","Pink"],["purple","Purple"],["sand","Sand"],["gray","Gray"]];
+const ICN = { note:'<path d="M6 3.5h12A1.5 1.5 0 0 1 19.5 5v10l-5 5H6A1.5 1.5 0 0 1 4.5 18.5V5A1.5 1.5 0 0 1 6 3.5z"/><path d="M14.5 20v-3.5A1.5 1.5 0 0 1 16 15h3.5M8 8.5h8M8 12h5"/>', label:'<path d="M3.5 12.2V5a1.5 1.5 0 0 1 1.5-1.5h7.2a1.5 1.5 0 0 1 1.06.44l7.3 7.3a1.5 1.5 0 0 1 0 2.12l-7.2 7.2a1.5 1.5 0 0 1-2.12 0l-7.3-7.3a1.5 1.5 0 0 1-.44-1.06z"/><circle cx="8.2" cy="8.2" r="1.4"/>', palette:'<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.3-1.1-1.6-1.1-2.8 0-1 .8-1.7 1.8-1.7h2.2a3.8 3.8 0 0 0 3.8-3.8c0-3.9-3.8-7-8.5-7z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.1" fill="currentColor"/>', share:'<path d="M12 15V3.5M7.5 8L12 3.5 16.5 8"/><path d="M5 12.5v6A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-6"/>' };
+const notePath = id => "data/users/"+S.me+"/notes/"+id;
+const labelsPath = () => "data/users/"+S.me+"/notelabels";
+function loadNotes(){
+  S.notes=S.notes||[]; S.noteLabels=S.noteLabels||[]; S.noteQ=S.noteQ||""; S.noteLabel=S.noteLabel||"all";
+  store.sub("data/users/"+S.me+"/notes", rows=>{ S.notes=rows.filter(r=>!r.deleted); LOCAL.save("notes", S.notes); if (S.view==="notes") scheduleRender(); });
+  store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="notelabels"); if (d) { S.noteLabels=d.list||[]; if (S.view==="notes") scheduleRender(); } });
+  LOCAL.load("notes").then(v=>{ if (Array.isArray(v) && !S.notes.length) { S.notes=v; if (S.view==="notes") scheduleRender(); } });
+  if (S.mode==="demo") setTimeout(()=>{ if (S.notes.length) return; const t=now();
+    [{title:"Wi-Fi at the office", text:"Network: Studio-5G\nPassword: lemon-tree-42", labels:["Work"], color:"yellow", pinned:true},
+     {title:"Supplier", text:"Dana Cole\n+1 212 555 0148\nOrders before 3pm ship the same day.", labels:["Work","Contacts"], color:"blue"},
+     {title:"", text:"Gate code for the parking lot: 4419#", labels:["Home"], color:""},
+     {title:"Launch checklist", text:"• Final price list\n• Photos from Lia\n• Book the venue\n• Send invites", labels:["Work"], color:"green"},
+     {title:"Gift ideas", text:"Mom: the blue scarf from the market\nAvi: headphones", labels:["Home"], color:"pink"}]
+      .forEach((n,i)=>store.set(notePath("demo"+i), {...n, at:t-i*3600e3, edited:t-i*3600e3}));
+    store.set(labelsPath(), {list:["Work","Home","Contacts"]}); }, 50);
+}
+async function saveLabels(list){ S.noteLabels=list; scheduleRender(); await guarded(store.set(labelsPath(), {list})).catch(()=>{}); }
+async function putNote(n){ const {id, ...d}=n; S.notes=[...S.notes.filter(x=>x.id!==id), n]; LOCAL.save("notes", S.notes); await guarded(store.set(notePath(id), d)).catch(()=>toast("Couldn't save. Check your connection.")); }
+async function dropNote(n, undo=true){ S.notes=S.notes.filter(x=>x.id!==n.id); scheduleRender(); await guarded(store.del(notePath(n.id))).catch(()=>{});
+  if (undo) toast("Note deleted", {label:"Undo", fn:()=>{ putNote(n); scheduleRender(); }}); }
+function noteMatches(n){
+  if (S.noteLabel!=="all" && !(n.labels||[]).includes(S.noteLabel)) return false;
+  const q=(S.noteQ||"").trim().toLowerCase(); if (!q) return true;
+  return ((n.title||"")+"\n"+(n.text||"")+"\n"+(n.labels||[]).join(" ")).toLowerCase().includes(q);
+}
+function noteCard(n){
+  const el=h("button",{class:"ncard"+(n.color?" nc-"+n.color:""), "aria-label":(n.title||n.text||"Note").slice(0,60), onclick:()=>openNote(n.id)},
+    n.pinned? h("span",{class:"npin", "aria-hidden":"true"}, svg(IC.pin)) : "",
+    n.title? h("b",{class:"ntitle"}, n.title) : "",
+    n.text? h("div",{class:"ntext"}, n.text.length>600? n.text.slice(0,600)+"…" : n.text) : "",
+    (n.labels||[]).length? h("div",{class:"nlabels"}, n.labels.map(l=>h("span",{class:"nlab"}, l))) : "");
+  let t=null; el.addEventListener("pointerdown", ()=>{ t=setTimeout(()=>{ t=-1; haptic(); copyNote(n); }, 550); });
+  ["pointerup","pointerleave","pointercancel"].forEach(ev=>el.addEventListener(ev, ()=>{ if (t>0) clearTimeout(t); }));
+  el.addEventListener("click", e=>{ if (t===-1) { e.stopImmediatePropagation(); e.preventDefault(); t=null; } }, true);
+  return el;
+}
+async function copyNote(n){ const t=[n.title, n.text].filter(Boolean).join("\n"); try { await navigator.clipboard.writeText(t); toast("Copied"); } catch { toast("Couldn't copy here"); } }
+function renderNotes(){
+  S.notes=S.notes||[]; S.noteLabels=S.noteLabels||[];
+  const w=h("section",{class:"teamwrap noteswrap","aria-label":"Notes"});
+  w.append(toprow("Notes", h("button",{class:"iconbtn", title:"Edit labels", "aria-label":"Edit labels", onclick:()=>editLabels()}, svg(ICN.label))));
+  w.append(h("label",{class:"search nsearch"}, svg(IC.search), h("input",{id:"nq", type:"search", placeholder:"Search notes", value:S.noteQ||"", oninput:e=>{ S.noteQ=e.target.value; patchNotes(); }})));
+  if (S.noteLabels.length) w.append(h("div",{class:"nchips", role:"group", "aria-label":"Labels"},
+    [["all","All"], ...S.noteLabels.map(l=>[l,l])].map(([v,l])=>h("button",{class:"nchip", "aria-pressed":String((S.noteLabel||"all")===v), onclick:()=>{ S.noteLabel=v; render(); }}, v==="all"? "" : svg(ICN.label), l))));
+  w.append(h("div",{id:"nlist"}, noteGrid()));
+  if (S.canWrite) w.append(h("button",{class:"fab vfab", "aria-label":"New note", title:"New note", onclick:()=>openNote(null)}, svg(IC.plus)));
+  return w;
+}
+function noteGrid(){
+  const all=(S.notes||[]).filter(noteMatches).sort((a,b)=>(b.edited||b.at||0)-(a.edited||a.at||0));
+  if (!(S.notes||[]).length) return h("div",{class:"nempty"}, svg(ICN.note), h("b",{}, "Keep important things here"), h("p",{}, "Codes, addresses, phone numbers, lists — anything you want to find again. Tap + to add a note. Press and hold a message to save it here."));
+  if (!all.length) return h("div",{class:"nempty"}, h("p",{}, "No notes match."));
+  const pinned=all.filter(n=>n.pinned), rest=all.filter(n=>!n.pinned);
+  return [pinned.length? h("div",{class:"nsec"}, "Pinned") : "", pinned.length? h("div",{class:"ngrid"}, pinned.map(noteCard)) : "",
+    pinned.length && rest.length? h("div",{class:"nsec"}, "Others") : "", rest.length? h("div",{class:"ngrid"}, rest.map(noteCard)) : ""];
+}
+function patchNotes(){ const l=$("#nlist"); if (l) l.replaceChildren(...[noteGrid()].flat().filter(Boolean)); }
+function openNote(id, seed){
+  const old=id? (S.notes||[]).find(n=>n.id===id) : null;
+  const n=old? {...old, labels:[...(old.labels||[])]} : {id:"n"+now().toString(36)+uidShort(), title:"", text:"", labels:S.noteLabel&&S.noteLabel!=="all"? [S.noteLabel] : [], color:"", pinned:false, at:now(), ...(seed||{})};
+  let dirty=!!seed, timer=null;
+  const empty=()=>!n.title.trim() && !n.text.trim();
+  const save=()=>{ clearTimeout(timer); if (!dirty) return; dirty=false; if (empty()) { if (old) dropNote(n, false); return; } n.edited=now(); putNote(n); };
+  const later=()=>{ dirty=true; clearTimeout(timer); timer=setTimeout(save, 700); };
+  const grow=ta=>{ ta.style.height="auto"; ta.style.height=Math.max(160, ta.scrollHeight)+"px"; };
+  const close=sheet(old? "Note" : "New note", (draw, closeIt)=>{
+    setTimeout(()=>{ const m=$("#ned-title")?.closest(".modal"); if (!m) return; NOTE_COLORS.forEach(([c])=>c && m.classList.remove("nc-"+c)); if (n.color) m.classList.add("nc-"+n.color); });
+    const tool=(icon,label,fn,on)=>h("button",{class:"iconbtn"+(on?" on":""), title:label, "aria-label":label, "aria-pressed":on===undefined? null : String(!!on), onclick:fn}, svg(icon));
+    return [
+      h("input",{class:"ned-title", id:"ned-title", placeholder:"Title", value:n.title, maxlength:"200", oninput:e=>{ n.title=e.target.value; later(); }}),
+      h("textarea",{class:"ned-text", id:"ned-text", placeholder:"Note", oninput:e=>{ n.text=e.target.value; grow(e.target); later(); }}, n.text),
+      n.labels.length? h("div",{class:"nlabels"}, n.labels.map(l=>h("button",{class:"nlab", title:"Remove label", "aria-label":"Remove label "+l, onclick:()=>{ n.labels=n.labels.filter(x=>x!==l); dirty=true; save(); draw(); }}, l, " ×"))) : "",
+      h("div",{class:"ncolors", role:"radiogroup", "aria-label":"Color"}, NOTE_COLORS.map(([c,l])=>h("button",{class:"ncol nc-"+(c||"none")+(n.color===c?" on":""), role:"radio", "aria-checked":String(n.color===c), title:l, "aria-label":l, onclick:()=>{ n.color=c; dirty=true; save(); draw(); }}))),
+      h("div",{class:"ntools"},
+        tool(IC.pin, n.pinned? "Unpin":"Pin", ()=>{ n.pinned=!n.pinned; dirty=true; save(); draw(); }, n.pinned),
+        tool(ICN.label, "Labels", ()=>pickNoteLabels(n, ()=>{ dirty=true; save(); draw(); })),
+        tool(ICF.copy, "Copy", ()=>copyNote(n)),
+        navigator.share? tool(ICN.share, "Share", ()=>navigator.share({text:[n.title,n.text].filter(Boolean).join("\n")}).catch(()=>{})) : "",
+        h("span",{class:"grow"}),
+        old? tool(IC.trash, "Delete note", ()=>{ dirty=false; clearTimeout(timer); closeIt(); dropNote(n); }) : ""),
+      n.edited? h("p",{class:"nedited"}, "Edited "+whenLabel(n.edited)) : ""];
+  }, {onClose:()=>{ save(); scheduleRender(); }});
+  setTimeout(()=>{ const ta=$("#ned-text"); if (ta) grow(ta); if (!old && !seed) $("#ned-title")?.focus(); }, 40);
+  return close;
+}
+function pickNoteLabels(n, done){
+  let fresh="";
+  sheet("Labels", (draw, close)=>[
+    h("div",{class:"ulist sgroup"}, (S.noteLabels||[]).length? S.noteLabels.map(l=>{ const on=n.labels.includes(l);
+      return h("button",{class:"srow pick1"+(on?" on":""), onclick:()=>{ n.labels=on? n.labels.filter(x=>x!==l) : [...n.labels, l]; done(); draw(); }}, svg(ICN.label), h("span",{class:"stx"}, h("b",{}, l)), on? svg(ICF.check) : ""); })
+      : h("p",{class:"note", style:"margin:10px 14px"}, "No labels yet. Make one below.")),
+    h("div",{class:"nnewlab"}, h("input",{id:"nl-new", placeholder:"New label, like Work or Home", maxlength:"40", oninput:e=>fresh=e.target.value, onkeydown:e=>{ if (e.key==="Enter") add(); }}),
+      h("button",{class:"primary", onclick:()=>add()}, "Add")),
+    h("button",{class:"ghost wide", onclick:close}, "Done")]);
+  function add(){ const l=fresh.trim().slice(0,40); if (!l) return; if (!(S.noteLabels||[]).includes(l)) saveLabels([...(S.noteLabels||[]), l]); if (!n.labels.includes(l)) n.labels=[...n.labels, l]; fresh=""; const i=$("#nl-new"); if (i) i.value=""; done();
+    const m=document.querySelector(".scrim:last-of-type .modal"); m && m.__draw && m.__draw(); }
+}
+function editLabels(){
+  let fresh="";
+  sheet("Edit labels", (draw, close)=>[
+    h("div",{class:"nnewlab"}, h("input",{id:"el-new", placeholder:"Create a new label", maxlength:"40", oninput:e=>fresh=e.target.value, onkeydown:e=>{ if (e.key==="Enter") add(); }}), h("button",{class:"primary", onclick:()=>add()}, "Add")),
+    h("div",{class:"ulist sgroup"}, (S.noteLabels||[]).map(l=>h("div",{class:"srow"}, svg(ICN.label), h("span",{class:"stx"}, h("b",{}, l), h("span",{}, (S.notes||[]).filter(n=>(n.labels||[]).includes(l)).length+" notes")),
+      h("button",{class:"iconbtn sm", title:"Rename", "aria-label":"Rename "+l, onclick:()=>renameLabel(l, draw)}, svg(IC.edit)),
+      h("button",{class:"iconbtn sm", title:"Delete label", "aria-label":"Delete label "+l, onclick:()=>{ removeLabel(l); draw(); }}, svg(IC.trash))))),
+    (S.noteLabels||[]).length? h("p",{class:"note", style:"margin:4px 14px"}, "Deleting a label keeps the notes; it only takes the label off them.") : "",
+    h("button",{class:"ghost wide", onclick:close}, "Done")]);
+  function add(){ const l=fresh.trim().slice(0,40); if (!l || (S.noteLabels||[]).includes(l)) return; saveLabels([...(S.noteLabels||[]), l]); fresh=""; const i=$("#el-new"); if (i) i.value="";
+    const m=document.querySelector(".scrim:last-of-type .modal"); m && m.__draw && m.__draw(); }
+}
+function renameLabel(l, redraw){
+  let v=l;
+  sheet("Rename label", (draw, close)=>[h("input",{class:"ninput", id:"rl-in", value:l, maxlength:"40", oninput:e=>v=e.target.value}),
+    h("button",{class:"primary wide", onclick:()=>{ const nv=v.trim(); if (!nv || nv===l) { close(); return; }
+      saveLabels([...new Set(S.noteLabels.map(x=>x===l? nv : x))]);
+      (S.notes||[]).filter(n=>(n.labels||[]).includes(l)).forEach(n=>putNote({...n, labels:[...new Set(n.labels.map(x=>x===l? nv : x))]}));
+      if (S.noteLabel===l) S.noteLabel=nv; close(); redraw && redraw(); scheduleRender(); }}, "Save")]);
+  setTimeout(()=>$("#rl-in")?.select(), 40);
+}
+function removeLabel(l){ saveLabels(S.noteLabels.filter(x=>x!==l)); (S.notes||[]).filter(n=>(n.labels||[]).includes(l)).forEach(n=>putNote({...n, labels:n.labels.filter(x=>x!==l)})); if (S.noteLabel===l) S.noteLabel="all"; scheduleRender(); }
+function saveMsgToNotes(m){ const t=plain(m); S.actFor=null; render(true); if (!t) { toast("Only text can be saved to notes"); return; }
+  const n={id:"n"+now().toString(36)+uidShort(), title:"", text:t, labels:[], color:"", pinned:false, at:now(), edited:now(), from:{chat:S.active, by:m.by}};
+  putNote(n); toast("Saved to Notes", {label:"Open", fn:()=>{ S.view="notes"; ls.set("view","notes"); render(); openNote(n.id); }}); }
 function renderBoard(){
   const wrap=h("section",{class:"boardwrap","aria-label":"Task board"});
   const tm=curTeam();

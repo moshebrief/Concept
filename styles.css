@@ -2479,3 +2479,65 @@ html.kb-open .ob2{min-height:0;height:100%;overflow-y:auto;padding-bottom:calc(v
 html.kb-open .ob2main{padding-top:8px}
 html.kb-open .ob2icon{width:56px;height:56px;margin-bottom:6px}
 html.kb-anim .ob2{transition:padding-bottom .25s ease}
+
+/* ===== Notes (a private place for important things, like Google Keep) ===== */
+@media (max-width:860px){ html .app .rail{width:min(360px,calc(100% - 32px))!important} }
+.noteswrap{--n-yellow:#fff3b0;--n-green:#d9f5d0;--n-blue:#d6ecff;--n-pink:#ffdbe6;--n-purple:#e9defc;--n-sand:#f3e6d3;--n-gray:#e8eaed}
+@media (prefers-color-scheme:dark){ .noteswrap,.scrim{--n-yellow:#4a4223;--n-green:#26402a;--n-blue:#1f3550;--n-pink:#4a2633;--n-purple:#36294d;--n-sand:#44392b;--n-gray:#3a3c40} }
+:root:not([data-theme="dark"]) .scrim{--n-yellow:#fff3b0;--n-green:#d9f5d0;--n-blue:#d6ecff;--n-pink:#ffdbe6;--n-purple:#e9defc;--n-sand:#f3e6d3;--n-gray:#e8eaed}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .scrim,:root:not([data-theme="light"]) .noteswrap{--n-yellow:#4a4223;--n-green:#26402a;--n-blue:#1f3550;--n-pink:#4a2633;--n-purple:#36294d;--n-sand:#44392b;--n-gray:#3a3c40} }
+:root[data-theme="dark"] .scrim,:root[data-theme="dark"] .noteswrap{--n-yellow:#4a4223;--n-green:#26402a;--n-blue:#1f3550;--n-pink:#4a2633;--n-purple:#36294d;--n-sand:#44392b;--n-gray:#3a3c40}
+.noteswrap .nsearch{margin:6px 0 10px}
+.noteswrap .nsearch input{flex:1;min-width:0;height:40px;border:0;background:transparent;font:inherit;font-size:16px;color:var(--ink);outline:none}
+.nchips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -2px 12px;padding:0 2px}
+.nchips::-webkit-scrollbar{display:none}
+.nchip{flex:none;height:34px;padding:0 14px;border-radius:17px;background:var(--fill);color:var(--ink);font:500 14px var(--f-body);display:flex;align-items:center;gap:6px;border:0}
+.nchip svg.i{width:16px;height:16px;color:var(--muted)}
+.nchip[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.nchip[aria-pressed="true"] svg.i{color:inherit}
+.nsec{font:600 12px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:6px 4px 8px}
+.ngrid{columns:2 170px;column-gap:10px;margin-bottom:14px}
+@media (min-width:861px){ .ngrid{columns:4 220px;column-gap:14px} }
+.ncard{display:block;width:100%;break-inside:avoid;margin:0 0 10px;text-align:left;background:var(--surface);color:var(--ink);border:.5px solid var(--rule);border-radius:14px;padding:12px 14px;position:relative;font:inherit;cursor:pointer;transition:transform .12s var(--ease),box-shadow .15s}
+.ncard:active{transform:scale(.98)}
+.ncard:hover{box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.ncard .ntitle{display:block;font:600 15.5px/1.3 var(--f-body);margin:0 18px 4px 0;word-break:break-word}
+.ncard .ntext{font:400 14.5px/1.4 var(--f-body);white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:12;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink)}
+.ncard .npin{position:absolute;top:10px;right:10px;color:var(--muted)}
+.ncard .npin svg.i{width:15px;height:15px}
+.nlabels{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.nlab{font:500 12px var(--f-body);padding:3px 8px;border-radius:7px;background:color-mix(in srgb,var(--ink) 8%,transparent);color:var(--ink);border:0}
+.nc-yellow{background:var(--n-yellow)!important}.nc-green{background:var(--n-green)!important}.nc-blue{background:var(--n-blue)!important}.nc-pink{background:var(--n-pink)!important}.nc-purple{background:var(--n-purple)!important}.nc-sand{background:var(--n-sand)!important}.nc-gray{background:var(--n-gray)!important}
+.ncard[class*="nc-"]{border-color:transparent}
+.nempty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:56px 24px;color:var(--muted)}
+.nempty svg.i{width:44px;height:44px;opacity:.6}
+.nempty b{color:var(--ink);font:600 17px var(--f-body)}
+.nempty p{margin:0;max-width:320px;font-size:14.5px;line-height:1.45}
+/* the note editor */
+.modal .ned-title{width:100%;border:0;background:transparent;font:600 20px/1.3 var(--f-body);color:var(--ink);padding:6px 4px;outline:none}
+.modal .ned-text{width:100%;min-height:160px;border:0;background:transparent;font:400 16px/1.5 var(--f-body);color:var(--ink);padding:4px;resize:none;outline:none}
+.modal .ned-title::placeholder,.modal .ned-text::placeholder{color:var(--muted)}
+.modal .nlabels{margin:2px 4px 6px}
+.modal .nlab{cursor:pointer}
+.ncolors{display:flex;gap:10px;flex-wrap:wrap;padding:10px 4px 4px}
+.ncol{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--rule);padding:0;background:var(--surface)}
+.ncol.on{box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--cobalt)}
+.ncol.nc-none{background:linear-gradient(135deg,var(--surface) 46%,var(--rule) 46%,var(--rule) 54%,var(--surface) 54%)}
+.ntools{display:flex;align-items:center;gap:4px;padding:8px 0 2px;border-top:.5px solid var(--rule);margin-top:8px}
+.ntools .iconbtn.on{color:var(--cobalt)}
+.nedited{margin:4px 6px 0;font-size:12.5px;color:var(--muted);text-align:right}
+.nnewlab{display:flex;gap:8px;padding:6px 4px 10px}
+.nnewlab input,.ninput{flex:1;min-width:0;height:42px;border:1px solid var(--rule);border-radius:10px;padding:0 12px;background:var(--surface);color:var(--ink);font:inherit;font-size:16px}
+.ninput{width:100%;margin:4px 0 12px}
+.modal[class*="nc-"] .sheethead{background:transparent!important}
+.noteswrap .search.nsearch{margin:6px 0 10px!important}
+.modal[class*="nc-"]{transition:background .2s}
+
+html body .scrim .modal.nc-yellow,html body .scrim.page .modal.nc-yellow{background:var(--n-yellow)!important}
+html body .scrim .modal.nc-green,html body .scrim.page .modal.nc-green{background:var(--n-green)!important}
+html body .scrim .modal.nc-blue,html body .scrim.page .modal.nc-blue{background:var(--n-blue)!important}
+html body .scrim .modal.nc-pink,html body .scrim.page .modal.nc-pink{background:var(--n-pink)!important}
+html body .scrim .modal.nc-purple,html body .scrim.page .modal.nc-purple{background:var(--n-purple)!important}
+html body .scrim .modal.nc-sand,html body .scrim.page .modal.nc-sand{background:var(--n-sand)!important}
+html body .scrim .modal.nc-gray,html body .scrim.page .modal.nc-gray{background:var(--n-gray)!important}
+html body .scrim .modal[class*="nc-"] .sheethead,html body .scrim .modal[class*="nc-"] .pagehead{background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
