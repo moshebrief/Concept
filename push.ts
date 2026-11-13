@@ -59,7 +59,7 @@ async function googleToken(): Promise<string> {
 const TONES = ["note", "chime", "pop", "bell", "glass", "pulse", "bamboo", "ripple", "bright", "none"];
 const okTone = (t: unknown, d: string) => (typeof t === "string" && TONES.includes(t) ? t : d);
 
-async function sendFcm(token: string, title: string, body: string, cid: string, tone: string): Promise<"ok" | "gone" | "error"> {
+async function sendFcm(token: string, title: string, body: string, cid: string, tone: string, badge: number): Promise<"ok" | "gone" | "error"> {
   const silent = tone === "none";
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${SA.project_id}/messages:send`, {
     method: "POST",
@@ -72,13 +72,13 @@ async function sendFcm(token: string, title: string, body: string, cid: string, 
         android: {
           priority: "HIGH",
           notification: {
-            channel_id: `msg_${tone}`, tag: cid, icon: "ic_stat_notify", color: "#007AFF",
+            channel_id: `msg_${tone}`, tag: cid, icon: "ic_stat_notify", color: "#007AFF", notification_count: badge,
             ...(silent ? {} : { sound: `tone_${tone}` }),
           },
         },
         apns: {
           headers: { "apns-priority": "10" },
-          payload: { aps: { ...(silent ? {} : { sound: `tone_${tone}.wav` }), "thread-id": cid } },
+          payload: { aps: { ...(silent ? {} : { sound: `tone_${tone}.wav` }), "thread-id": cid, badge } },
         },
       },
     }),
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
     const recips: string[] = (chan.members ?? []).filter((u: string) => u && u !== sender);
     if (!recips.length) return new Response("nobody");
 
-    const paths = [`team/${sender}`, ...recips.map((u) => `data/users/${u}/prefs`), ...recips.map((u) => `devices/${u}`)];
+    const paths = [`team/${sender}`, ...recips.map((u) => `data/users/${u}/prefs`), ...recips.map((u) => `devices/${u}`), ...recips.map((u) => `data/users/${u}/badge`)];
     if (chan.kind === "task" && chan.taskId) paths.push(`tasks/${chan.taskId}`);
     const { data: rows } = await sb.from("docs").select("path,data").in("path", paths);
     const byPath = new Map((rows ?? []).map((r: Doc) => [r.path, r.data]));
@@ -157,9 +157,15 @@ Deno.serve(async (req) => {
       const mentioned = (msg.mentions ?? []).includes(u);
       const title = isGroup ? chatTitle : senderName;
       const body = isGroup ? `${senderName}${mentioned ? " mentioned you" : ""}: ${what}` : what;
+      // The red number on the app icon: how many chats have unread messages. The app writes the real list
+      // whenever it's open; here we add this chat to it.
+      const bd = byPath.get(`data/users/${u}/badge`) ?? {};
+      const chats: Record<string, number> = { ...(bd.c ?? {}), [cid]: 1 };
+      const badge = Object.keys(chats).length;
+      await sb.from("docs").upsert({ path: `data/users/${u}/badge`, col: `data/users/${u}`, data: { c: chats }, updated_at: new Date().toISOString() });
       let changed = false;
       for (const [k, v] of tokens) {
-        const r = await sendFcm(v.t, title, body, cid, tone);
+        const r = await sendFcm(v.t, title, body, cid, tone, badge);
         if (r === "ok") sent++;
         if (r === "gone") { delete dev.tokens[k]; changed = true; }
       }

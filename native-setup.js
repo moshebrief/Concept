@@ -148,6 +148,42 @@ function ios() {
            .replace(/TARGETED_DEVICE_FAMILY = "[^"]*";/g, `TARGETED_DEVICE_FAMILY = 1;`)
            .replace(/TARGETED_DEVICE_FAMILY = [0-9,]+;/g, `TARGETED_DEVICE_FAMILY = 1;`);
   if (!pbx.includes("CODE_SIGN_ENTITLEMENTS")) pbx = pbx.replace(/INFOPLIST_FILE = App\/Info\.plist;/g, "CODE_SIGN_ENTITLEMENTS = App/App.entitlements;\n\t\t\t\tINFOPLIST_FILE = App/Info.plist;");
+
+  // Privacy manifest: Apple requires a reason for "UserDefaults" (used by the app-icon badge plugin to remember the number).
+  write(path.join(dir, "App", "PrivacyInfo.xcprivacy"),
+`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+`);
+  if (!pbx.includes("PrivacyInfo.xcprivacy")) {
+    const REF = "7A11C0DE00000000000000A1", BF = "7A11C0DE00000000000000A2";
+    pbx = pbx.replace("/* Begin PBXBuildFile section */", `/* Begin PBXBuildFile section */\n\t\t${BF} /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = ${REF} /* PrivacyInfo.xcprivacy */; };`)
+             .replace("/* Begin PBXFileReference section */", `/* Begin PBXFileReference section */\n\t\t${REF} /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };`);
+    // add it to the App folder in Xcode, next to Assets.xcassets, and to the files copied into the app
+    pbx = pbx.replace(/(\n(\t+)([0-9A-F]{24}) \/\* Assets\.xcassets \*\/,)/, (m, all, tabs) => `${all}\n${tabs}${REF} /* PrivacyInfo.xcprivacy */,`)
+             .replace(/(\n(\t+)([0-9A-F]{24}) \/\* Assets\.xcassets in Resources \*\/,)/, (m, all, tabs) => `${all}\n${tabs}${BF} /* PrivacyInfo.xcprivacy in Resources */,`);
+    must((pbx.match(/PrivacyInfo\.xcprivacy/g) || []).length >= 4, "couldn't add PrivacyInfo.xcprivacy to the Xcode project");
+  }
   write(path.join(dir, "App", "App.entitlements"),
 `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

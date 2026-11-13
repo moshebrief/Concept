@@ -181,7 +181,7 @@ function startDemo(msg){ S.mode="demo"; S.me="me"; demo.seed(); if (!S.active) S
 function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(h("span",{style:"width:9px;height:9px;background:var(--knot);transform:rotate(45deg);flex:none"}), h("span",{},t)); }
 
 function subscribeAll(){
-  loadPins(); loadNotes(); loadAddr(); startE2E();
+  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E();
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
   store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
@@ -191,6 +191,7 @@ function subscribeAll(){
     S.channels = rows.filter(c => c.kind!=="dm" || (c.members||[]).includes(S.me)).sort((a,b)=>((b.last&&b.last.at)||b.at||0)-((a.last&&a.last.at)||a.at||0));
     await resolvePeople(rows.flatMap(c=>[...(c.members||[]), c.last&&c.last.by]).filter(Boolean));
     if (!S.active || !S.channels.find(c=>c.id===S.active)) S.active = S.channels[0] ? S.channels[0].id : null;
+    IB.ready=true;
     decryptMany(S.channels.map(c=>c.last&&c.last.enc)).then(ch=>{ if (ch) scheduleRender(); });
     LOCAL.save("channels", S.channels); syncSoon(); noticeIncoming(S.channels); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
     openMsgs(); scheduleRender();
@@ -1920,8 +1921,22 @@ function patchList(){ if (SW.drag) { SW.pending=true; return; } const l=$("#list
 function updateBadges(){
   updateDots();
   const ur=S.channels.filter(unread).length; const ud=$("#unreadDot"); if (ud){ ud.hidden=!ur; ud.textContent=ur; }
+  iconBadge();
   const mine=visibleTasks().filter(t=>t.assignee===S.me && t.status!=="done").length; const md=$("#mineDot"); if (md){ md.hidden=!mine; md.textContent=mine; }
 }
+// The red number on the app icon = chats with unread messages (muted chats don't count).
+// The server raises it when a notification goes out (see push.ts); the app sets the real number whenever it's open.
+let IB={last:null, t:null, ready:false};
+function iconBadge(){
+  if (S.mode!=="live") return;
+  if (!IB.ready) return;                                   // wait until the chat list has loaded, so we never wipe it to 0 by mistake
+  const ids=S.channels.filter(c=>unread(c) && !isMuted(c)).map(c=>c.id), n=ids.length, key=ids.sort().join(",");
+  const b=NP("Badge"); if (b) { try { n? b.set({count:n}) : b.clear(); } catch {} }
+  if (key===IB.last) return; IB.last=key;
+  clearTimeout(IB.t); IB.t=setTimeout(()=>{ if (DB && S.me) store.set("data/users/"+S.me+"/badge", {c:Object.fromEntries(ids.map(id=>[id,1]))}).catch(()=>{}); }, 1200);
+}
+function watchBadge(){ if (S.mode!=="live") return;
+  store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="badge"); if (!d) return; const k=Object.keys(d.c||{}).sort().join(","); if (k!==IB.last) { IB.last=null; iconBadge(); } }); }
 function msgsFor(cid){ const have=new Set(S.msgs.map(m=>m.id)); const cl=(S.nt.cleared||{})[cid]||0; const all=S.msgs.concat(S.pend.filter(p=>p.cid===cid && !have.has(p.id))).filter(m=>!cl || (m.at||0)>cl); return (S.blocked||[]).length? all.filter(m=>!isBlocked(m.by)) : all; }
 const newMsgId = () => "m"+now().toString(36)+uidShort().slice(0,4);
 
@@ -3050,7 +3065,7 @@ async function nativeInit(){
     kb.addListener("keyboardDidShow", ()=>{ const st=$("#stream"); if (st && document.activeElement && document.activeElement.closest(".compose")) st.scrollTop=st.scrollHeight; unpan(); revealFocused(); });
     kb.addListener("keyboardDidHide", ()=>unpan()); }
   const app=NP("App");
-  if (app) app.addListener("appStateChange", ({isActive})=>{ if (isActive && S.inThread && S.view==="chats") { markRead(); scheduleRender(); } if (!isActive) autoBackup(); });
+  if (app) app.addListener("appStateChange", ({isActive})=>{ if (isActive && S.inThread && S.view==="chats") { markRead(); scheduleRender(); } if (!isActive) { iconBadge(); autoBackup(); } });
   setTimeout(()=>{ offerRestore().catch(()=>{}); }, 6000);
   setTimeout(()=>{ autoBackup(); }, 45000);
   const sb=NP("SystemBars"); const dark=matchMedia("(prefers-color-scheme: dark)").matches;
