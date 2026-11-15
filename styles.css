@@ -2578,3 +2578,37 @@ html body .lpmmenu button{color:var(--ink)!important}
 html body .lpmmenu button.danger{color:#ff3b30!important}
 .lpmlift,.lpmlift *{filter:none!important;opacity:1!important}
 .lpmlift .lineitem{background:var(--surface)!important}
+
+/* ===== Holding a message: WhatsApp / iMessage style ===== */
+.strip{transition:transform .3s cubic-bezier(.3,0,.4,1)}
+.strip.pressing{transform:scale(.96)}
+.lpm.msgmenu .lpmlift{background:transparent!important;border-radius:0!important;box-shadow:none!important;overflow:visible}
+.lpm.msgmenu .lpmlift.lpmrow{display:block!important;padding:0!important;margin:0!important;max-width:none!important;min-height:0!important}
+.lpm.msgmenu .lpmlift .strip{box-shadow:0 10px 34px rgba(0,0,0,.22);margin:0!important;max-width:100%!important;transform:none!important}
+.lpm.msgmenu .lpmlift.clip .strip{max-height:100%;overflow:hidden}
+.lpm.msgmenu .lpmlift .fwdbtn,.lpm.msgmenu .lpmlift .mchev,.lpm.msgmenu .lpmlift .swi,.lpm.msgmenu .lpmlift .who,.lpm.msgmenu .lpmlift .selck{display:none!important}
+.lpm.msgmenu.in .lpmlift{transform:translateY(var(--dy,0)) scale(1)}
+.lpmreact{display:flex;align-items:center;gap:2px;padding:5px 6px;border-radius:28px;background:var(--surface);box-shadow:0 8px 30px rgba(0,0,0,.18);opacity:0;transform:scale(.5);transition:transform .34s cubic-bezier(.2,.9,.25,1.15),opacity .16s;z-index:3;max-width:calc(100vw - 24px)}
+.lpm.in .lpmreact{opacity:1;transform:scale(1)}
+.lpm.out .lpmreact{opacity:0;transform:scale(.6);transition-duration:.16s}
+.lpmreact button{width:42px;height:42px;border-radius:50%;border:0;background:transparent;font-size:27px;line-height:1;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.lpmreact button:active{transform:scale(1.25)}
+.lpmreact button.on{background:color-mix(in srgb,var(--cobalt) 18%,transparent)}
+.lpmreact .emore{background:var(--fill);font-size:0;width:36px;height:36px;margin-left:2px}
+.lpmreact .emore svg.i{width:20px;height:20px;color:var(--muted)}
+.lpmreact.more{flex-wrap:wrap;width:min(330px,calc(100vw - 24px));border-radius:22px;justify-content:center}
+/* the old buttons beside every bubble: only on photos, videos and files (like WhatsApp) */
+.msg:not(.rich) > .fwdbtn,.msg:not(.rich) .fwdbtn{display:none!important}
+.lpm.msgmenu .lpmlift .strip{white-space:normal}
+.lpm.msgmenu .lpmlift .strip .time,.lpm.msgmenu .lpmlift .strip .meta{float:none}
+.lpm.msgmenu .lpmlift .brow{display:flex;margin:0!important;padding:0!important;transform:none!important}
+.lpm.msgmenu .lpmlift.mine .brow,.lpm.msgmenu .lpmlift.lpmrow.mine .brow{justify-content:flex-end}
+/* chat header: frosted like WhatsApp, but messages scrolling under it must not be readable */
+:root{--g-top:rgba(247,247,250,.86)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--g-top:rgba(22,22,26,.84)}}
+:root[data-theme="dark"]{--g-top:rgba(22,22,26,.84)}
+/* a full-screen page (new chat, settings pages...) covers the floating tab bar */
+body:has(.scrim.page) .app .rail{display:none!important}
+/* unread chats stand out like in Messages / WhatsApp: darker preview and a blue time */
+.lineitem.unread .pv,.lineitem.unread .pvt{color:var(--ink)!important}
+.lineitem.unread .meta .mono{color:var(--cobalt)!important;font-weight:600}

@@ -907,7 +907,7 @@ function rowMenu(c, x, y, el, mouse){
     {label: ur? "Mark as read" : "Mark as unread", icon: ur? ICF.check : ICF.dotchat, fn:()=>toggleUnread(c)},
     {label: mu? "Unmute" : "Mute", icon: mu? ICF.bell : ICF.bellx, fn:()=> mu? setMute(c.id, null) : openMute(c)},
     {label:"Notification tone", icon:ICF.music, fn:()=>openChatNotif(c)},
-    {label:"Delete chat", icon:IC.trash, danger:true, fn:()=>confirmDeleteChat(c)}]); return; }
+    {label:"Delete chat", icon:IC.trash, danger:true, fn:()=>confirmDeleteChat(c)}], {align:"left"}); return; }
   const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }, oncontextmenu:e=>{ e.preventDefault(); scrim.remove(); }});
   const go=fn=>()=>{ scrim.remove(); fn(); };
   const m=h("div",{class:"popmenu", role:"menu", style:`left:${Math.min(x, innerWidth-230)}px;top:${Math.min(y, innerHeight-250)}px`},
@@ -932,36 +932,52 @@ function longPress(el, fn){
 }
 // iOS-style menu for a held item: the screen blurs, the item lifts out of the list, and the menu grows from under it.
 // items: [{label, icon, fn, danger}] (null to skip). Tap outside to close.
-function ctxMenu(src, items){
+function ctxMenu(src, items, opt={}){
   if (document.querySelector(".lpm")) return;
   items=items.filter(Boolean);
-  const r=src.getBoundingClientRect(), vw=innerWidth, vh=innerHeight;
+  // measure the item at its real size (it may still be shrunk from the press)
+  const rr=src.getBoundingClientRect(), ow=src.offsetWidth||rr.width, oh=src.offsetHeight||rr.height;
+  const r={left:rr.left+(rr.width-ow)/2, top:rr.top+(rr.height-oh)/2, width:ow, height:oh}; r.right=r.left+ow; r.bottom=r.top+oh;
+  const vw=innerWidth, vh=innerHeight;
   const pr=h("div",{style:"position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)"}); document.body.append(pr);
   const cs=getComputedStyle(pr), safeT=(parseFloat(cs.paddingTop)||0)+12, safeB=(parseFloat(cs.paddingBottom)||0)+12; pr.remove();
-  const MW=Math.min(254, vw-32), MH=items.length*46+(items.some(i=>i.danger)? 8 : 0), GAP=10;
-  // where the lifted item sits: same place if the menu fits below it, otherwise nudged up so both fit
-  let top=r.top; const need=r.height+GAP+MH;
-  if (top+need > vh-safeB) top=Math.max(safeT, vh-safeB-need);
-  const below = top+need <= vh-safeB+1;
-  const menuTop = below? top+r.height+GAP : Math.max(safeT, top-GAP-MH);
-  const left = Math.min(Math.max(16, r.left+12), vw-16-MW);
-  const wrap=h("div",{class:"lpm", role:"dialog", "aria-label":"Options"});
+  const MW=Math.min(opt.menuWidth||254, vw-32), MH=items.length*46+(items.filter(i=>i.danger).length? 8 : 0), GAP=8;
+  const wrap=h("div",{class:"lpm"+(opt.cls?" "+opt.cls:""), role:"dialog", "aria-label":"Options"});
   const back=h("div",{class:"lpmback"});
-  const lift=src.cloneNode(true); lift.classList.add("lpmlift"); [lift, ...lift.querySelectorAll("*")].forEach(n=>{ n.classList && n.classList.remove("pressing","tap","anim","armed"); n.removeAttribute && n.removeAttribute("id"); });
-  Object.assign(lift.style,{position:"fixed", left:r.left+"px", top:r.top+"px", width:r.width+"px", height:r.height+"px", margin:"0", "--dy":(top-r.top)+"px"});
-  const menu=h("div",{class:"lpmmenu", role:"menu", style:`left:${left}px;top:${menuTop}px;width:${MW}px;transform-origin:${r.left+24-left}px ${below?"0":"100%"}`});
+  const head=opt.header||null; let HH=0;
+  if (head) { head.classList.add("lpmhead"); head.style.visibility="hidden"; document.body.append(head); HH=head.offsetHeight+GAP; head.remove(); head.style.visibility=""; }
+  // the lifted item stays where it is if everything fits; otherwise it moves so the bar above and the menu below both fit
+  const LH=Math.min(r.height, vh*0.42);
+  let top=r.top; const need=HH+LH+GAP+MH;
+  if (top-HH < safeT) top=safeT+HH;
+  if (top+LH+GAP+MH > vh-safeB) top=Math.max(safeT+HH, vh-safeB-MH-GAP-LH);
+  const fitsBelow = top+LH+GAP+MH <= vh-safeB+1;
+  const menuTop = fitsBelow? top+LH+GAP : Math.max(safeT, top-GAP-MH);
+  const alignRight = opt.align==="right" || (opt.align!=="left" && r.left+r.width/2 > vw/2);
+  const left = alignRight? Math.max(16, Math.min(vw-16-MW, r.right-MW)) : Math.min(Math.max(16, r.left), vw-16-MW);
+  let lift=src.cloneNode(true);
+  if (opt.ctxClass) { const inner=lift, sc=getComputedStyle(src);
+    // colors can come from the chat screen around the bubble, so copy what it actually looks like
+    Object.assign(inner.style,{margin:"0", font:sc.font, letterSpacing:sc.letterSpacing, background:sc.background, backgroundColor:sc.backgroundColor, color:sc.color, borderRadius:sc.borderRadius, width:(Math.ceil(r.width)+4)+"px", maxWidth:"none"});
+    lift=h("div",{class:opt.ctxClass}, src.parentElement? h("div",{class:src.parentElement.className}, inner) : inner); }   // keep the look that comes from the parent (e.g. my bubble is blue)
+  lift.classList.add("lpmlift"); [lift, ...lift.querySelectorAll("*")].forEach(n=>{ n.classList && n.classList.remove("pressing","tap","anim","armed","swiping"); n.removeAttribute && n.removeAttribute("id"); });
+  Object.assign(lift.style,{position:"fixed", left:(opt.ctxClass && opt.align==="right"? r.left-4 : r.left)+"px", top:r.top+"px", width:(r.width+(opt.ctxClass? 4 : 0))+"px", height:(r.height>LH? LH+"px" : (opt.ctxClass? "auto" : r.height+"px")), margin:"0"}); lift.style.setProperty("--dy", (top-r.top)+"px");
+  if (r.height>LH) lift.classList.add("clip");
+  const menu=h("div",{class:"lpmmenu", role:"menu", style:`left:${left}px;top:${menuTop}px;width:${MW}px;transform-origin:${alignRight? "100%" : "0"} ${fitsBelow?"0":"100%"}`});
   // the finger that opened the menu is still down: ignore the tap it makes when it lifts
   let closing=false, ready=false; const arm=()=>setTimeout(()=>{ ready=true; }, 60);
   addEventListener("pointerup", arm, {once:true, capture:true}); setTimeout(()=>{ ready=true; }, 900);
-  const close=(after)=>{ if (closing || (!ready && !after)) return; closing=true; wrap.classList.add("out"); setTimeout(()=>{ wrap.remove(); after && after(); }, 190); };
-  items.forEach((it,i)=>{ if (it.danger && i>0) menu.append(h("div",{class:"lpmsep"}));
+  const close=(after)=>{ if (closing || (!ready && !after)) return; closing=true; wrap.classList.add("out"); setTimeout(()=>{ wrap.remove(); opt.onClose && opt.onClose(); after && after(); }, 190); };
+  items.forEach((it,i)=>{ if (it.danger && i>0 && !items[i-1].danger) menu.append(h("div",{class:"lpmsep"}));
     menu.append(h("button",{role:"menuitem", class:it.danger?"danger":"", onclick:()=>{ if (ready) close(it.fn); }}, h("span",{}, it.label), svg(it.icon))); });
   back.addEventListener("click", ()=>close()); back.addEventListener("contextmenu", e=>{ e.preventDefault(); close(); });
   lift.addEventListener("click", e=>{ e.preventDefault(); e.stopPropagation(); close(); });
-  wrap.append(back, lift, menu); document.body.append(wrap);
+  wrap.append(back, lift);
+  if (head) { Object.assign(head.style,{position:"fixed", top:(top-HH)+"px", [alignRight?"right":"left"]: (alignRight? Math.max(12, vw-r.right) : Math.max(12, r.left))+"px", "transform-origin": alignRight? "100% 100%" : "0 100%"}); wrap.append(head); }
+  wrap.append(menu); document.body.append(wrap);
   requestAnimationFrame(()=>wrap.classList.add("in"));
   const esc=e=>{ if (e.key==="Escape") { close(); removeEventListener("keydown", esc); } }; addEventListener("keydown", esc);
-  setTimeout(()=>menu.querySelector("button")?.focus({preventScroll:true}), 260);
+  return {close:fn=>{ ready=true; close(fn); }, ready:()=>ready};
 }
 
 function renderSettings(){
@@ -1419,7 +1435,34 @@ function renderDial(w){
 // ---------- message gestures ----------
 const MORE_EMOJI=["👍","❤️","😂","😮","😢","🙏","🔥","✅","👏","🎉","💯","🤝","😍","🤔","👀","😅","🙌","💪","😎","🥳","😡","👌","⭐","🚀"];
 function quickEmojis(){ const use=ls.get("emojiUse",{}); const top=Object.entries(use).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); return [...new Set([...top, ...EMOJI])].slice(0,6); }
-function holdMenu(m){ if (m.deleted || S.selecting || !S.canWrite) return; S.actFor=m.id; S.emojiMore=false; haptic(); render(true); }
+function holdMenu(m, src){
+  if (m.deleted || S.selecting || !S.canWrite) return;
+  if (!src) { S.actFor=m.id; S.emojiMore=false; haptic(); render(true); return; }
+  haptic(); S.emojiMore=false;
+  const mine=m.by===S.me, task=m.taskId && S.tasks.find(t=>t.id===m.taskId && canSeeTask(t)), r=m.reactions||{};
+  let ctl=null;
+  const pick=e=>{ ctl && ctl.close(()=>toggleReact(m,e)); };
+  const pill=h("div",{class:"lpmreact", role:"group", "aria-label":"React", onclick:e=>e.stopPropagation()});
+  const fill=more=>{ pill.replaceChildren(...(more? MORE_EMOJI : quickEmojis()).map(e=>h("button",{class:(r[e]||[]).includes(S.me)?"on":"", "aria-label":"React "+e, onclick:()=>pick(e)}, e)),
+    more? "" : h("button",{class:"emore", "aria-label":"More emojis", onclick:()=>{ pill.classList.add("more"); fill(true); }}, svg(IC.plus))); };
+  fill(false);
+  const items=[
+    {label:"Reply", icon:IC.reply, fn:()=>startReply(m)},
+    plain(m)!==false? {label:"Forward", icon:ICF.fwd, fn:()=>forwardMenu(m)} : null,
+    plain(m)? {label:"Copy", icon:ICF.copy, fn:()=>copyMsg(m)} : null,
+    task? {label:"Open task", icon:IC.knot, fn:()=>openTask(task.id)} : {label:"Make task", icon:IC.knot, fn:()=>quickTask([m], {open:(S.prefs.swipeTask||"open")!=="silent"})},
+    task && canThread(task)? {label:"Task conversation", icon:IC.thread, fn:()=>openTaskChat(task)} : null,
+    plain(m)? {label:"Save to Notes", icon:ICN.note, fn:()=>saveMsgToNotes(m)} : null,
+    mine && !m.kind && plain(m)!==false? {label:"Edit", icon:IC.edit, fn:()=>{ S.editing=m.id; render(true); }} : null,
+    {label:"Select", icon:ICF.selm, fn:()=>{ S.selecting=true; S.sel=[m.id]; render(true); }},
+    mine? {label:"Delete", icon:IC.trash, danger:true, fn:()=>confirmDeleteMsg(m)} : {label:"Report", icon:ICF.flag2, danger:true, fn:()=>openReport({title:"Report message", user:m.by, channel:S.active, message:m.id, text:msgText(m)})}];
+  const row=src.closest(".msg");
+  ctl=ctxMenu(src, items, {header:pill, cls:"msgmenu", align: mine? "right" : "left", menuWidth:230, ctxClass: row? row.className.replace(/\b(swiping|swr|swl|justtied|tasked)\b/g,"")+" lpmrow" : ""});
+}
+function confirmDeleteMsg(m){
+  sheet("Delete message?", (draw, close)=>[h("p",{class:"note", style:"margin:0"}, "It will be deleted for everyone in this chat."),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary danger-bg", onclick:()=>{ close(); deleteMsg(m); }}, "Delete"))]);
+}
 function swipeTask(m){
   const mode=S.prefs.swipeTask||"open";
   const existing=m.taskId && S.tasks.find(t=>t.id===m.taskId && canSeeTask(t));
@@ -1444,7 +1487,7 @@ function attachGestures(el, strip, m){
   const brow=strip.parentElement||el;
   const ico = canAct? h("span",{class:"swi swi-l","aria-hidden":"true"}, svg(IC.knot)) : null;
   if (ico) brow.append(ico);
-  let x0=0,y0=0,t0=0,mx=0,dx=0,trail=[],active=false,decided=false,horiz=false,lp=null,endedAt=0,armL=false,armR=false;
+  let pz=null,x0=0,y0=0,t0=0,mx=0,dx=0,trail=[],active=false,decided=false,horiz=false,lp=null,endedAt=0,armL=false,armR=false;
   const band=(d,lim,cap)=>{ const a=Math.abs(d); const v=a<=lim? a : lim+(a-lim)*0.32; return Math.sign(d)*Math.min(cap, v); };
   const set=v=>{
     el.style.setProperty("--sx", v+"px");
@@ -1457,14 +1500,14 @@ function attachGestures(el, strip, m){
   const start=(x,y,target)=>{ if (S.selecting || target.closest("button,a,.vbars,input,textarea,.reacts,.chip")) return false;
     x0=x; y0=y; t0=performance.now(); mx=0; dx=0; trail=[[t0,0]]; active=true; decided=false; horiz=false; armL=armR=false;
     if (ico) ico.style.left=Math.max(0, strip.offsetLeft+strip.offsetWidth-36)+"px";
-    clearTimeout(lp); lp=setTimeout(()=>{ if (active && !decided){ active=false; holdMenu(m); } }, 430); return true; };
+    clearTimeout(lp); clearTimeout(pz); pz=setTimeout(()=>{ if (active && !decided) strip.classList.add("pressing"); }, 140); lp=setTimeout(()=>{ strip.classList.remove("pressing"); if (active && !decided){ active=false; holdMenu(m, strip); } }, 430); return true; };
   const move=(x,y)=>{ if (!active) return false; mx=x-x0; const my=y-y0; const tn=performance.now(); trail.push([tn,mx]); while (trail.length>2 && tn-trail[0][0]>90) trail.shift();
-    if (!decided && (Math.abs(mx)>6 || Math.abs(my)>6)) { decided=true; clearTimeout(lp); horiz=Math.abs(mx)>Math.abs(my); if (!horiz) { active=false; return false; } SW.drag=true; el.classList.add("swiping"); }
+    if (!decided && (Math.abs(mx)>6 || Math.abs(my)>6)) { decided=true; clearTimeout(lp); clearTimeout(pz); strip.classList.remove("pressing"); horiz=Math.abs(mx)>Math.abs(my); if (!horiz) { active=false; return false; } SW.drag=true; el.classList.add("swiping"); }
     if (!horiz) return false;
     let v=mx; if (!canAct) v=Math.max(0,v);
     dx = v>0? band(v, SW_REPLY, 96) : band(v, SW_TASK, 104);
     set(dx); return true; };
-  const end=()=>{ clearTimeout(lp); if (!active) return; active=false; if (!horiz) return;
+  const end=()=>{ clearTimeout(lp); clearTimeout(pz); strip.classList.remove("pressing"); if (!active) return; active=false; if (!horiz) return;
     el.classList.remove("swiping"); SW.drag=false; endedAt=Date.now();
     const f=trail[0], vel=(mx-f[1])/Math.max(16, performance.now()-f[0]);  // speed over the last ~90ms, px per ms
     const doReply = dx>=SW_REPLY || (mx>28 && vel>0.4);
@@ -1473,7 +1516,7 @@ function attachGestures(el, strip, m){
     if (doReply) { if (!armR) haptic(); startReply(m); }
     else if (doTask) { if (!armL) haptic(); el.classList.add("tasked"); setTimeout(()=>el.classList.remove("tasked"), 500); swipeTask(m); }
     if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag) scheduleRender(); }, 300); } };
-  const cancel=()=>{ clearTimeout(lp); if (active && horiz) { el.classList.remove("swiping","swr","swl"); SW.drag=false; set(0); } active=false; };
+  const cancel=()=>{ clearTimeout(lp); clearTimeout(pz); strip.classList.remove("pressing"); if (active && horiz) { el.classList.remove("swiping","swr","swl"); SW.drag=false; set(0); } active=false; };
   if ("ontouchstart" in window) {
     el.addEventListener("touchstart", e=>{ if (e.touches.length!==1) return; const t=e.touches[0]; start(t.clientX, t.clientY, e.target); }, {passive:true});
     // once the finger is clearly going sideways, the chat stops scrolling so the swipe feels steady
@@ -1486,7 +1529,7 @@ function attachGestures(el, strip, m){
   el.addEventListener("pointerup", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; end(); });
   el.addEventListener("pointercancel", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; cancel(); });
   el.addEventListener("click", e=>{ if (Date.now()-endedAt<400) { e.stopPropagation(); e.preventDefault(); } }, true);
-  strip.addEventListener("contextmenu", e=>{ e.preventDefault(); if (!horiz) holdMenu(m); });
+  strip.addEventListener("contextmenu", e=>{ e.preventDefault(); if (!horiz) holdMenu(m, strip); });
 }
 function replyBarEl(){
   const r = S.msgs.find(x=>x.id===(S.replyTo||S.editing));
@@ -3364,7 +3407,7 @@ function listChildren(){
         h("span",{class:"meta"}, x.last? h("span",{class:"mono"}, fmtShort(x.last.at)):"", h("span",{class:"metaicons"}, isMuted(x)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", unread(x)? h("span",{class:"badge"+(isMuted(x)?" muted":"")},"1"):"")));
       longPress(row,(px,py,el,mouse)=>rowMenu(x,px,py,el,mouse)); return swipeWrap(row, x); }))];
   };
-  const itemEl = c => h("button",{class:"lineitem", "aria-current":String(c.id===S.active && S.inThread || (c.id===S.active && window.innerWidth>860)), onclick:()=>selectChannel(c.id)},
+  const itemEl = c => h("button",{class:"lineitem"+(unread(c)? " unread" : ""), "aria-current":String(c.id===S.active && S.inThread || (c.id===S.active && window.innerWidth>860)), onclick:()=>selectChannel(c.id)},
     chanGlyph(c),
     h("span",{style:"min-width:0"}, h("div",{class:"nm"}, chanTitle(c)), h("div",{class:"pv"}, c.last && c.last.by===S.me? ticks({by:S.me, at:c.last.at}, c) : "", h("span",{class:"pvt", "data-cid":c.id}, c.last? (c.kind!=="dm" && c.last.by!==S.me? nameOf(c.last.by).replace(/^Example:\s*/,"").split(" ")[0]+": ":"")+lastPreview(c.last) : ""))),
     h("span",{class:"meta"}, c.last? h("span",{class:"mono"}, fmtShort(c.last.at)):"", h("span",{class:"metaicons"}, isMuted(c)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", S.pins.includes(c.id)? h("span",{class:"pinmark", title:"Pinned"}, svg(IC.pin)):"", unread(c)? h("span",{class:"badge"+(isMuted(c)?" muted":"")+(c.last&&(c.last.mentions||[]).includes(S.me)?" at":"")}, c.last&&(c.last.mentions||[]).includes(S.me)? "@" : "1"):""))
@@ -3445,7 +3488,7 @@ function renderMsg(m, cont, chan){
   const el = h("div",{style:mine?null:`--tint:${(S.people[m.by]&&S.people[m.by].color)||colorFor(m.by)}`, class:`msg${mine?" mine":""}${cont?" cont":""}${task?" knotted":""}${m.pending?" pending":""}${rich?" rich k-"+m.kind:""}${S.justTied===m.id?" justtied":""}${S.selecting?" selmode":""}${sel?" selected":""}`, id:"msg-"+m.id, onclick:e=>{ if (S.selecting && !m.deleted){ e.stopPropagation(); toggleSel(m.id); } }});
   if (S.selecting) el.append(h("span",{class:"selck"}, sel? svg(ICF.check):""));
   if (!cont && !mine && ch.kind!=="dm") el.append(h("div",{class:"who"}, nameOf(m.by).replace(/^Example:\s*/,"")));
-  const strip = h("div",{class:"strip", tabindex:"0", "aria-label":"Message. Hold for options, swipe right to reply, swipe left to make a task", onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); holdMenu(m); } }});
+  const strip = h("div",{class:"strip", tabindex:"0", "aria-label":"Message. Hold for options, swipe right to reply, swipe left to make a task", onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); holdMenu(m, e.currentTarget); } }});
   if (m.fwd) strip.append(h("div",{class:"fwdlabel"}, svg(m.fwd>=5? ICF.fwd2 : ICF.fwd), m.fwd>=5? "Forwarded many times" : "Forwarded"));
   if (m.replyTo) { const r=S.msgs.find(x=>x.id===m.replyTo); if (r) strip.append(h("div",{class:"quote", onclick:e=>{e.stopPropagation(); jumpToMessage(S.active, r.id);}}, h("b",{},nameOf(r.by)), (r.deleted?"Message deleted": msgText(r)).slice(0,140))); }
   if (m.statusQuote) strip.append(h("div",{class:"quote"}, h("b",{}, "Status · "+nameOf(m.statusQuote.by).replace(/^Example:\s*/,"")), String(m.statusQuote.text).slice(0,140)));
@@ -3462,7 +3505,7 @@ function renderMsg(m, cont, chan){
   el.append(h("span",{class:"swi swi-r","aria-hidden":"true"}, svg(IC.reply)));
   el.append(h("div",{class:"brow"}, strip,
     !m.deleted && !m.pending && !S.selecting && S.canWrite && plain(m)!==false? h("button",{class:"fwdbtn", title:"Forward", "aria-label":"Forward message", onclick:e=>{ e.stopPropagation(); forwardMenu(m); }}, svg(ICF.fwd)) : "",
-    !m.deleted && !S.selecting && S.canWrite? h("button",{class:"mchev", title:"Options", "aria-label":"Message options", onclick:e=>{ e.stopPropagation(); holdMenu(m); }}, svg(ICF.chev)) : ""));
+    !m.deleted && !S.selecting && S.canWrite? h("button",{class:"mchev", title:"Options", "aria-label":"Message options", onclick:e=>{ e.stopPropagation(); const st=e.currentTarget.closest(".msg"); holdMenu(m, st && st.querySelector(".strip")); }}, svg(ICF.chev)) : ""));
   if (!m.pending) attachGestures(el, strip, m);
   const rs = Object.entries(m.reactions||{}).filter(([,v])=>v&&v.length);
   if (rs.length) el.append(h("div",{class:"reacts"}, rs.map(([e,v])=>h("button",{class:"react"+(v.includes(S.me)?" on":""), title:v.map(nameOf).join(", "), disabled:!S.canWrite, onclick:()=>toggleReact(m,e)}, e, h("span",{class:"mono"},v.length)))));
