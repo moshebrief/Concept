@@ -21,12 +21,15 @@ const IC = {
 };
 const uidShort = () => Math.random().toString(36).slice(2,10);
 const now = () => Date.now();
-const fmtTime = t => new Date(t).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+const fmtTime = t => new Date(t).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
 const dayKey = t => new Date(t).toDateString();
 const fmtDay = t => { const d=new Date(t), td=new Date(); const y=new Date(); y.setDate(td.getDate()-1);
   if (d.toDateString()===td.toDateString()) return "Today"; if (d.toDateString()===y.toDateString()) return "Yesterday";
   return d.toLocaleDateString([], {weekday:"short", day:"numeric", month:"short"}); };
-const fmtShort = t => { const d=new Date(t); return d.toDateString()===new Date().toDateString()? fmtTime(t) : d.toLocaleDateString([], {day:"numeric",month:"short"}); };
+const fmtShort = t => { const d=new Date(t), n=new Date(); if (d.toDateString()===n.toDateString()) return fmtTime(t);
+  const y=new Date(n); y.setDate(n.getDate()-1); if (d.toDateString()===y.toDateString()) return "Yesterday";
+  const days=(new Date(n.toDateString())-new Date(d.toDateString()))/864e5; if (days>0 && days<7) return d.toLocaleDateString([], {weekday:"long"});
+  return d.toLocaleDateString([], {day:"numeric", month:"numeric", year:"2-digit"}); };
 const fmtDue = s => s ? new Date(s+"T12:00").toLocaleDateString([], {day:"numeric", month:"short"}) : "";
 const isLate = (s, st) => s && st!=="done" && new Date(s+"T23:59") < new Date();
 const ls = { get(k,d){ try{ const v=localStorage.getItem("concept:"+k); return v==null?d:JSON.parse(v);}catch{return d;} }, set(k,v){ try{ localStorage.setItem("concept:"+k, JSON.stringify(v)); }catch{} } };
@@ -4027,5 +4030,17 @@ document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
 if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+// ---------- "jump to latest" button (WhatsApp's round ⌄ when you scroll up in a chat) ----------
+(function(){
+  const btnFor = main => { let b=main.querySelector(":scope > .tobottom"); if (!b) { b=h("button",{class:"tobottom", "aria-label":"Scroll to latest message", title:"Latest", onclick:e=>{ e.stopPropagation(); const st=$("#stream"); if (st) st.scrollTo({top:st.scrollHeight, behavior:"smooth"}); haptic&&haptic(); }}, svg(ICF.chev)); main.append(b); } return b; };
+  const check = () => { const st=$("#stream"); if (!st) return; const main=st.closest(".chatmain")||st.parentElement; if (!main) return;
+    const far = st.scrollHeight-st.scrollTop-st.clientHeight > Math.max(400, st.clientHeight*0.8); btnFor(main).classList.toggle("on", far); };
+  document.addEventListener("scroll", e=>{ if (e.target && e.target.id==="stream") check(); }, {capture:true, passive:true});
+  // iPhone: tapping the clock at the top scrolls the list you're looking at back to the top
+  window.addEventListener("statusTap", ()=>{ const page=[...document.querySelectorAll(".scrim.page > .modal, .infoview")].pop();
+    const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
+    if (t) t.scrollTo({top:0, behavior:"smooth"}); });
+})();
 boot();
 })();
+
