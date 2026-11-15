@@ -359,8 +359,11 @@ function goBackToList(){ navGo("back", ()=>{ S.inThread=false; render(); }); }
 // iPhone-style swipe from the left edge of a chat to go back to the list.
 (function edgeBack(){
   let st=null;
-  document.addEventListener("touchstart", e=>{ if (window.innerWidth>860 || !S.inThread || S.view!=="chats" || S.openTask || REC) return; const t=e.touches[0]; if (!t || t.clientX>24) return;
+  document.addEventListener("touchstart", e=>{ if (window.innerWidth>860 || !S.inThread || S.view!=="chats" || S.openTask || REC) return; const t=e.touches[0]; if (!t) return;
     const main=document.querySelector(".main.chatmain"), list=document.querySelector(".app .lines"); if (!main || !main.contains(e.target)) return;
+    // from the left edge it always goes back; anywhere else in the chat it does too, unless the finger is on a message bubble or a button
+    if (t.clientX>24 && (!e.target.closest(".stream") || e.target.closest(".strip, button, a, input, textarea, .reacts, .chip, .vbars, .swi, .lpm, .loadmore"))) return;
+    if (document.querySelector(".lpm, .scrim")) return;
     st={x:t.clientX, y:t.clientY, main, list, dx:0, on:false}; }, {passive:true});
   document.addEventListener("touchmove", e=>{ if (!st) return; const t=e.touches[0]; const dx=t.clientX-st.x, dy=t.clientY-st.y;
     if (!st.on) { if (Math.abs(dy)>Math.abs(dx) && Math.abs(dy)>8) { st=null; return; } if (dx<8) return; st.on=true; document.querySelector(".app").classList.add("peek"); }
@@ -1481,7 +1484,7 @@ const haptic=(()=>{ let lab=null; return ()=>{
 }; })();
 // Swipe right = reply. Swipe left = make a task (or open it). Like WhatsApp's swipe-to-reply:
 // the bubble follows the finger, an icon fills in, a little tap is felt when it's far enough, and letting go does it.
-// The swipe can start anywhere on the message's row, and a quick flick counts too.
+// The swipe has to start on the bubble itself; a swipe right on the empty space around it goes back to the chats.
 let OPEN_MSG=null;
 function closeMsgActions(){ OPEN_MSG=null; }
 const SW_REPLY=56, SW_TASK=60;
@@ -1501,7 +1504,7 @@ function attachGestures(el, strip, m){
     if (r!==armR || l!==armL) { if ((r&&!armR) || (l&&!armL)) haptic(); armR=r; armL=l; }
     el.classList.toggle("swr", r); el.classList.toggle("swl", l);
   };
-  const start=(x,y,target)=>{ if (S.selecting || target.closest("button,a,.vbars,input,textarea,.reacts,.chip")) return false;
+  const start=(x,y,target)=>{ if (S.selecting || x<=24 || !target.closest(".strip") || target.closest("button,a,.vbars,input,textarea,.reacts,.chip")) return false;   // only the bubble itself swipes; the screen edge is for going back
     x0=x; y0=y; t0=performance.now(); mx=0; dx=0; trail=[[t0,0]]; active=true; decided=false; horiz=false; armL=armR=false;
     if (ico) ico.style.left=Math.max(0, strip.offsetLeft+strip.offsetWidth-36)+"px";
     clearTimeout(lp); clearTimeout(pz); pz=setTimeout(()=>{ if (active && !decided) strip.classList.add("pressing"); }, 140); lp=setTimeout(()=>{ strip.classList.remove("pressing"); if (active && !decided){ active=false; holdMenu(m, strip); } }, 430); return true; };
@@ -2211,8 +2214,8 @@ function openAttach(anchor){
     item("a-photo", ICF.image, "Photos & Videos", ()=>pickFiles({accept:"image/*,video/*", multiple:true, done:fs=>openMediaPreview(fs.slice(0,10))})),
     item("a-cam", ICF.camera, "Camera", ()=>pickFiles({accept:"image/*,video/*", capture:"environment", done:fs=>openMediaPreview(fs)})),
     item("a-doc", ICF.doc, "Document", ()=>pickFiles({accept:"*/*", done:fs=>sendMedia(S.active, fs.slice(0,1), "", "file")})),
-    item("a-loc", ICF.pin2, "Location", openLocationPicker),
-    item("a-con", ICF.contact, "Contact", openContactPicker)));
+    item("a-loc", ICF.pin2, "Location", ()=>{ $("#composer")?.blur(); openLocationPicker(); }),
+    item("a-con", ICF.contact, "Contact", ()=>{ $("#composer")?.blur(); openContactPicker(); })));
   document.body.append(scrim);
 }
 function openMediaPreview(files){
@@ -3383,7 +3386,7 @@ function render(keepComposer){
   else app.append(renderTeam());
   if (S.openTask) app.append(renderDrawer()); else LAST_DRAWER=null;
 
-  const nta=$("#composer"); if (nta){ nta.value = S.editing? (plain(S.msgs.find(m=>m.id===S.editing))||"") : draft; autoGrow(nta); nta.closest(".crow").classList.toggle("has-text", !!nta.value.trim() || !!S.editing || !!(S.vdraft && S.vdraft.cid===S.active)); if (hadFocus||S.editing||S.replyTo) nta.focus(); }
+  const nta=$("#composer"); if (nta){ nta.value = S.editing? (plain(S.msgs.find(m=>m.id===S.editing))||"") : draft; if (!nta.classList.contains("kbkeep")) autoGrow(nta); nta.closest(".crow")?.classList.toggle("has-text", !!nta.value.trim() || !!S.editing || !!(S.vdraft && S.vdraft.cid===S.active)); if (hadFocus||S.editing||S.replyTo) nta.focus(); }
   syncChatBars(); const ns=$("#stream"); if (ns){ if (scrollDown||atBottom) ns.scrollTop=ns.scrollHeight; else ns.scrollTop=prevScroll; scrollDown=false; }
   if ($("#list")) $("#list").scrollTop=listScroll;
   if (boardScroll && $("#board")) { $("#board").scrollLeft=boardScroll[0]; $("#board").scrollTop=boardScroll[1]; }
@@ -3569,12 +3572,14 @@ function renderComposer(c){
   if (S.replyTo || S.editing) inner.append(replyBarEl());
   if (S.rec && S.recFor!=="task") {
     inner.append(h("div",{class:"recbar"},
-      h("button",{class:"rectrash", "aria-label":"Cancel recording", title:"Delete", onclick:()=>stopRec(true)}, svg(IC.trash)),
+      h("button",{class:"rectrash", "aria-label":"Cancel recording", title:"Delete", onmousedown:e=>e.preventDefault(), onclick:()=>stopRec(true)}, svg(IC.trash)),
       h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, fmtDur(REC? (now()-REC.t0)/1000 : 0)),
       h("div",{class:"recbars", id:"recBars", "aria-hidden":"true"}, Array.from({length:40},()=>h("i"))),
-      h("button",{class:"reckeep", "aria-label":"Stop and add a message", title:"Add a message", onclick:()=>stopRec(false, true)}, svg(IC.edit)),
-      h("button",{class:"micbtn sending", "aria-label":"Send voice note", title:"Send", onclick:()=>stopRec(false)}, svg(IC.send))
+      h("button",{class:"reckeep", "aria-label":"Stop and add a message", title:"Add a message", onmousedown:e=>e.preventDefault(), onclick:()=>stopRec(false, true)}, svg(IC.edit)),
+      h("button",{class:"micbtn sending", "aria-label":"Send voice note", title:"Send", onmousedown:e=>e.preventDefault(), onclick:()=>stopRec(false)}, svg(IC.send))
     ));
+    // keep the message box (invisible) so an open keyboard stays open while recording, like WhatsApp
+    inner.append(h("textarea",{id:"composer", class:"kbkeep", rows:"1", tabindex:"-1", "aria-hidden":"true"}));
     return box;
   }
   inner.append(renderVoiceDraft());
@@ -3591,7 +3596,7 @@ function renderComposer(c){
       h("button",{class:"inbtn emobtn", "aria-label":S.emojiOpen?"Keyboard":"Emoji", title:"Emoji", onmousedown:e=>e.preventDefault(), onclick:()=>{ S.emojiOpen=!S.emojiOpen; if (S.emojiOpen) { const t=$("#composer"); if (t) t.blur(); } render(true); if (!S.emojiOpen) setTimeout(()=>{ const t=$("#composer"); if (t) t.focus(); }); }}, svg(S.emojiOpen? ICF.kbd : ICF.smile)),
       S.editing? "" : h("button",{class:"inbtn knotbtn","aria-pressed":String(S.asTask), title:"Send this message and turn it into a task", onclick:()=>{S.asTask=!S.asTask; render(true); $("#composer").focus();}}, svg(IC.knot))),
     h("button",{class:"sendbtn", "aria-label":S.editing?"Save edit":"Send", onmousedown:e=>e.preventDefault(), onclick:()=>{ const t=$("#composer"); const v=t.value; t.value=""; autoGrow(t); t.closest(".crow").classList.remove("has-text"); ls.set("draft:"+S.active,""); sendMessage(v); }}, svg(S.editing?IC.edit:IC.send)),
-    S.editing? "" : h("button",{class:"micbtn", "aria-label":"Hold to record a voice note", title:"Hold to record", onpointerdown:micDown, oncontextmenu:e=>e.preventDefault(), onclick:e=>{ if (e.detail===0) startRec(); }}, svg(IC.mic))
+    S.editing? "" : h("button",{class:"micbtn", "aria-label":"Hold to record a voice note", title:"Hold to record", onpointerdown:micDown, onmousedown:e=>e.preventDefault(), oncontextmenu:e=>e.preventDefault(), onclick:e=>{ if (e.detail===0) startRec(); }}, svg(IC.mic))
   ));
   if (S.emojiOpen) inner.append(renderEmojiPanel());
   return box;
@@ -4059,6 +4064,10 @@ document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
 if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+// Keyboard stays up: tapping the buttons around the message box (plus, mic, task, reply bar, the plus menu,
+// tapping off the plus menu) must not take focus away from the box, or the iPhone drops the keyboard.
+document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (!a || a.id!=="composer") return;
+  if (e.target.closest(".compose button, .compose .recbar, .compose .replybar, .mentionbox, .attachmenu, .scrim.clear")) e.preventDefault(); }, true);
 // ---------- "jump to latest" button (WhatsApp's round ⌄ when you scroll up in a chat) ----------
 (function(){
   const btnFor = main => { let b=main.querySelector(":scope > .tobottom"); if (!b) { b=h("button",{class:"tobottom", "aria-label":"Scroll to latest message", title:"Latest", onclick:e=>{ e.stopPropagation(); const st=$("#stream"); if (st) st.scrollTo({top:st.scrollHeight, behavior:"smooth"}); haptic&&haptic(); }}, svg(ICF.chev)); main.append(b); } return b; };

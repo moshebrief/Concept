@@ -1676,7 +1676,9 @@ a.srow>svg.i{color:var(--muted);width:16px;height:16px}
 .crow .micbtn{transition:transform .16s cubic-bezier(.2,.9,.25,1),background .16s}
 .crow .micbtn.pressed{transform:scale(1.55);background:var(--cobalt)!important;color:#fff!important;box-shadow:0 6px 18px rgba(0,122,255,.35)}
 .crow .micbtn.pressed svg.i{color:#fff!important}
-.crow.holding > :not(.holdbar):not(.micbtn){display:none!important}
+.crow.holding > :not(.holdbar):not(.micbtn):not(.inbox){display:none!important}
+/* the message box stays in place (just invisible) while holding the mic, so the keyboard doesn't drop */
+.crow.holding > .inbox{display:flex!important;position:absolute!important;left:0;top:0;width:1px!important;height:1px!important;min-width:0!important;opacity:0!important;overflow:hidden!important;pointer-events:none!important;padding:0!important;margin:0!important;border:0!important}
 .holdbar{flex:1;min-width:0;height:36px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;position:relative}
 .holdbar .recdot{width:10px;height:10px;border-radius:50%;background:#FF3B30;animation:recblink 1s ease-in-out infinite;flex:none}
 .holdbar .rectime{font-size:16px;font-variant-numeric:tabular-nums;color:var(--ink);min-width:38px}
@@ -2654,3 +2656,7 @@ html:root body .av.wa-av.mgav:not(:has(img)),html:root body .glyph.wa-av.mgav{ba
 html body .wa-av svg.i{width:100%!important;height:100%!important;margin:0!important;fill:var(--wa-av-fg)!important;stroke:none;color:var(--wa-av-fg)}
 html body .wa-av.wa-grp svg.i{width:104%!important;height:104%!important;margin:0 0 -6% 4%!important}
 html body .wa-av .mgi{display:none}
+
+/* invisible stand-in for the message box during a locked recording (keeps the keyboard open) */
+textarea.kbkeep{position:absolute!important;left:0;bottom:0;width:1px!important;height:1px!important;min-height:0!important;opacity:0!important;padding:0!important;border:0!important;resize:none;pointer-events:none;font-size:16px;caret-color:transparent;background:transparent;color:transparent}
+.compose .inner{position:relative}
