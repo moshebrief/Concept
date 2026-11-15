@@ -2548,3 +2548,33 @@ html body .scrim .modal[class*="nc-"] .sheethead,html body .scrim .modal[class*=
 }
 /* board cards: the message under the chat-name title, so tasks from the same chat are easy to tell apart */
 .card .tnote{font:400 13.5px/1.35 var(--f-body);color:var(--muted);margin:2px 0 6px;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+
+/* ===== Press-and-hold like iOS / WhatsApp ===== */
+.lineitem,.swrow{transition:transform .33s cubic-bezier(.3,0,.4,1),filter .33s}
+.lineitem.pressing,.swrow:has(.lineitem.pressing){transform:scale(.965);filter:brightness(.93)}
+.lpm{position:fixed;inset:0;z-index:9000}
+.lpmback{position:absolute;inset:0;background:rgba(0,0,0,.18);-webkit-backdrop-filter:blur(18px) saturate(140%);backdrop-filter:blur(18px) saturate(140%);opacity:0;transition:opacity .22s ease}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .lpmback{background:rgba(0,0,0,.42)}}
+:root[data-theme="dark"] .lpmback{background:rgba(0,0,0,.42)}
+.lpm.in .lpmback{opacity:1}
+.lpmlift{z-index:1;background:var(--surface)!important;border-radius:14px!important;overflow:hidden;box-shadow:0 0 0 rgba(0,0,0,0);transform:translateY(0) scale(1);transition:transform .38s cubic-bezier(.2,.9,.25,1.12),box-shadow .3s;pointer-events:auto;list-style:none}
+.lpmlift .swacts,.lpmlift .gmbg{display:none!important}
+.lpmlift > .lineitem{transform:none!important}
+.lpm.in .lpmlift{transform:translateY(var(--dy,0)) scale(1.02);box-shadow:0 12px 40px rgba(0,0,0,.22)}
+.lpmmenu{position:fixed;z-index:2;background:var(--glass,var(--surface));-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);background:color-mix(in srgb,var(--surface) 86%,transparent);border-radius:14px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.2);opacity:0;transform:scale(.6);transition:transform .34s cubic-bezier(.2,.9,.25,1.12),opacity .18s ease}
+.lpm.in .lpmmenu{opacity:1;transform:scale(1)}
+.lpm.out .lpmback{opacity:0;transition-duration:.18s}
+.lpm.out .lpmmenu{opacity:0;transform:scale(.7);transition:transform .18s ease-in,opacity .15s}
+.lpm.out .lpmlift{transform:translateY(0) scale(1);box-shadow:none;transition:transform .2s ease-in,box-shadow .2s}
+.lpmmenu button{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;height:46px;padding:0 16px;border:0;background:transparent;color:var(--ink);font:400 16.5px var(--f-body);text-align:left;border-top:.5px solid var(--rule)}
+.lpmmenu button:first-child{border-top:0}
+.lpmmenu button:active,.lpmmenu button:focus-visible{background:var(--fill);outline:none}
+.lpmmenu button svg.i{width:20px;height:20px;color:var(--ink);flex:none}
+.lpmmenu button.danger,.lpmmenu button.danger svg.i{color:#ff3b30}
+.lpmmenu .lpmsep{height:8px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.lpmmenu .lpmsep + button{border-top:0}
+@media (prefers-reduced-motion:reduce){.lpmmenu,.lpmlift,.lpmback,.lineitem,.swrow{transition:none!important}}
+html body .lpmmenu button{color:var(--ink)!important}
+html body .lpmmenu button.danger{color:#ff3b30!important}
+.lpmlift,.lpmlift *{filter:none!important;opacity:1!important}
+.lpmlift .lineitem{background:var(--surface)!important}

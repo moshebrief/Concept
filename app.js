@@ -900,9 +900,15 @@ async function togglePin(cid){
   S.pins=pins; render(); toast(pins.includes(cid)? "Chat pinned" : "Chat unpinned");
   savePrefsDoc();
 }
-function rowMenu(c, x, y){
-  const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }, oncontextmenu:e=>{ e.preventDefault(); scrim.remove(); }});
+function rowMenu(c, x, y, el, mouse){
   const pinned=S.pins.includes(c.id), ur=unread(c), mu=isMuted(c), isTop=!(c.kind==="task" && c.parent);
+  if (el && !mouse) { ctxMenu(el.closest(".swrow")||el, [
+    isTop? {label: pinned? "Unpin" : "Pin", icon:IC.pin, fn:()=>togglePin(c.id)} : null,
+    {label: ur? "Mark as read" : "Mark as unread", icon: ur? ICF.check : ICF.dotchat, fn:()=>toggleUnread(c)},
+    {label: mu? "Unmute" : "Mute", icon: mu? ICF.bell : ICF.bellx, fn:()=> mu? setMute(c.id, null) : openMute(c)},
+    {label:"Notification tone", icon:ICF.music, fn:()=>openChatNotif(c)},
+    {label:"Delete chat", icon:IC.trash, danger:true, fn:()=>confirmDeleteChat(c)}]); return; }
+  const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }, oncontextmenu:e=>{ e.preventDefault(); scrim.remove(); }});
   const go=fn=>()=>{ scrim.remove(); fn(); };
   const m=h("div",{class:"popmenu", role:"menu", style:`left:${Math.min(x, innerWidth-230)}px;top:${Math.min(y, innerHeight-250)}px`},
     isTop? h("button",{role:"menuitem", onclick:go(()=>togglePin(c.id))}, svg(IC.pin), pinned? "Unpin chat":"Pin chat") : "",
@@ -912,7 +918,51 @@ function rowMenu(c, x, y){
     h("button",{role:"menuitem", class:"dangerrow", onclick:go(()=>confirmDeleteChat(c))}, svg(IC.trash), "Delete chat"));
   scrim.append(m); document.body.append(scrim);
 }
-function longPress(el, fn){ let t, sx=0, sy=0; const stop=()=>clearTimeout(t); el.addEventListener("pointerdown", e=>{ if (e.pointerType!=="touch") return; sx=e.clientX; sy=e.clientY; t=setTimeout(()=>{ if (SW.drag) return; el.dataset.lp="1"; fn(e.clientX, e.clientY); }, 520); }); el.addEventListener("pointermove", e=>{ if (Math.abs(e.clientX-sx)>8 || Math.abs(e.clientY-sy)>8) stop(); }); ["pointerup","pointerleave","pointercancel"].forEach(ev=>el.addEventListener(ev, stop)); el.addEventListener("contextmenu", e=>{ e.preventDefault(); fn(e.clientX, e.clientY); }); el.addEventListener("click", e=>{ if (el.dataset.lp) { e.stopImmediatePropagation(); e.preventDefault(); delete el.dataset.lp; } }, true); }
+function longPress(el, fn){
+  // Like iOS / WhatsApp: as you hold, the row slowly sinks in; at ~0.45s you feel a tap and the menu opens.
+  // Moving your finger (scrolling or swiping) cancels it.
+  let t=null, sx=0, sy=0, on=false;
+  const stop=()=>{ clearTimeout(t); t=null; if (on) { on=false; el.classList.remove("pressing"); } };
+  el.addEventListener("pointerdown", e=>{ if (e.pointerType==="mouse" || e.button>0) return; sx=e.clientX; sy=e.clientY; on=true;
+    t=setTimeout(()=>{ el.classList.add("pressing"); t=setTimeout(()=>{ t=null; if (SW.drag) { stop(); return; } el.dataset.lp="1"; haptic(); on=false; fn(e.clientX, e.clientY, el); el.classList.remove("pressing"); }, 330); }, 120); });
+  el.addEventListener("pointermove", e=>{ if (t && (Math.abs(e.clientX-sx)>8 || Math.abs(e.clientY-sy)>8)) stop(); });
+  ["pointerup","pointerleave","pointercancel"].forEach(ev=>el.addEventListener(ev, ()=>{ if (t) stop(); }));
+  el.addEventListener("contextmenu", e=>{ e.preventDefault(); if (el.dataset.lp) return; fn(e.clientX, e.clientY, el, true); });
+  el.addEventListener("click", e=>{ if (el.dataset.lp) { e.stopImmediatePropagation(); e.preventDefault(); delete el.dataset.lp; } }, true);
+}
+// iOS-style menu for a held item: the screen blurs, the item lifts out of the list, and the menu grows from under it.
+// items: [{label, icon, fn, danger}] (null to skip). Tap outside to close.
+function ctxMenu(src, items){
+  if (document.querySelector(".lpm")) return;
+  items=items.filter(Boolean);
+  const r=src.getBoundingClientRect(), vw=innerWidth, vh=innerHeight;
+  const pr=h("div",{style:"position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)"}); document.body.append(pr);
+  const cs=getComputedStyle(pr), safeT=(parseFloat(cs.paddingTop)||0)+12, safeB=(parseFloat(cs.paddingBottom)||0)+12; pr.remove();
+  const MW=Math.min(254, vw-32), MH=items.length*46+(items.some(i=>i.danger)? 8 : 0), GAP=10;
+  // where the lifted item sits: same place if the menu fits below it, otherwise nudged up so both fit
+  let top=r.top; const need=r.height+GAP+MH;
+  if (top+need > vh-safeB) top=Math.max(safeT, vh-safeB-need);
+  const below = top+need <= vh-safeB+1;
+  const menuTop = below? top+r.height+GAP : Math.max(safeT, top-GAP-MH);
+  const left = Math.min(Math.max(16, r.left+12), vw-16-MW);
+  const wrap=h("div",{class:"lpm", role:"dialog", "aria-label":"Options"});
+  const back=h("div",{class:"lpmback"});
+  const lift=src.cloneNode(true); lift.classList.add("lpmlift"); [lift, ...lift.querySelectorAll("*")].forEach(n=>{ n.classList && n.classList.remove("pressing","tap","anim","armed"); n.removeAttribute && n.removeAttribute("id"); });
+  Object.assign(lift.style,{position:"fixed", left:r.left+"px", top:r.top+"px", width:r.width+"px", height:r.height+"px", margin:"0", "--dy":(top-r.top)+"px"});
+  const menu=h("div",{class:"lpmmenu", role:"menu", style:`left:${left}px;top:${menuTop}px;width:${MW}px;transform-origin:${r.left+24-left}px ${below?"0":"100%"}`});
+  // the finger that opened the menu is still down: ignore the tap it makes when it lifts
+  let closing=false, ready=false; const arm=()=>setTimeout(()=>{ ready=true; }, 60);
+  addEventListener("pointerup", arm, {once:true, capture:true}); setTimeout(()=>{ ready=true; }, 900);
+  const close=(after)=>{ if (closing || (!ready && !after)) return; closing=true; wrap.classList.add("out"); setTimeout(()=>{ wrap.remove(); after && after(); }, 190); };
+  items.forEach((it,i)=>{ if (it.danger && i>0) menu.append(h("div",{class:"lpmsep"}));
+    menu.append(h("button",{role:"menuitem", class:it.danger?"danger":"", onclick:()=>{ if (ready) close(it.fn); }}, h("span",{}, it.label), svg(it.icon))); });
+  back.addEventListener("click", ()=>close()); back.addEventListener("contextmenu", e=>{ e.preventDefault(); close(); });
+  lift.addEventListener("click", e=>{ e.preventDefault(); e.stopPropagation(); close(); });
+  wrap.append(back, lift, menu); document.body.append(wrap);
+  requestAnimationFrame(()=>wrap.classList.add("in"));
+  const esc=e=>{ if (e.key==="Escape") { close(); removeEventListener("keydown", esc); } }; addEventListener("keydown", esc);
+  setTimeout(()=>menu.querySelector("button")?.focus({preventScroll:true}), 260);
+}
 
 function renderSettings(){
   const w=h("section",{class:"teamwrap settings","aria-label":"Settings"});
@@ -1369,7 +1419,7 @@ function renderDial(w){
 // ---------- message gestures ----------
 const MORE_EMOJI=["👍","❤️","😂","😮","😢","🙏","🔥","✅","👏","🎉","💯","🤝","😍","🤔","👀","😅","🙌","💪","😎","🥳","😡","👌","⭐","🚀"];
 function quickEmojis(){ const use=ls.get("emojiUse",{}); const top=Object.entries(use).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); return [...new Set([...top, ...EMOJI])].slice(0,6); }
-function holdMenu(m){ if (m.deleted || S.selecting || !S.canWrite) return; S.actFor=m.id; S.emojiMore=false; if (navigator.vibrate) try{ navigator.vibrate(8); }catch{} render(true); }
+function holdMenu(m){ if (m.deleted || S.selecting || !S.canWrite) return; S.actFor=m.id; S.emojiMore=false; haptic(); render(true); }
 function swipeTask(m){
   const mode=S.prefs.swipeTask||"open";
   const existing=m.taskId && S.tasks.find(t=>t.id===m.taskId && canSeeTask(t));
@@ -3298,7 +3348,7 @@ function listChildren(){
   const pinned=S.pins.map(id=>top.find(c=>c.id===id)).filter(Boolean);
   const rest=top.filter(c=>!S.pins.includes(c.id));
   const item = c => {
-    const li=itemEl(c); longPress(li,(x,y)=>rowMenu(c,x,y)); const el=swipeWrap(li, c);
+    const li=itemEl(c); longPress(li,(x,y,el,mouse)=>rowMenu(c,x,y,el,mouse)); const el=swipeWrap(li, c);
     const subs=c.kind!=="task"? subsOf(c.id).filter(x=>!q || chans.includes(x) || chans.includes(c)) : [];
     if (!subs.length) return el;
     const open = !!S.expanded[c.id] || (q && subMatch.has(c.id));
@@ -3312,7 +3362,7 @@ function listChildren(){
         h("span",{class:"glyph tglyph sm", style:`--st:${st? st.c : "var(--muted)"}`}, svg(IC.knot)),
         h("span",{style:"min-width:0"}, h("div",{class:"nm"}, t? h("span",{class:"tidmini", style:`--c:${st.c}`},"CN-"+t.num) : "", " ", t? t.title : chanTitle(x)), h("div",{class:"pv"}, h("span",{class:"pvt", "data-cid":x.id}, x.last? (x.last.by!==S.me? nameOf(x.last.by).replace(/^Example:\s*/,"").split(" ")[0]+": ":"")+lastPreview(x.last) : (st? st.name : "")))),
         h("span",{class:"meta"}, x.last? h("span",{class:"mono"}, fmtShort(x.last.at)):"", h("span",{class:"metaicons"}, isMuted(x)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", unread(x)? h("span",{class:"badge"+(isMuted(x)?" muted":"")},"1"):"")));
-      longPress(row,(px,py)=>rowMenu(x,px,py)); return swipeWrap(row, x); }))];
+      longPress(row,(px,py,el,mouse)=>rowMenu(x,px,py,el,mouse)); return swipeWrap(row, x); }))];
   };
   const itemEl = c => h("button",{class:"lineitem", "aria-current":String(c.id===S.active && S.inThread || (c.id===S.active && window.innerWidth>860)), onclick:()=>selectChannel(c.id)},
     chanGlyph(c),
