@@ -2593,60 +2593,88 @@ function resetNotif(){
 }
 
 // --- swipe a chat row: right = read/pin, left = mute/delete ---
-const SW={drag:false, pending:false, open:null};
-const SWB=72;
+const SW={drag:false, pending:false, open:null, openX:0};
+const SWB=76;   // width of one swipe button, like iOS
+// Right swipe shows Unread + Pin, left swipe shows Mute + Delete. The outer button is the one a full swipe does.
 function swipeActs(c){
   const isTop=!(c.kind==="task" && c.parent), ur=unread(c), mu=isMuted(c), pinned=S.pins.includes(c.id);
   return {
     l:[{k:"read", cls:"sw-blue", icon: ur? ICF.check : ICF.dotchat, label: ur? "Read" : "Unread", fn:()=>toggleUnread(c)},
        isTop? {k:"pin", cls:"sw-gray", icon:IC.pin, label: pinned? "Unpin" : "Pin", fn:()=>togglePin(c.id)} : null].filter(Boolean),
-    r:[{k:"mute", cls:"sw-orange", icon: mu? ICF.bell : ICF.bellx, label: mu? "Unmute" : "Mute", fn:()=> mu? setMute(c.id, null) : openMute(c)},
-       {k:"del", cls:"sw-red", icon:IC.trash, label:"Delete", fn:()=>confirmDeleteChat(c)}]
+    r:[{k:"mute", cls:"sw-gray", icon: mu? ICF.bell : ICF.bellx, label: mu? "Unmute" : "Mute", fn:()=> mu? setMute(c.id, null) : openMute(c)},
+       {k:"del", cls:"sw-red", icon:IC.trash, label:"Delete", fn:()=>deleteChat(c), gone:true}]
   };
 }
-function closeSwipe(anim=true){ if (!SW.open) return; const r=document.querySelector(`.swrow[data-sw="${SW.open}"]`); SW.open=null; if (r) setOff(r, 0, anim); }
-function setOff(row, x, anim){ const li=row.querySelector(":scope > .lineitem"); if (!li) return; row.classList.toggle("anim", !!anim); li.style.setProperty("--swx", x+"px"); row.dataset.off=String(x); row.classList.toggle("sl", x>0); row.classList.toggle("sr", x<0); }
-document.addEventListener("pointerdown", e=>{ if (SW.open && !e.target.closest(`.swrow[data-sw="${SW.open}"] .swacts`)) { const inRow=e.target.closest(`.swrow[data-sw="${SW.open}"]`); closeSwipe(); if (inRow) inRow.dataset.eat="1"; } }, true);
-// Gmail-style swipe on a chat row: the row follows your finger over a colored strip with one icon.
-// Swipe right = mark read / unread. Swipe left = delete (asks first). Let go past the line to do it.
+function setOff(row, x, anim){
+  const li=row.querySelector(":scope > .lineitem"); if (!li) return;
+  row.classList.toggle("anim", !!anim); li.style.setProperty("--swx", x+"px"); row.dataset.off=String(x);
+  row.classList.toggle("sl", x>0); row.classList.toggle("sr", x<0);
+  const L=row.querySelector(":scope > .swacts.l"), R=row.querySelector(":scope > .swacts.r");
+  if (L) L.style.width=Math.max(0,x)+"px"; if (R) R.style.width=Math.max(0,-x)+"px";
+}
+function closeSwipe(anim=true){ if (!SW.open) return; const r=document.querySelector(`.swrow[data-sw="${SW.open}"]`); SW.open=null; SW.openX=0; if (r) { r.classList.remove("full"); setOff(r, 0, anim); } }
+// Touching anywhere outside the open row (or scrolling the list) closes it, like iOS.
+document.addEventListener("pointerdown", e=>{ if (!SW.open) return; if (e.target.closest(`.swrow[data-sw="${SW.open}"]`)) return; closeSwipe(); }, true);
+document.addEventListener("scroll", e=>{ if (SW.open && !SW.drag && e.target && e.target.id==="list") closeSwipe(); }, {capture:true, passive:true});
+
 function swipeWrap(li, c){
-  const ur=unread(c);
-  const R={cls:"sw-blue", icon: ur? ICF.check : ICF.dotchat, label: ur? "Read" : "Unread", fn:()=>toggleUnread(c)};
-  const L={cls:"sw-red", icon:IC.trash, label:"Delete"};
-  const row=h("div",{class:"swrow gm", "data-sw":c.id},
-    h("div",{class:"gmbg l "+R.cls, "aria-hidden":"true"}, h("span",{class:"gmic"}, svg(R.icon)), h("b",{}, R.label)),
-    h("div",{class:"gmbg r "+L.cls, "aria-hidden":"true"}, h("b",{}, L.label), h("span",{class:"gmic"}, svg(L.icon))),
+  const A=swipeActs(c), LW=A.l.length*SWB, RW=A.r.length*SWB;
+  let row;
+  const doAct=(a, side)=>{
+    haptic();
+    if (a.gone) {   // delete: the row slides away and folds up, then the chat goes (with Undo)
+      SW.open=null; SW.openX=0; row.classList.add("full"); setOff(row, -row.clientWidth, true);
+      setTimeout(()=>{ row.style.height=row.offsetHeight+"px"; requestAnimationFrame(()=>{ row.classList.add("fold"); row.style.height="0px"; }); }, 200);
+      setTimeout(()=>a.fn(), 460); return;
+    }
+    closeSwipe(); row.classList.remove("full"); setOff(row, 0, true); setTimeout(()=>a.fn(), 230);
+  };
+  const btn=(a, side)=>h("button",{class:"swbtn "+a.cls, tabindex:"-1", "aria-label":a.label, onclick:e=>{ e.stopPropagation(); e.preventDefault(); doAct(a, side); }}, svg(a.icon), h("span",{}, a.label));
+  row=h("div",{class:"swrow", "data-sw":c.id},
+    h("div",{class:"swacts l"}, ...A.l.map(a=>btn(a,"l"))),
+    h("div",{class:"swacts r"}, ...A.r.map(a=>btn(a,"r"))),
     li);
+  if (SW.open===c.id && SW.openX) requestAnimationFrame(()=>setOff(row, SW.openX, false));   // stays open across a refresh
+
   let st=null;
-  const TH=()=>Math.min(140, row.clientWidth*.3);
-  row.addEventListener("pointerdown", e=>{ if (e.button>0 || e.target.closest(".subtoggle")) return; st={x:e.clientX, y:e.clientY, id:e.pointerId, mode:null, off:0, armed:false}; });
+  const FULL=()=>Math.max(LW, RW)+Math.min(150, row.clientWidth*.3);   // past this, letting go does the outer action
+  row.addEventListener("pointerdown", e=>{
+    if (e.button>0 || e.target.closest(".subtoggle, .swbtn")) return;
+    st={x:e.clientX, y:e.clientY, id:e.pointerId, mode:null, base:parseFloat(row.dataset.off||"0"), off:0, full:false, t:performance.now(), px:e.clientX, v:0};
+    st.off=st.base;
+  });
   row.addEventListener("pointermove", e=>{
     if (!st || e.pointerId!==st.id) return; const dx=e.clientX-st.x, dy=e.clientY-st.y;
-    if (!st.mode) { if (Math.abs(dx)>10 && Math.abs(dx)>Math.abs(dy)*1.4) { st.mode="h"; SW.drag=true; try { row.setPointerCapture(st.id); } catch {} } else if (Math.abs(dy)>10) { st=null; return; } else return; }
-    const W=row.clientWidth; let x=Math.max(-W, Math.min(W, dx));
-    st.off=x; setOff(row, x, false);
-    const armed=Math.abs(x)>TH(); if (armed!==st.armed) { st.armed=armed; row.classList.toggle("armed", armed); if (armed && navigator.vibrate) try { navigator.vibrate(8); } catch {} }
-    e.preventDefault();
-  });
-  const end=()=>{
-    if (!st) return; const s=st; st=null; if (s.mode!=="h") return;
-    row.dataset.eat="1"; setTimeout(()=>{ delete row.dataset.eat; }, 350);
-    SW.drag=false; row.classList.remove("armed");
-    const flush=()=>{ if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag) scheduleRender(); }, 300); } };
-    if (s.off>TH()) { setOff(row, 0, true); setTimeout(()=>{ R.fn(); flush(); }, 260); return; }
-    if (-s.off>TH()) {
-      setOff(row, -row.clientWidth, true);
-      let gone=false;
-      setTimeout(()=>sheet("Delete chat?", (draw, close)=>[
-        h("p",{class:"note", style:"margin:0"}, "“"+chanTitle(c)+"” will be removed from your chat list and its messages hidden on your devices. It comes back if someone sends a new message."),
-        h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary danger-bg", onclick:()=>{ gone=true; close(); deleteChat(c); }}, "Delete"))],
-        {onClose:()=>{ if (!gone) { setOff(row, 0, true); flush(); } }}), 240);
-      return;
+    if (!st.mode) {
+      if (Math.abs(dx)>8 && Math.abs(dx)>Math.abs(dy)*1.2) { st.mode="h"; SW.drag=true; li.classList.remove("pressing"); if (SW.open && SW.open!==c.id) closeSwipe(); try { row.setPointerCapture(st.id); } catch {} st.x=e.clientX; }
+      else if (Math.abs(dy)>8) { st=null; return; } else return;
     }
-    setOff(row, 0, true); flush();
+    e.preventDefault();
+    const W=row.clientWidth; let x=st.base+(e.clientX-st.x);
+    const max=x>0? (A.l.length? W : 0) : (A.r.length? W : 0);
+    if (Math.abs(x)>max) x=Math.sign(x)*(max+(Math.abs(x)-max)*.2);   // rubber band when that side has nothing
+    const now_=performance.now(), dt=now_-st.t; if (dt>0) { st.v=.7*((e.clientX-st.px)/dt)+.3*st.v; st.t=now_; st.px=e.clientX; }
+    st.off=x; setOff(row, x, false);
+    const full=Math.abs(x)>FULL(); if (full!==st.full) { st.full=full; row.classList.toggle("full", full); haptic(); }
+  });
+  const end=e=>{
+    if (!st) return; const s=st; st=null;
+    if (s.mode!=="h") { if (s.base!==0) { row.dataset.eat="1"; setTimeout(()=>{ delete row.dataset.eat; }, 350); closeSwipe(); } return; }
+    row.dataset.eat="1"; setTimeout(()=>{ delete row.dataset.eat; }, 350);
+    SW.drag=false;
+    const flush=()=>{ if (SW.pending) { SW.pending=false; setTimeout(()=>{ if (!SW.drag && !SW.open) scheduleRender(); }, 320); } };
+    const x=s.off, v=s.v;
+    if (x>0 && s.full && A.l.length) { doAct(A.l[0],"l"); flush(); return; }
+    if (x<0 && s.full && A.r.length) { doAct(A.r[A.r.length-1],"r"); flush(); return; }
+    row.classList.remove("full");
+    const openL = A.l.length && x>0 && (x>LW*.45 || v>.35) && v>-.35;
+    const openR = A.r.length && x<0 && (-x>RW*.45 || v<-.35) && v<.35;
+    if (openL) { SW.open=c.id; SW.openX=LW; setOff(row, LW, true); }
+    else if (openR) { SW.open=c.id; SW.openX=-RW; setOff(row, -RW, true); }
+    else { if (SW.open===c.id) { SW.open=null; SW.openX=0; } setOff(row, 0, true); flush(); }
   };
   row.addEventListener("pointerup", end); row.addEventListener("pointercancel", end);
-  row.addEventListener("click", e=>{ if (row.dataset.eat) { e.stopImmediatePropagation(); e.preventDefault(); delete row.dataset.eat; } }, true);
+  row.addEventListener("click", e=>{ if (row.dataset.eat && !e.target.closest(".swbtn")) { e.stopImmediatePropagation(); e.preventDefault(); delete row.dataset.eat; } }, true);
   return row;
 }
 

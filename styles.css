@@ -1604,10 +1604,6 @@ a.srow>svg.i{color:var(--muted);width:16px;height:16px}
 .swbtn{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;font:600 11.5px/1 var(--f-body);border:0;padding:0;transition:flex .2s ease}
 .swbtn svg.i{width:22px;height:22px;color:#fff}
 .sw-blue{background:#007AFF}.sw-gray{background:#8E8E93}.sw-orange{background:#FF9500}.sw-red{background:#FF3B30}
-.swrow.full.sr .swacts.r{width:100%!important}
-.swrow.full.sr .swacts.r .swbtn:not(:last-child),.swrow.full.sl .swacts.l .swbtn:not(:first-child){flex:0 0 0;overflow:hidden}
-.swrow.full.sl .swacts.l{width:100%!important}
-.swrow.full .swbtn{align-items:center}
 .subgroup .swrow > .lineitem{background:transparent}
 .subgroup .swrow{background:var(--surface)}
 .subgroup .swrow > .lineitem.subitem{background:var(--surface)}
@@ -2624,3 +2620,28 @@ body:has(.scrim.page) .app .rail{display:none!important}
   background:var(--surface);color:var(--muted);border:0;box-shadow:0 2px 10px rgba(0,0,0,.18);opacity:0;transform:scale(.6);pointer-events:none;transition:opacity .18s var(--ease),transform .22s var(--ease)}
 .tobottom.on{opacity:1;transform:scale(1);pointer-events:auto}
 .tobottom svg{width:22px;height:22px}
+
+/* ===== Chat row swipe, like iOS Mail / WhatsApp ===== */
+/* the row sticks to your finger (no lag); it only animates when it snaps open/closed */
+html body .swrow > .lineitem{transition:none!important}
+html body .swrow.anim > .lineitem{transition:transform .34s cubic-bezier(.2,.9,.25,1)!important}
+.swrow{background:var(--surface)}
+.swacts{width:0;overflow:hidden;visibility:visible!important;z-index:0}
+.swrow.anim .swacts{transition:width .34s cubic-bezier(.2,.9,.25,1)}
+.swacts.l{flex-direction:row}
+.swbtn{flex:1 1 0;min-width:0;overflow:hidden;white-space:nowrap;font:500 13px/1 var(--f-body);gap:5px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.swbtn span{opacity:.98}
+.swbtn svg.i{width:24px;height:24px;stroke:#fff}
+.swbtn:active{filter:brightness(.88)}
+/* full swipe: the outer button takes the whole width; its icon rides along with the edge of the row */
+.swrow .swbtn{transition:flex .22s cubic-bezier(.2,.9,.25,1)}
+.swrow.full.sl .swacts.l .swbtn:first-child{flex:1 0 100%;justify-content:center;align-items:flex-end;padding-right:28px}
+.swrow.full.sr .swacts.r .swbtn:last-child{flex:1 0 100%;justify-content:center;align-items:flex-start;padding-left:28px}
+.swrow.full.sl .swacts.l .swbtn:not(:first-child),.swrow.full.sr .swacts.r .swbtn:not(:last-child){flex:0 0 0}
+.sw-gray{background:#8E8E93}.sw-blue{background:#007AFF}.sw-red{background:#FF3B30}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sw-gray{background:#636366}:root:not([data-theme="light"]) .sw-blue{background:#0A84FF}:root:not([data-theme="light"]) .sw-red{background:#FF453A}}
+:root[data-theme="dark"] .sw-gray{background:#636366}
+/* deleted row folds away */
+.swrow.fold{transition:height .26s cubic-bezier(.3,0,.3,1),opacity .2s;opacity:0;overflow:hidden}
+/* no sink-in effect once you're swiping */
+.swrow.sl,.swrow.sr{transform:none!important;filter:none!important}
