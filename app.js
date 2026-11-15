@@ -133,18 +133,19 @@ function initials(name){
   if (!w.length) return "";
   return ((w[0][0]||"")+(w.length>1? w[w.length-1][0] : "")).toUpperCase();
 }
-const PERSON_SIL='<circle cx="12" cy="9" r="4.2"/><path d="M3.8 21.5c.9-4.3 4.2-6.6 8.2-6.6s7.3 2.3 8.2 6.6z"/>';
+const PERSON_SIL='<circle cx="12" cy="9.2" r="4.6"/><path d="M2.6 24c.6-5.4 4.5-8.6 9.4-8.6s8.8 3.2 9.4 8.6z"/>';
+// WhatsApp's default pictures: a pale gray circle with a white outline of a person, or of a group.
+const GROUP_SIL='<circle cx="15.6" cy="8.6" r="3.3"/><path d="M10.4 21.5c.5-3.6 2.6-5.6 5.2-5.6s4.7 2 5.2 5.6z"/><circle cx="9" cy="10" r="3.9" stroke="var(--wa-av-bg)" stroke-width="1.4" paint-order="stroke"/><path d="M2.6 21.5c.7-4.2 3.3-6.4 6.4-6.4s5.7 2.2 6.4 6.4z" stroke="var(--wa-av-bg)" stroke-width="1.4" paint-order="stroke"/>';
 function monogram(name, cls){
-  const t=initials(name); const el=h("span",{class:cls+" mgav"+(t.length>1?" mg2":"")});
-  if (t) el.append(h("span",{class:"mgi"}, t)); else el.append(svg(PERSON_SIL));
-  return el;
+  const el=h("span",{class:cls+" mgav wa-av wa-grp"}); el.append(svg(GROUP_SIL)); return el;
 }
 function avatar(id, cls=""){
   const p = S.people[id]||{}; const nm=(p.name||"").replace(/^Example:\s*/,"");
   const el = h("span",{class:"av mgav "+cls, title:fullName(id)});
   const pu=(typeof PROF!=="undefined" && PROF[id] && PROF[id].photo!==undefined)? PROF[id].photo : p.avatarUrl;
   if (pu) el.append(h("img",{src:pu, alt:"", onerror:e=>e.target.remove()}));
-  else { const t=initials(nm); if (t) { el.append(h("span",{class:"mgi"}, t)); if (t.length>1) el.classList.add("mg2"); } else el.append(svg(PERSON_SIL)); }
+  else if (/\b(sm|td2av)\b/.test(cls)) { const t=initials(nm); if (t) { el.append(h("span",{class:"mgi"}, t)); if (t.length>1) el.classList.add("mg2"); } else el.append(svg(PERSON_SIL)); }   // tiny chips keep the letter so you can tell people apart
+  else { el.classList.add("wa-av"); el.append(svg(PERSON_SIL)); }
   return el;
 }
 function chanTitle(c){ if (!c) return ""; if (c.kind==="task"){ const t=S.tasks.find(x=>x.id===c.taskId); return t? `CN-${t.num} · ${t.title}` : (c.name||"Task conversation"); } if (c.kind==="dm"){ const o=(c.members||[]).find(m=>m!==S.me)||S.me; return fullName(o).replace(/^Example:\s*/,""); } return c.name||"Untitled"; }

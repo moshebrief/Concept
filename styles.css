@@ -2645,3 +2645,12 @@ html body .swrow.anim > .lineitem{transition:transform .34s cubic-bezier(.2,.9,.
 .swrow.fold{transition:height .26s cubic-bezier(.3,0,.3,1),opacity .2s;opacity:0;overflow:hidden}
 /* no sink-in effect once you're swiping */
 .swrow.sl,.swrow.sr{transform:none!important;filter:none!important}
+
+/* ===== Default profile pictures, exactly like WhatsApp ===== */
+:root{--wa-av-bg:#DFE5E7;--wa-av-fg:#FFFFFF}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--wa-av-bg:#6A7175;--wa-av-fg:#CFD4D6}}
+:root[data-theme="dark"]{--wa-av-bg:#6A7175;--wa-av-fg:#CFD4D6}
+html:root body .av.wa-av.mgav:not(:has(img)),html:root body .glyph.wa-av.mgav{background:var(--wa-av-bg)!important;background-image:none!important;display:grid!important;place-items:end center!important;overflow:hidden;padding:0!important;box-shadow:none!important;border:0!important}
+html body .wa-av svg.i{width:100%!important;height:100%!important;margin:0!important;fill:var(--wa-av-fg)!important;stroke:none;color:var(--wa-av-fg)}
+html body .wa-av.wa-grp svg.i{width:104%!important;height:104%!important;margin:0 0 -6% 4%!important}
+html body .wa-av .mgi{display:none}
