@@ -2546,3 +2546,5 @@ html body .scrim .modal[class*="nc-"] .sheethead,html body .scrim .modal[class*=
   html body .td2notes,html body .metabox input{font-size:16px!important}
   html body .td2subs .subrow input.subtx{font-size:16px!important}
 }
+/* board cards: the message under the chat-name title, so tasks from the same chat are easy to tell apart */
+.card .tnote{font:400 13.5px/1.35 var(--f-body);color:var(--muted);margin:2px 0 6px;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}

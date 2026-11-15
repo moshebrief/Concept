@@ -1110,9 +1110,12 @@ const peopleForTasks = (task) => { const tid=task&&task.team; const ts=myTeams()
 const msgText = m => { if (!m.kind) return shown(m); const p=m.kind==="media"? plainP(m) : null; const items=(p&&p.items)||[]; const lab=m.kind==="voice"? "🎤 Voice note ("+fmtDur(m.voice&&m.voice.dur)+")" : richLabel(m.kind, (items[0]||{}).t, items.length); const cap=plain(m); return cap? lab+" · "+cap : lab; };
 async function quickTask(msgs, opts={}){
   msgs=(msgs||[]).filter(m=>m && !m.deleted); if (!msgs.length || !S.canWrite) return;
-  const cid=S.active; const first=msgText(msgs[0]).split("\n")[0].trim();
-  const title = (first || (msgs.length+" messages")).slice(0,90);
-  const notes = msgs.length>1? msgs.map(m=>nameOf(m.by).replace(/^Example:\s*/,"")+": "+msgText(m)).join("\n") : (msgText(msgs[0]).length>first.length? msgText(msgs[0]) : "");
+  const cid=S.active;
+  // The task is named after the chat: the person's name for a one-on-one chat, the group's name for a group.
+  // (A task conversation uses the chat it belongs to.) The message itself goes into the task's notes.
+  let ch=S.channels.find(c=>c.id===cid); if (ch && ch.kind==="task" && ch.parent) ch=S.channels.find(c=>c.id===ch.parent)||ch;
+  const title = ((ch && ch.kind!=="task" && chanTitle(ch)) || msgText(msgs[0]).split("\n")[0].trim() || (msgs.length+" messages")).slice(0,90);
+  const notes = msgs.length>1? msgs.map(m=>nameOf(m.by).replace(/^Example:\s*/,"")+": "+msgText(m)).join("\n") : msgText(msgs[0]);
   const id="t"+now().toString(36)+uidShort().slice(0,3);
   try {
     saveTaskFast(id, {title, notes, status:STATUSES[0].id, assignee:"", due:"", priority:"normal", channel:cid, fromMsg:msgs[0].id, fromMsgs:msgs.map(m=>m.id), fromText:msgs.map(msgText).join("\n"), fromBy:msgs[0].by, team:(curTeam()||{}).id||"", createdBy:S.me, at:now(), subtasks:[], log:[{at:now(), by:S.me, what:"created from "+(msgs.length>1? msgs.length+" messages":"a message")}]}, ()=>{
@@ -3659,6 +3662,7 @@ function renderBoard(){
       cards.append(h("button",{class:"card pri-"+(t.priority||"normal"), draggable:S.canWrite?"true":null, onclick:()=>openTask(t.id),
         ondragstart:e=>{e.dataTransfer.setData("text/plain",t.id); e.currentTarget.classList.add("dragging");}, ondragend:e=>e.currentTarget.classList.remove("dragging")},
         h("div",{class:"ttl"}, t.title),
+        (t.notes||"").trim()? h("div",{class:"tnote"}, t.notes.trim().slice(0,160)) : "",
         h("div",{class:"bot"},
           h("span",{class:"tid"},"CN-"+t.num),
           (t.subtasks||[]).length? h("span",{class:"subchip"}, svg(ICF.list), t.subtasks.filter(x=>x.done).length+"/"+t.subtasks.length) : "",
