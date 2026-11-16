@@ -2699,3 +2699,16 @@ html body .lineitem .badge.num{font:600 12.5px/20px var(--f-body)!important;min-
 :root.kb-open .mp-bot{padding-bottom:8px!important}
 :root.kb-open .mprev .mp-strip{display:none}
 .sc-cap{font-size:16px}
+
+/* ===== Keyboard sweep: every text box and its buttons stay above the keyboard ===== */
+/* New Contact: the sheet ends above the keyboard, the big picture shrinks, and the form scrolls */
+:root.kb-open .ncwrap{bottom:var(--kb,0px)}
+.ncbody{overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;flex:1}
+:root.kb-open .ncbody .ncav{width:56px!important;height:56px!important;margin-top:4px!important;margin-bottom:10px!important}
+:root.kb-open .ncbody{padding-bottom:24px}
+/* small pop-up boxes (delete account, passwords…): never taller than the space above the keyboard */
+:root.kb-open .scrim:not(.page) > .modal{max-height:calc(100% - 12px)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+:root.kb-open .scrim:not(.page){align-items:flex-start!important;padding-top:max(8px, env(safe-area-inset-top,0px))!important}
+/* task notes: room to scroll the box you're typing in well clear of the keyboard */
+:root.kb-open .td2body{padding-bottom:160px!important}
+:root.kb-open .scrim.page > .modal{padding-bottom:120px}
