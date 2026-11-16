@@ -13,7 +13,9 @@ const BUILD = String(parseInt(process.env.BUILD_NUMBER || process.env.PROJECT_BU
 // iPhone build number: Codemagic's BUILD_NUMBER counts each workflow separately, so the App Store and the
 // TestFlight workflows would reuse numbers Apple has already seen (and Apple rejects the upload).
 // PROJECT_BUILD_NUMBER counts every build of the app, so it only ever goes up.
-const IOS_BUILD = String(Math.max(parseInt(process.env.PROJECT_BUILD_NUMBER || "0", 10), parseInt(process.env.BUILD_NUMBER || "1", 10)) + 0);
+// Minutes since Jan 1 2025: every build gets a new, bigger number than all earlier ones, whatever workflow runs it,
+// so App Store Connect never rejects an upload for reusing a build number.
+const IOS_BUILD = String(Math.max(Math.floor((Date.now() - Date.UTC(2025,0,1)) / 60000), parseInt(process.env.PROJECT_BUILD_NUMBER || "0", 10), parseInt(process.env.BUILD_NUMBER || "1", 10)));
 
 const log = (...a) => console.log("[native-setup]", ...a);
 const read = p => fs.readFileSync(p, "utf8");
