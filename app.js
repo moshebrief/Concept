@@ -4914,12 +4914,12 @@ function renderFiles(){
   const items = m.items.filter(it=>(flat? (!inScope || inScope.has(it.folder)) : (it.folder||null)===(dir||null)) && matchQ(it) && matchK(it)).sort((a,b)=>b.at-a.at);
   const folders = flat? (q? m.folders.filter(f=>(!inScope || inScope.has(f.parent)) && f.name.toLowerCase().includes(q)) : []) : m.folders.filter(f=>(f.parent||null)===(dir||null)).sort((a,b)=>a.name.localeCompare(b.name));
   const body=h("div",{class:"st-fbody"});
-  if (folders.length || (!flat)) {
+  if (folders.length) {
     body.append(h("div",{class:"seg-label"}, flat? "Folders" : here? "Folders" : "Folders"),
       h("div",{class:"st-fgrid"}, ...folders.map(f=>{ const n=fsCount(f.id); const el=h("button",{class:"st-fcard", onclick:()=>{ S.fdir=f.id; S.fq=""; S.fk="all"; render(); }},
           h("span",{class:"st-fcico", style:`color:${f.color}`}, svg(ICS.folderFill)), h("b",{}, f.name), h("small",{}, n+" item"+(n===1?"":"s")));
           longPress(el, (x,y,src)=>folderMenu(f, src||el)); return el; }),
-        !flat? h("button",{class:"st-fcard st-fadd", onclick:()=>newFolder(dir||null)}, h("span",{class:"st-fcico"}, svg(IC.plus)), h("b",{}, "New folder")) : ""));
+));
   }
   if (items.length) {
     const media = items.every(i=>i.kind==="image" || i.kind==="video");
