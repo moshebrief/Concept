@@ -405,7 +405,7 @@ async function startRec(cb, opts={}){
   if (!S.canWrite || REC || (!cb && !S.active)) return;
   // Show the recording screen the moment the mic is pressed; the microphone itself wakes up a split second later.
   REC = {pending:true, t0:now(), levels:[], chunks:[], cancel:false, cb, hold:!!opts.hold, cid:S.active};
-  S.recFor = cb? "task" : "chat"; S.rec=true; if (navigator.vibrate) try{ navigator.vibrate(15); }catch{}
+  S.recFor = cb? "task" : "chat"; S.rec=true;
   if (REC.hold) holdUI(true); else render(true);
   REC.timer = setInterval(()=>{ const el=$("#recTime"); if (el && REC) el.textContent=fmtDur(recSecs()); }, 250);
   let stream=null;
@@ -527,32 +527,60 @@ function holdUI(on){
   const old=row.querySelector(".holdbar"); if (on && old) return; if (old) old.remove();
   if (on) row.prepend(h("div",{class:"holdbar"}, h("span",{class:"recmic"}, svg(MICF)), h("span",{class:"rectime mono", id:"recTime"}, "0:00"),
     h("span",{class:"slidecancel", id:"slideCancel"}, "Slide to cancel", svg(IC.back)),
-    h("span",{class:"lockhint", id:"lockHint"}, svg(ICF.lock), svg('<path d="M7 14l5-5 5 5"/>'))));
+    h("span",{class:"lockhint", id:"lockHint"}, h("span",{class:"lkbody"}, svg('<rect x="6" y="11" width="12" height="9" rx="2.200"/><path class="lkshackle" d="M8.500 11V8a3.500 3.500 0 0 1 7 0v3"/>')), h("span",{class:"lkarrow"}, svg('<path d="M7 14l5-5 5 5"/>')))));
 }
+// Hold to record, like WhatsApp: the mic grows under your finger and follows it — left to cancel, up to lock.
+// It only moves one way at a time, gives a little tap on the phone when recording starts, locks or cancels,
+// and springs back smoothly when you let go.
 function micDown(e){
   if (e.button>0 || REC || HOLD) return;
   e.preventDefault();
-  const btn=e.currentTarget, sx=e.clientX, sy=e.clientY, t0=Date.now(); let done=false;
+  const btn=e.currentTarget, sx=e.clientX, sy=e.clientY, t0=Date.now(); let done=false, axis=null, armed=null;
   HOLD={}; try { btn.setPointerCapture(e.pointerId); } catch {}
-  btn.classList.add("pressed");
+  btn.style.transition=""; btn.classList.add("pressed"); haptic();
+  const W=Math.min(innerWidth, 520), CANCEL=Math.max(110, W*.32), LOCK=80;
   const started=startRec(null, {hold:true});
-  const move=ev=>{ if (done) return; const dx=Math.min(0, ev.clientX-sx), dy=Math.min(0, ev.clientY-sy);
-    const sc=$("#slideCancel"); if (sc) { sc.style.transform=`translateX(${dx}px)`; sc.style.opacity=String(Math.max(0, 1+dx/140)); }
-    const lk=$("#lockHint"); if (lk) lk.style.transform=`translateY(${Math.max(-40, dy/2)}px)`;
-    if (dx<-120) finish("cancel"); else if (dy<-70) finish("lock"); };
+  const setBtn=(x,y)=>{ btn.style.transform=`translate3d(${x}px,${y}px,0)`; };
+  const move=ev=>{ if (done) return;
+    let dx=Math.min(0, ev.clientX-sx), dy=Math.min(0, ev.clientY-sy);
+    if (axis==="y" && -dy<14 && -dx>16) axis="x"; else if (axis==="x" && -dx<14 && -dy>16) axis="y";   // came back near the start: can change direction
+    if (!axis && Math.hypot(dx,dy)>10) axis = Math.abs(dx)>Math.abs(dy)? "x" : "y";
+    if (axis==="x") dy=0; else if (axis==="y") dx=0; else { dx=0; dy=0; }
+    setBtn(dx*.85, dy*.6);
+    const sc=$("#slideCancel"); if (sc) { sc.style.transform=`translate3d(${dx*.9}px,0,0)`; sc.style.opacity=String(Math.max(0, 1+dx/(CANCEL*.9))); }
+    const lk=$("#lockHint"); if (lk) { const k=Math.min(1, -dy/LOCK); lk.style.setProperty("--lk", k); lk.classList.toggle("near", k>.85); }
+    const want = dx<-CANCEL? "cancel" : dy<-LOCK? "lock" : null;
+    if (want!==armed) { armed=want; if (want) finish(want); }
+  };
   const up=()=>finish(Date.now()-t0<300? "tap" : "send");
   const cancel=()=>finish("cancel");
   function finish(kind){
-    if (done) return; done=true; HOLD=null; btn.classList.remove("pressed");
+    if (done) return; done=true; const pend=HOLD && HOLD.pending; HOLD=null;
     for (const [t,f] of [["pointermove",move],["pointerup",up],["pointercancel",cancel]]) { btn.removeEventListener(t,f); removeEventListener(t,f); }
+    // the mic springs back into place
+    btn.style.transition="transform .34s cubic-bezier(.3,1.35,.5,1), scale .3s cubic-bezier(.3,1.35,.5,1), background-color .2s"; btn.style.transform=""; btn.classList.remove("pressed");
+    setTimeout(()=>{ btn.style.transition=""; }, 340);
+    if (kind==="lock" || kind==="cancel") haptic();
     started.then(()=>{
-      if (!REC) return;
-      if (kind==="lock" || kind==="tap") { REC.hold=false; holdUI(false); if (navigator.vibrate) try { navigator.vibrate(15); } catch {} render(true); }
-      else if (kind==="send") stopRec(false);
-      else { stopRec(true); if (navigator.vibrate) try { navigator.vibrate([10,40,10]); } catch {} }
+      if (!REC) { if (pend) scheduleRender(); return; }
+      if (kind==="lock" || kind==="tap") { REC.hold=false; const row=document.querySelector(".crow"); if (row) row.classList.add("locking"); setTimeout(()=>{ holdUI(false); render(true); }, kind==="lock"? 120 : 0); }
+      else if (kind==="send") { holdOut("send"); stopRec(false); }
+      else { holdOut("cancel"); stopRec(true); }
+      if (pend) setTimeout(scheduleRender, 260);
     });
   }
   for (const [t,f] of [["pointermove",move],["pointerup",up],["pointercancel",cancel]]) { btn.addEventListener(t,f); addEventListener(t,f); }
+}
+// The hold bar leaves gently instead of vanishing: sliding away to send, or the mic dropping into a bin to cancel.
+function holdOut(kind){
+  const row=document.querySelector(".crow"), bar=row && row.querySelector(".holdbar"); if (!bar) return;
+  const ghost=bar.cloneNode(true); ghost.classList.add("ghost", kind); ghost.removeAttribute("id"); ghost.querySelectorAll("[id]").forEach(x=>x.removeAttribute("id"));
+  if (kind==="cancel") { const mic=ghost.querySelector(".recmic"); if (mic) mic.replaceWith(h("span",{class:"recbin"}, svg(IC.trash))); }
+  const r=bar.getBoundingClientRect(); ghost.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;right:auto;bottom:auto`;
+  const solid=el=>{ for (let x=el; x && x!==document.body; x=x.parentElement) { const c=getComputedStyle(x).backgroundColor; if (c && !/rgba\(.*,\s*0(\.0+)?\)$|transparent/.test(c)) return c; } return getComputedStyle(document.body).backgroundColor; };
+  if (kind==="cancel") { const rr=row.getBoundingClientRect(); ghost.style.setProperty("background", solid(row.parentElement||row), "important"); ghost.style.borderRadius="22px";
+    Object.assign(ghost.style, {left:rr.left+"px", top:rr.top+"px", width:rr.width+"px", height:rr.height+"px", paddingLeft:(r.left-rr.left+12)+"px"}); }
+  document.body.append(ghost); setTimeout(()=>ghost.remove(), kind==="cancel"? 650 : 300);   // lives outside the composer, so the redraw doesn't cut it short
 }
 function stopRec(cancel, draft){ if (!REC) return; REC.cancel=!!cancel; REC.draft=!!draft;
   if (REC.pending) { if (cancel) { REC.abort=true; clearInterval(REC.timer); REC=null; S.rec=false; holdUI(false); render(true); } else REC.stopAfter=true; return; }
@@ -2134,7 +2162,7 @@ async function signOut(){ try { await SB.auth.signOut(); } catch {} clearLocalCo
 
 // ===================== smooth rendering =====================
 let RQ=0;
-function scheduleRender(){ if (SW.drag) { SW.pending=true; return; } if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
+function scheduleRender(){ if (SW.drag) { SW.pending=true; return; } if (HOLD) { HOLD.pending=true; return; } if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
 // While you're typing in a search box, task or settings field, background updates wait until you're
 // done, so the keyboard never gets closed under your fingers.
 let TYPING_HOLD=false;
@@ -4427,7 +4455,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 

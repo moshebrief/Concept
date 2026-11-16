@@ -2800,3 +2800,37 @@ html body .main.chatmain.wp-color{background-image:none!important;background-col
 .wpdimctl input{flex:1;accent-color:var(--cobalt)}
 b.blue{color:var(--cobalt);font-weight:400}
 .wpnote{text-align:center;margin:14px 0 4px}
+
+/* ===== Hold-to-record: smooth like WhatsApp ===== */
+.main.chatmain .crow{position:relative}
+html body .main.chatmain .crow .micbtn{transition:scale .26s cubic-bezier(.3,1.45,.5,1),background-color .18s,transform .3s cubic-bezier(.3,1.35,.5,1);will-change:transform}
+html body .main.chatmain .crow .micbtn.pressed{transform:none;scale:1.6;position:relative;z-index:6;transition:scale .26s cubic-bezier(.3,1.45,.5,1),background-color .18s;box-shadow:0 6px 18px rgba(0,122,255,.3)}
+/* the bar slides in from the right */
+.holdbar:not(.ghost){animation:holdIn .24s cubic-bezier(.2,.9,.25,1) both}
+@keyframes holdIn{from{opacity:0;transform:translate3d(24px,0,0)}}
+.holdbar .slidecancel{will-change:transform,opacity;transition:none!important}
+.holdbar .slidecancel svg.i{animation:nudgeL 1.3s ease-in-out infinite}
+@keyframes nudgeL{0%,100%{transform:none}50%{transform:translateX(-4px)}}
+/* lock pill: rises in, and the lock closes as your finger slides up */
+.holdbar .lockhint{right:-36px!important;bottom:84px!important;width:36px!important;padding:0!important;height:calc(78px - var(--lk,0)*30px);justify-content:space-between;gap:0!important;
+  border-radius:18px;background:var(--surface)!important;box-shadow:0 4px 16px rgba(0,0,0,.16)!important;animation:lockIn .3s cubic-bezier(.2,.9,.3,1.2) .08s both;overflow:hidden}
+@keyframes lockIn{from{opacity:0;transform:translate3d(0,22px,0) scale(.8)}}
+.lockhint .lkbody{display:grid;place-items:center;height:36px;flex:none;color:var(--muted);transition:color .15s}
+.lockhint .lkbody svg.i{width:19px;height:19px}
+.lockhint .lkshackle{transform:translateY(calc((1 - var(--lk,0))*-2.6px));transition:transform .08s}
+.lockhint .lkarrow{display:grid;place-items:center;height:26px;opacity:calc(1 - var(--lk,0)*1.4);color:var(--muted)}
+.lockhint .lkarrow svg.i{width:15px;height:15px;animation:nudgeU 1.2s ease-in-out infinite}
+@keyframes nudgeU{0%,100%{transform:none}50%{transform:translateY(-4px)}}
+.lockhint.near .lkbody{color:var(--cobalt)}
+.crow.locking .lockhint{transition:transform .12s,opacity .12s;transform:translateY(-14px);opacity:0}
+/* leaving: slides away when sent; the mic turns into a bin when cancelled */
+.holdbar.ghost{pointer-events:none;z-index:60;display:flex}
+.holdbar.ghost .lockhint{display:none}
+.holdbar.ghost.send{animation:ghostSend .26s cubic-bezier(.4,0,.6,1) both}
+@keyframes ghostSend{to{opacity:0;transform:translate3d(0,-6px,0)}}
+.holdbar.ghost.cancel > :not(.recbin){animation:ghostFade .18s ease both}
+@keyframes ghostFade{to{opacity:0}}
+.holdbar.ghost .recbin{display:grid;place-items:center;color:#FF3B30;animation:binDrop .6s cubic-bezier(.3,.7,.3,1) both}
+.holdbar.ghost .recbin svg.i{width:22px;height:22px;stroke:#FF3B30}
+@keyframes binDrop{0%{transform:translateY(-8px) scale(.6);opacity:0}25%{transform:none;opacity:1}45%{transform:rotate(-12deg)}60%{transform:rotate(10deg)}75%{transform:none;opacity:1}100%{transform:translateY(10px) scale(.7);opacity:0}}
+@media (prefers-reduced-motion:reduce){.holdbar:not(.ghost),.lockhint,.holdbar .slidecancel svg.i,.lkarrow svg.i{animation:none!important}}
