@@ -185,7 +185,7 @@ function startDemo(msg){ S.mode="demo"; S.me="me"; demo.seed(); if (!S.active) S
 function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(h("span",{style:"width:9px;height:9px;background:var(--knot);transform:rotate(45deg);flex:none"}), h("span",{},t)); }
 
 function subscribeAll(){
-  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E();
+  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E(); startLinkedWatch();
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
   store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); profileSignal(rows); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
@@ -1131,6 +1131,7 @@ function renderSettings(){
     h("button",{class:"srow pick", onclick:openStorage}, h("span",{class:"sic", style:"background:#34C759"}, svg(STORAGE_IC)), h("span",{class:"stx"}, h("b",{},"Storage and data"), h("span",{}, "Manage what's saved on this phone")), h("span",{class:"sval", id:"s-store"}, ""), svg(IC.arrow)),
     row(IC.send, "Enter key sends", toggle("enterSends", true)),
     row(IC.knot, "Swipe left to make task", h("div",{class:"segmini", role:"group", "aria-label":"Swipe left"}, [["open","Open task"],["silent","Just add"]].map(([v,l])=>h("button",{"aria-pressed":String((p.swipeTask||"open")===v), onclick:()=>setPref("swipeTask",v)}, l)))),
+    h("button",{class:"srow pick", onclick:openLinkedDevices}, h("span",{class:"sic", style:"background:#34C759"}, svg('<rect x="3" y="4.500" width="18" height="12" rx="1.800"/><path d="M8 20h8M12 16.500V20"/>')), h("span",{class:"stx"}, h("b",{},"Linked devices")), svg(IC.arrow)),
     h("button",{class:"srow pick", onclick:openStarred}, h("span",{class:"sic", style:"background:#FFCC00"}, svg(ICX.star)), h("span",{class:"stx"}, h("b",{},"Starred messages")), h("span",{class:"sval"}, String(Object.keys(STARS).length||"")), svg(IC.arrow)),
     row(IC.pin, "Pinned chats", h("span",{class:"sval"}, S.pins.length+"/5"))));
   w.append(...group("Automations",
@@ -1964,16 +1965,20 @@ const fmtPhone = p => { const d=String(p||"").replace(/[^\d]/g,""); return d? "+
 // ---------- sign in with phone (texted code) ----------
 function openLogin(){
   if (document.getElementById("onboard")) return;
-  let cc=ls.get("cc","+1"), num="", step="phone", phone="", busy=false, wait=0, timer=null, err="";
+  const wide = () => !NATIVE_APP() && window.innerWidth>=700;
+  let cc=ls.get("cc","+1"), num="", step=wide()? "qr" : "phone", phone="", busy=false, wait=0, timer=null, err="", qrBox=null;
   const o=overlay("onboard","Sign in"); o.id="onboard";
   const draw=()=>{
+    if (step!=="qr" && qrBox) { qrBox.stopLink(); qrBox=null; }
+    if (step==="qr") { if (!qrBox) { qrBox=linkQRPanel(()=>{ step="phone"; err=""; draw(); }); o.replaceChildren(h("div",{class:"ob2 lqpage"}, qrBox)); } return; }
     if (step==="phone") o.replaceChildren(obScreen({
       title:"Welcome to Task Message", sub:"Chat with anyone and turn any message into a task. Enter your phone number to begin.",
       body:[h("div",{class:"obfield"},
           h("label",{class:"obccwrap"}, h("span",{class:"obccv"}, cc), svg(ICF.chev), h("select",{class:"obcc", "aria-label":"Country code", onchange:e=>{ cc=e.target.value; ls.set("cc",cc); draw(); }}, COUNTRIES.map(([c,n])=>h("option",{value:c, selected:c===cc}, n+" "+c)))),
           h("span",{class:"obsep"}),
           h("input",{class:"obnum", id:"ob-num", type:"tel", inputmode:"tel", autocomplete:"tel-national", placeholder:"Phone number", value:num, oninput:e=>num=e.target.value, onkeydown:e=>{ if (e.key==="Enter") sendCode(); }})),
-        h("p",{class:"obhint"}, "We'll text you a 6-digit code.")],
+        h("p",{class:"obhint"}, "We'll text you a 6-digit code."),
+        wide()? h("button",{class:"oblink", style:"margin-top:14px", onclick:()=>{ step="qr"; err=""; draw(); }}, "Link with your phone instead (QR code)") : ""],
       err, busy, label:"Continue", go:sendCode,
       foot:h("p",{class:"obterms"}, "By continuing you agree to the ", h("a",{href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, "Terms"), " and ", h("a",{href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, "Privacy Policy"), ". No abusive or objectionable content is allowed.")}));
     else o.replaceChildren(obScreen({
@@ -4453,6 +4458,158 @@ function dailySummary(){
   }, 3500);
 }
 
+// ===================== Linked devices: use Task Message on a computer, like WhatsApp =====================
+// The computer shows a QR code. Your phone scans it (Settings → Linked devices → Link a device) and the
+// computer is signed in to your account. The QR holds a one-time public key, so only that computer can
+// pick up the sign-in. From the phone you can see every linked computer and log it out.
+const LINK_PFX="TMLINK1.";
+const b64u = u8 => b64e(u8).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const SCRIPTS={};
+function loadScript(src){ return SCRIPTS[src] || (SCRIPTS[src]=new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=()=>{ delete SCRIPTS[src]; rej(new Error("load")); }; document.head.append(s); })); }
+function uaName(){
+  const u=navigator.userAgent||"";
+  const br=/Edg\//.test(u)? "Edge" : /OPR\//.test(u)? "Opera" : /Firefox\//.test(u)? "Firefox" : /Chrome\//.test(u)? "Chrome" : /Safari\//.test(u)? "Safari" : "Browser";
+  const os=/iPhone/.test(u)? "iPhone" : /iPad/.test(u)? "iPad" : /Android/.test(u)? "Android" : /Mac OS X|Macintosh/.test(u)? "Mac" : /Windows/.test(u)? "Windows" : /CrOS/.test(u)? "Chromebook" : /Linux/.test(u)? "Linux" : "computer";
+  return br+" on "+os;
+}
+const linkedPath = () => "data/users/"+S.me+"/linked";
+async function linkFn(body){
+  const {data, error}=await SB.functions.invoke("link", {body});
+  if (error) { let m=""; try { m=(await error.context.json()).error; } catch {} throw new Error(m || "Couldn't reach the server. Check your connection and try again."); }
+  return data||{};
+}
+
+// ---- On the computer: the QR code on the sign-in screen ----
+function linkQRPanel(onPhone){
+  const box=h("div",{class:"lqr"}), st={stop:false, rounds:0};
+  const steps=h("ol",{class:"lqsteps"},
+    h("li",{}, "Open ", h("b",{}, "Task Message"), " on your phone"),
+    h("li",{}, "Tap ", h("b",{}, "Settings"), ", then ", h("b",{}, "Linked devices")),
+    h("li",{}, "Tap ", h("b",{}, "Link a device"), " and point your phone at this screen"));
+  const code=h("div",{class:"lqcode", "aria-label":"QR code to link this computer"}, h("span",{class:"spin"}));
+  const wrap=h("div",{class:"lqwrap"}, h("div",{class:"lqtext"}, h("h1",{class:"lqtitle"}, "Use Task Message on your computer"), steps,
+      h("button",{class:"oblink lqalt", onclick:onPhone}, "Sign in with phone number instead")), code);
+  box.append(wrap);
+  async function round(){
+    if (st.stop || !box.isConnected && st.rounds) return;
+    st.rounds++; clearTimeout(st.t); clearTimeout(st.p);
+    if (st.rounds>5) { code.replaceChildren(h("button",{class:"lqreload", onclick:()=>{ st.rounds=0; round(); }}, svg('<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>'), h("span",{}, "Click to reload QR code"))); return; }
+    try {
+      await loadScript("vendor/qrcode.js");
+      const kp=await crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey"]);
+      const jw=await crypto.subtle.exportKey("jwk", kp.publicKey);
+      const id=b64u(crypto.getRandomValues(new Uint8Array(18)));
+      const qr=qrcode(0,"M"); qr.addData(LINK_PFX+id+"."+jw.x+"."+jw.y); qr.make();
+      const n=qr.getModuleCount(), cells=[];
+      for (let r=0;r<n;r++) for (let c=0;c<n;c++) if (qr.isDark(r,c)) cells.push(`M${c} ${r}h1v1h-1z`);
+      code.replaceChildren(h("div",{class:"lqsvg", html:`<svg viewBox="-2 -2 ${n+4} ${n+4}" shape-rendering="crispEdges"><rect x="-2" y="-2" width="${n+4}" height="${n+4}" fill="#fff"/><path d="${cells.join("")}" fill="#111"/></svg>`}), h("img",{class:"lqlogo", src:"icon.svg", alt:""}));
+      st.cur={id, priv:kp.privateKey};
+      st.t=setTimeout(round, 60000);                       // a fresh code every minute, like WhatsApp
+      poll(id);
+    } catch { code.replaceChildren(h("p",{class:"oberr"}, "Couldn't make the QR code. Check your connection.")); st.t=setTimeout(round, 8000); }
+  }
+  async function poll(id){
+    if (st.stop || !st.cur || st.cur.id!==id || !SB) return;
+    try {
+      const r=await linkFn({act:"poll", id});
+      if (r.ready && st.cur && st.cur.id===id) { st.stop=true; clearTimeout(st.t); await finish(r); return; }
+    } catch {}
+    st.p=setTimeout(()=>poll(id), 2000);
+  }
+  async function finish(r){
+    code.replaceChildren(h("div",{class:"lqdone"}, h("span",{class:"spin"}), h("span",{}, "Linking…")));
+    try {
+      const theirs=await crypto.subtle.importKey("jwk",{kty:"EC",crv:"P-256",x:r.epk.x,y:r.epk.y,ext:true},{name:"ECDH",namedCurve:"P-256"},false,[]);
+      const key=await crypto.subtle.deriveKey({name:"ECDH", public:theirs}, st.cur.priv, {name:"AES-GCM", length:256}, false, ["decrypt"]);
+      const msg=JSON.parse(TD.decode(await crypto.subtle.decrypt({name:"AES-GCM", iv:b64d(r.iv)}, key, b64d(r.ct))));
+      const {data, error}=await SB.auth.verifyOtp({token_hash:msg.th, type:"magiclink"});
+      if (error || !data || !data.session) throw error||new Error("no session");
+      ls.set("linkId", st.cur.id); ls.set("linkSid", JSON.parse(atob(data.session.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).session_id||"");
+      location.reload();
+    } catch { st.stop=false; st.rounds=0; code.replaceChildren(h("p",{class:"oberr"}, "Linking didn't finish. Scan the new code to try again.")); setTimeout(round, 2500); }
+  }
+  box.stopLink=()=>{ st.stop=true; clearTimeout(st.t); clearTimeout(st.p); };
+  round();
+  return box;
+}
+// After a computer signs in this way: it puts its name and sign-in on the list, keeps "last active" fresh,
+// and signs itself out if the phone logs it out.
+let LINK_T=0;
+async function linkedHeartbeat(){
+  const id=ls.get("linkId",""); if (!id || S.mode!=="live" || !S.me) return;
+  try {
+    const cur=(await store.get(linkedPath()).catch(()=>null))||{}; const devices={...(cur.devices||{})};
+    if (!devices[id]) { if (ls.get("linkSeen","")) { ls.set("linkId",""); toast("This computer was logged out from your phone"); setTimeout(signOut, 1200); } return; }
+    ls.set("linkSeen","1");
+    devices[id]={...devices[id], name:devices[id].name && devices[id].name!=="Computer"? devices[id].name : uaName(), seen:now(), ...(ls.get("linkSid","")? {sid:ls.get("linkSid","")} : {})};
+    await store.set(linkedPath(), {devices});
+  } catch {}
+}
+function startLinkedWatch(){ if (!ls.get("linkId","")) return; linkedHeartbeat(); clearInterval(LINK_T); LINK_T=setInterval(linkedHeartbeat, 60000);
+  document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible") linkedHeartbeat(); }); }
+
+// ---- On the phone: Settings → Linked devices ----
+function seenText(t){ if (!t) return ""; return Date.now()-t<2*60e3? "Active now" : "Last active "+lastSeenText(t).replace(/^last seen /,""); }
+function openLinkedDevices(){
+  let devices={}, unsub=false;
+  const load=async(draw)=>{ try { const d=await store.get(linkedPath()); devices=(d&&d.devices)||{}; } catch {} if (!unsub) draw(); };
+  sheet("Linked devices", (draw, close)=>{
+    if (!openLinkedDevices.loaded) { openLinkedDevices.loaded=true; load(draw); }
+    const list=Object.entries(devices).sort((a,b)=>(b[1].seen||0)-(a[1].seen||0));
+    const here=ls.get("linkId","");
+    return [
+      h("div",{class:"ldhero"},
+        h("div",{class:"ldart", "aria-hidden":"true"}, svg('<rect x="2.500" y="4" width="15" height="10.500" rx="1.600"/><path d="M6.500 18h7M10 14.500V18"/><rect x="15.500" y="9" width="6" height="11" rx="1.400"/><path d="M18.500 17.600h.01"/>')),
+        h("p",{class:"ldsub"}, "Use Task Message on your computer. Messages are end-to-end encrypted, and only new messages show there."),
+        h("button",{class:"ldbtn", onclick:()=>{ if (!NATIVE_APP() && window.innerWidth>860) { toast("Use your phone to scan the code on this screen"); return; } openLinkScanner(()=>{ openLinkedDevices.loaded=false; load(draw); }); }}, "Link a device")),
+      list.length? h("div",{class:"seg-label"}, "Device status") : "",
+      list.length? h("div",{class:"ulist sgroup"}, list.map(([id,d])=>h("button",{class:"srow pick lditem", onclick:()=>confirmUnlink(id, d, ()=>{ delete devices[id]; draw(); })},
+          h("span",{class:"ldic"}, svg('<rect x="3" y="4.500" width="18" height="12" rx="1.800"/><path d="M8 20h8M12 16.500V20"/>')),
+          h("span",{class:"stx"}, h("b",{}, (d.name||"Computer")+(id===here? " (this computer)" : "")), h("small",{}, seenText(d.seen||d.at))),
+          svg(IC.arrow)))) : "",
+      h("p",{class:"note ldnote"}, svg(ICF.lock), " Your personal messages are end-to-end encrypted on all your devices.")
+    ];
+  }, {onClose:()=>{ unsub=true; openLinkedDevices.loaded=false; }});
+}
+function confirmUnlink(id, d, done){
+  sheet(d.name||"Computer", (draw, close)=>[
+    h("p",{class:"note", style:"margin:0 4px 12px"}, seenText(d.seen||d.at)+". Linked "+fmtDay(d.at||now()).toLowerCase()+"."),
+    h("div",{class:"ulist sgroup delopts"}, h("button",{class:"srow pick dangerrow", onclick:async e=>{ e.currentTarget.disabled=true;
+      try { await linkFn({act:"logout", id}); close(); done(); toast("Logged out"); if (id===ls.get("linkId","")) { ls.set("linkId",""); setTimeout(signOut, 600); } }
+      catch (err) { toast(err.message); e.currentTarget.disabled=false; } }}, h("span",{class:"stx"}, h("b",{}, "Log out")))),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"))]);
+}
+// The camera screen that reads the QR code
+async function openLinkScanner(onDone){
+  const o=overlay("lscan", "Scan QR code"); let stream=null, raf=0, busy=false, closed=false;
+  const video=h("video",{playsinline:"", muted:"", autoplay:"", class:"lsvid"}); video.muted=true; video.setAttribute("playsinline","");
+  const msg=h("p",{class:"lsmsg"}, "Scan the QR code shown on your computer's screen");
+  const close=()=>{ closed=true; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach(t=>t.stop()); o.classList.add("out"); setTimeout(()=>o.remove(), 220); };
+  o.append(video, h("div",{class:"lsshade"}, h("div",{class:"lsframe"}, h("i"),h("i"),h("i"),h("i"))),
+    h("div",{class:"lstop"}, h("button",{class:"iconbtn lsx", "aria-label":"Close", onclick:close}, svg(IC.x||'<path d="M6 6l12 12M18 6L6 18"/>')), h("b",{}, "Scan QR code")),
+    h("div",{class:"lsbot"}, msg, h("p",{class:"lshint"}, "On your computer, open the Task Message website to see the code.")));
+  try {
+    const [s]=await Promise.all([navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}, width:{ideal:1280}, height:{ideal:720}}, audio:false}), loadScript("vendor/jsqr.min.js")]);
+    stream=s; if (closed) { s.getTracks().forEach(t=>t.stop()); return; }
+    video.srcObject=s; await video.play().catch(()=>{});
+  } catch { msg.textContent="Task Message can't use the camera. Allow camera access for Task Message in your phone's Settings, then try again."; msg.classList.add("err"); return; }
+  const cv=document.createElement("canvas"), cx=cv.getContext("2d", {willReadFrequently:true}); let last=0, bad=0;
+  const tick=async t=>{
+    if (closed) return; raf=requestAnimationFrame(tick);
+    if (busy || t-last<110 || video.readyState<2) return; last=t;
+    const vw=video.videoWidth, vh=video.videoHeight; if (!vw) return;
+    const side=Math.min(vw, vh)*.8, sc=Math.min(1, 560/side); cv.width=cv.height=Math.round(side*sc);
+    cx.drawImage(video, (vw-side)/2, (vh-side)/2, side, side, 0, 0, cv.width, cv.height);
+    const img=cx.getImageData(0,0,cv.width,cv.height); const r=window.jsQR && jsQR(img.data, img.width, img.height, {inversionAttempts:"dontInvert"});
+    if (!r || !r.data) return;
+    if (!r.data.startsWith(LINK_PFX)) { if (Date.now()-bad>2500) { bad=Date.now(); msg.textContent="That's not a Task Message code. Scan the code on the Task Message website."; } return; }
+    const [id,x,y]=r.data.slice(LINK_PFX.length).split(".");
+    busy=true; haptic(); o.classList.add("got"); msg.classList.remove("err"); msg.textContent="Linking…";
+    try { await linkFn({act:"approve", id, pub:{x,y}, name:"Computer"}); msg.textContent="Linked"; setTimeout(()=>{ close(); toast("Computer linked"); onDone&&onDone(); }, 500); }
+    catch (e) { msg.textContent=e.message; msg.classList.add("err"); o.classList.remove("got"); setTimeout(()=>{ busy=false; }, 1500); }
+  };
+  raf=requestAnimationFrame(tick);
+}
 // Keyboard stays up: tapping the buttons around the message box (plus, mic, task, reply bar, the plus menu,
 // tapping off the plus menu) must not take focus away from the box, or the iPhone drops the keyboard.
 document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (!a || a.id!=="composer") return;
@@ -4468,7 +4625,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 

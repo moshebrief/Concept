@@ -28,6 +28,9 @@ function web() {
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(out, f));
     else must(!["index.html", "styles.css", "tones.js", "app.js", "config.js", "supabase.js"].includes(f), `${f} is missing from the repository`);
   }
+  // small libraries the app loads when needed (QR code for linking a computer)
+  if (fs.existsSync(path.join(ROOT, "vendor"))) fs.cpSync(path.join(ROOT, "vendor"), path.join(out, "vendor"), { recursive: true });
+  must(fs.existsSync(path.join(out, "vendor", "jsqr.min.js")), "vendor/jsqr.min.js is missing from the repository");
   const conf = read(path.join(out, "config.js"));
   must(!/YOUR_SUPABASE/.test(conf), "config.js still has the placeholder keys — add your Supabase URL and key first");
   log("web files copied to www/");
