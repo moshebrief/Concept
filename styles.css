@@ -2692,3 +2692,10 @@ html body .lineitem .badge.num{font:600 12.5px/20px var(--f-body)!important;min-
 /* repeat chip in a task */
 .td2chip.rep.set{color:var(--cobalt)}
 .td2rep{color:var(--cobalt);padding:0 9px}
+
+/* Full-screen screens with a text box (photo preview, status, forward): everything stays above the keyboard,
+   so the Send button is never hidden behind it */
+:root.kb-open .overlay.mprev,:root.kb-open .overlay.compose-status,:root.kb-open .overlay.story,:root.kb-open .overlay.fwdview{bottom:var(--kb,0px)!important;padding-bottom:0!important}
+:root.kb-open .mp-bot{padding-bottom:8px!important}
+:root.kb-open .mprev .mp-strip{display:none}
+.sc-cap{font-size:16px}
