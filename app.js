@@ -3389,7 +3389,7 @@ function revealFocused(){
   if (caret>bottom) sc.scrollTop+=caret-bottom; else if (r.top<b.top+8) sc.scrollTop-=b.top+8-r.top;
 }
 window.addEventListener("scroll", ()=>{ if (KB.native) unpan(); }, {passive:true});
-document.addEventListener("focusin", e=>{ if (!KB.native || !e.target.matches || !e.target.matches("input,textarea,[contenteditable]")) return; requestAnimationFrame(unpan); setTimeout(()=>{ unpan(); revealFocused(); }, 380); });
+document.addEventListener("focusin", e=>{ if (!KB.native || !e.target.matches || !e.target.matches("input,textarea,[contenteditable]")) return; requestAnimationFrame(unpan); setTimeout(()=>{ unpan(); revealFocused(); if (e.target.id==="t-notes") keepCaretInView(e.target); }, 380); });
 const NP = name => (NATIVE && CAP.Plugins && CAP.Plugins[name]) || null;
 const siteLink = file => (NATIVE || CFG.siteUrl? (CFG.siteUrl||"https://concept-rnmb.onrender.com").replace(/\/$/,"")+"/" : "") + file;
 let PUSH_READY=false;
@@ -4093,6 +4093,21 @@ function openTask(id){
   S.actFor=null; S.confirmDel=false; render();
 }
 let LAST_DRAWER=null;
+// Task notes: the box grows with what you write, and the line you're typing always stays above the keyboard
+function growNotes(t){ const st=t.closest(".td2body"), keep=st? st.scrollTop : 0; t.style.height="auto"; t.style.height=Math.max(88, t.scrollHeight)+"px"; if (st) st.scrollTop=keep; }
+function keepCaretInView(t){
+  const st=t.closest(".td2body"); if (!st) return;
+  requestAnimationFrame(()=>{
+    const cs=getComputedStyle(t), lh=parseFloat(cs.lineHeight)||22, pad=parseFloat(cs.paddingTop)||0;
+    const before=t.value.slice(0, t.selectionEnd ?? t.value.length), lines=before.split("\n").length;
+    const caretY=t.getBoundingClientRect().top+pad+lines*lh;          // bottom of the line being typed
+    const vv=window.visualViewport, kb=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--kb"))||0;
+    const visBottom=Math.min(st.getBoundingClientRect().bottom, (vv? vv.height+vv.offsetTop : innerHeight)-kb)-16;
+    const top=st.getBoundingClientRect().top+8;
+    if (caretY>visBottom) st.scrollTop+=caretY-visBottom;
+    else if (caretY-lh<top) st.scrollTop-=top-(caretY-lh);
+  });
+}
 function renderDrawer(){
   const isNew = S.openTask==="new"; const t = isNew? null : S.tasks.find(x=>x.id===S.openTask);
   if (!isNew && !t) { S.openTask=null; return h("span"); }
@@ -4137,7 +4152,7 @@ function renderDrawer(){
   // ---- subtasks + photos + voice memos
   body.append(h("div",{class:"td2card td2subs"}, renderTaskFiles(d, ro, renderSubtasks(d, t, isNew, ro))));
   // ---- notes
-  body.append(h("div",{class:"td2card"}, h("textarea",{class:"td2notes", id:"t-notes", disabled:ro, placeholder:"Add notes…", oninput:e=>{ d.notes=e.target.value; e.target.style.height="auto"; e.target.style.height=Math.max(88,e.target.scrollHeight)+"px"; }}, d.notes)));
+  body.append(h("div",{class:"td2card"}, h("textarea",{class:"td2notes", id:"t-notes", disabled:ro, placeholder:"Add notes…", oninput:e=>{ d.notes=e.target.value; growNotes(e.target); keepCaretInView(e.target); }}, d.notes)));
   // ---- where it came from (with the voice note playable right here)
   if (d.fromText || d.fromMsg) {
     const ch=S.channels.find(c=>c.id===d.channel);
