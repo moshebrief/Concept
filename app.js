@@ -4,6 +4,23 @@
 // ---------- tiny helpers ----------
 const $ = (s, r=document) => r.querySelector(s);
 const h = (tag, attrs={}, ...kids) => { const e=document.createElement(tag); for (const [k,v] of Object.entries(attrs||{})) { if (v==null||v===false) continue; if (k==="class") e.className=v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (k==="html") e.innerHTML=v; else e.setAttribute(k, v===true?"":v); } for (const k of kids.flat(Infinity)) { if (k==null||k===false) continue; e.append(k.nodeType?k:document.createTextNode(String(k))); } return e; };
+// How fast things move when you tap: 1 = as designed, higher = calmer. Every screen, menu and button
+// animation (in styles.css) and the matching timings in the code below follow this one number.
+const SLOW=1.3, ms=n=>Math.round(n*SLOW);
+(function slowAnimations(){
+  const scale=v=>v.split(",").map(x=>{ x=x.trim(); const n=parseFloat(x); if (!n) return x; const sec=x.endsWith("ms")? n/1000 : n; return sec>0.7? x : (+(sec*SLOW).toFixed(3))+"s"; }).join(", ");
+  const walk=rules=>{ for (const r of rules) {
+    if (r.cssRules && !(r instanceof CSSStyleRule)) { walk(r.cssRules); continue; }
+    const st=r.style; if (!st) continue;
+    for (const [prop, cnt] of [["transition-duration",""],["animation-duration","animation-iteration-count"],["transition-delay",""],["animation-delay",""]]) {
+      const v=st.getPropertyValue(prop); if (!v) continue;
+      if (cnt && /infinite/.test(st.getPropertyValue(cnt))) continue;          // blinking dots and the like keep their pace
+      st.setProperty(prop, scale(v), st.getPropertyPriority(prop));
+    }
+  } };
+  const run=()=>{ for (const sh of document.styleSheets) { try { if (sh.href && !/styles\.css/.test(sh.href)) continue; walk(sh.cssRules); } catch {} } };
+  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded", run); else run();
+})();
 const svg = (d, vb="0 0 24 24") => { const e=document.createElementNS("http://www.w3.org/2000/svg","svg"); e.setAttribute("viewBox",vb); e.setAttribute("class","i"); e.innerHTML=d; return e; };
 const IC = {
   pin:'<path d="M9 3.5h6l-1 5.5 3 3v2H7v-2l3-3z"/><path d="M12 14v6.5"/>',
@@ -341,7 +358,7 @@ function navGo(dir, fn){
   fn();
   const el=document.querySelector(dir==="fwd"? ".main.chatmain" : ".lines");
   // older phones without View Transitions: the same slide, done directly on the screen that comes in
-  if (el && el.animate) el.animate(dir==="fwd"? [{transform:"translateX(100%)"},{transform:"none"}] : [{transform:"translateX(-30%)", opacity:.85},{transform:"none", opacity:1}], {duration:dir==="fwd"? 380 : 340, easing:"cubic-bezier(.32,.72,0,1)"});
+  if (el && el.animate) el.animate(dir==="fwd"? [{transform:"translateX(100%)"},{transform:"none"}] : [{transform:"translateX(-30%)", opacity:.85},{transform:"none", opacity:1}], {duration:ms(dir==="fwd"? 380 : 340), easing:"cubic-bezier(.32,.72,0,1)"});
 }
 function selectChannel(id){ noteUnreadFrom(id); S.cfKeep=id; const wasIn=S.inThread && S.view==="chats"; S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true;
   if (wasIn) { render(); return; }
@@ -1087,7 +1104,7 @@ function ctxMenu(src, items, opt={}){
   // the finger that opened the menu is still down: ignore the tap it makes when it lifts
   let closing=false, ready=false; const arm=()=>setTimeout(()=>{ ready=true; }, 60);
   addEventListener("pointerup", arm, {once:true, capture:true}); setTimeout(()=>{ ready=true; }, 900);
-  const close=(after)=>{ if (closing || (!ready && !after)) return; closing=true; wrap.classList.add("out"); setTimeout(()=>{ wrap.remove(); opt.onClose && opt.onClose(); after && after(); }, 190); };
+  const close=(after)=>{ if (closing || (!ready && !after)) return; closing=true; wrap.classList.add("out"); setTimeout(()=>{ wrap.remove(); opt.onClose && opt.onClose(); after && after(); }, ms(190)); };
   items.forEach((it,i)=>{ if (it.danger && i>0 && !items[i-1].danger) menu.append(h("div",{class:"lpmsep"}));
     menu.append(h("button",{role:"menuitem", class:it.danger?"danger":"", onclick:()=>{ if (ready) close(it.fn); }}, h("span",{}, it.label), svg(it.icon))); });
   back.addEventListener("click", ()=>close()); back.addEventListener("contextmenu", e=>{ e.preventDefault(); close(); });
@@ -2723,7 +2740,7 @@ function pageify(scrim){
 function hookPageRemove(scrim){
   if (scrim.__hooked) return; scrim.__hooked=true; const real=Element.prototype.remove;
   scrim.remove=function(){ if (!this.classList.contains("page") || this.classList.contains("out") || !this.isConnected) { real.call(this); return; }
-    this.classList.add("out"); setTimeout(()=>real.call(this), 230); };
+    this.classList.add("out"); setTimeout(()=>real.call(this), ms(230)); };
 }
 new MutationObserver(ms=>{ for (const r of ms) for (const n of r.addedNodes) if (n.nodeType===1 && n.classList.contains("scrim") && !n.classList.contains("clear")) {
   pageify(n); hookPageRemove(n); new MutationObserver(()=>pageify(n)).observe(n, {childList:true, subtree:true}); } }).observe(document.body, {childList:true});
@@ -4149,7 +4166,7 @@ function openChatByNumber(){
   if (document.getElementById("ncview")) return;
   let cc=ls.get("cc","+1"), num=(S.newFlow&&/^[+\d\s()-]{6,}$/.test(S.newFlow.q||"")? S.newFlow.q : ""), first="", last="", busy=false, notOn=null;
   const o=h("div",{class:"ncwrap", id:"ncview", role:"dialog", "aria-label":"New contact"});
-  const close=()=>{ o.classList.add("out"); setTimeout(()=>o.remove(), 220); };
+  const close=()=>{ o.classList.add("out"); setTimeout(()=>o.remove(), ms(220)); };
   const valid=()=>dgt(toE164(num, cc)).length>=8;
   const go=async()=>{
     if (!valid() || busy) return; const phone=toE164(num, cc);
@@ -4584,7 +4601,7 @@ async function openLinkScanner(onDone){
   const o=overlay("lscan", "Scan QR code"); let stream=null, raf=0, busy=false, closed=false;
   const video=h("video",{playsinline:"", muted:"", autoplay:"", class:"lsvid"}); video.muted=true; video.setAttribute("playsinline","");
   const msg=h("p",{class:"lsmsg"}, "Scan the QR code shown on your computer's screen");
-  const close=()=>{ closed=true; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach(t=>t.stop()); o.classList.add("out"); setTimeout(()=>o.remove(), 220); };
+  const close=()=>{ closed=true; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach(t=>t.stop()); o.classList.add("out"); setTimeout(()=>o.remove(), ms(220)); };
   o.append(video, h("div",{class:"lsshade"}, h("div",{class:"lsframe"}, h("i"),h("i"),h("i"),h("i"))),
     h("div",{class:"lstop"}, h("button",{class:"iconbtn lsx", "aria-label":"Close", onclick:close}, svg(IC.x||'<path d="M6 6l12 12M18 6L6 18"/>')), h("b",{}, "Scan QR code")),
     h("div",{class:"lsbot"}, msg, h("p",{class:"lshint"}, "On your computer, open the Task Message website to see the code.")));
