@@ -210,6 +210,7 @@ function openMsgs(){
   S._lm=localMessages(cid);
   unsubMsgs = store.sub("channels/"+cid+"/messages", async rows => {
     if (S.msgsFor!==cid) return;
+    { const lids=new Set((LOCAL.older[cid]||[]).map(m=>m.id)); rows=rows.filter(m=>hereOK(m, lids)); }
     rows.sort((a,b)=>a.at-b.at);
     await resolvePeople(rows.map(m=>m.by));
     if (!E2E.ready) await initPromise();
@@ -224,7 +225,7 @@ function openMsgs(){
 }
 let _initP=null; function initPromise(){ return Promise.race([new Promise(r=>{ const t=setInterval(()=>{ if (E2E.ready){ clearInterval(t); r(); } },50); setTimeout(()=>{ clearInterval(t); r(); },1500); })]); }
 function markRead(){ if (!S.active) return; ucClear(S.active); if ((S.nt.unr||[]).includes(S.active)) { S.nt.unr=S.nt.unr.filter(x=>x!==S.active); saveNt(); } const c=S.channels.find(x=>x.id===S.active); const t=(c&&c.last&&c.last.at)||now(); S.lastRead[S.active]=t; ls.set("lastRead", S.lastRead); if (S.inThread || window.innerWidth>860) ackRead(c); }
-const unread = c => (c.last && c.last.by!==S.me && c.last.at > (S.lastRead[c.id]||0) && c.id!==S.active) || ((S.nt.unr||[]).includes(c.id) && !(c.id===S.active && S.inThread));
+const unread = c => (c.last && c.last.by!==S.me && c.last.at > Math.max(S.lastRead[c.id]||0, readFloor()) && c.id!==S.active) || ((S.nt.unr||[]).includes(c.id) && !(c.id===S.active && S.inThread));
 
 // ---------- actions ----------
 async function sendMessage(text){
@@ -2282,7 +2283,7 @@ const MEDIA_CACHE={}, MEDIA_P={};
 function plainP(m){ if (m.local) return m.local; if (m.payload) return m.payload; if (!m.penc) return null; const v=DEC.get(m.penc.iv); if (v===undefined) return null; if (v===false) return false; try { return JSON.parse(v); } catch { return false; } }
 function richLabel(kind, sub, n){ if (kind==="voice") return "🎤 Voice note"; if (kind==="media") return sub==="video"? "🎥 Video" : sub==="file"? "📄 Document" : (n>1? "📷 "+n+" photos" : "📷 Photo"); if (kind==="contact") return "👤 Contact"; if (kind==="location") return "📍 Location"; return ""; }
 function lastPreview(l){
-  if (!l) return ""; const cap = l.enc? shown(l) : (l.text||"");
+  if (!l || !hereOK(l, NATIVE_APP()? {has:()=>true} : null)) return ""; const cap = l.enc? shown(l) : (l.text||"");
   const lab = richLabel(l.kind, l.sub, l.n);
   if (lab) return cap && cap!=="🔒 …"? lab+" · "+cap : lab;
   return cap || "Message deleted";
@@ -2945,9 +2946,20 @@ async function loadLocalCopy(){
   }
   if (ch || tm) render(true);
 }
+// Messages live on your devices, not in the cloud. The server only passes a message along, encrypted,
+// until everyone's phone has saved it. So a device only shows what reached it after it was set up there:
+// a new phone or the website starts empty (like WhatsApp); the phone you've been using keeps all it saved.
+function devSince(){ if (S.mode!=="live" || !S.me) return 0; const k="devSince:"+S.me; let v=+ls.get(k,0);
+  // a phone that was already in use keeps getting everything still waiting for it; the website and new devices start now
+  if (!v) { v = NATIVE_APP() && Object.keys(ls.get("lastRead",{})||{}).length? 1 : now(); ls.set(k,v); } return v; }
+const readFloor = () => NATIVE_APP()? 0 : devSince();
+const hereOK = (m, localIds) => !m || S.mode!=="live" || (m.at||0)>=devSince()-60000 || (NATIVE_APP() && localIds && localIds.has(m.id));
+function NATIVE_APP(){ try { return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); } catch { return false; } }
 function localMessages(cid){
   return LOCAL.load("m:"+cid).then(async rows=>{
     if (!Array.isArray(rows) || !rows.length) return;
+    if (!NATIVE_APP()) rows=rows.filter(m=>hereOK(m));   // the website: nothing from before it was set up
+    if (!rows.length) return;
     if (!E2E.ready) await initPromise();
     await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
     if (S.msgsFor!==cid) return;
@@ -2974,10 +2986,11 @@ async function syncAll(){
       let q=SB.from("docs").select("path,data").eq("col","channels/"+c.id+"/messages").order("updated_at",{ascending:true}).limit(1000);
       if (meta[c.id]) q=q.gte("updated_at", new Date(meta[c.id]-10*60e3).toISOString());
       const {data, error}=await q; if (error) continue;
-      const rows=(data||[]).map(r=>({id:r.path.split("/").pop(), ...r.data}));
+      let rows=(data||[]).map(r=>({id:r.path.split("/").pop(), ...r.data}));
+      { const lids=new Set(((await LOCAL.load("m:"+c.id))||[]).map(m=>m.id)); rows=rows.filter(m=>hereOK(m, lids)); }
       if (!E2E.ready) await initPromise();
       await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
-      const merged=mergeById((await LOCAL.load("m:"+c.id))||[], rows).slice(-5000);
+      const merged=mergeById(((await LOCAL.load("m:"+c.id))||[]).filter(m=>NATIVE_APP() || hereOK(m)), rows).slice(-5000);
       await kvSet(LOCAL.key("m:"+c.id), merged);
       for (const r of rows) { try { await saveAttachments(r); } catch {} }
       meta[c.id]=top; await kvSet(LOCAL.key("syncmeta"), meta);
@@ -4242,7 +4255,7 @@ const ICX={
 // ---- Unread counts: the number in the blue badge, like WhatsApp ----
 const UC=ls.get("uc",{}), UCAT=ls.get("ucat",{}), UC_ASKED={}; let UC_BOOT=true;
 function ucSave(){ ls.set("uc",UC); ls.set("ucat",UCAT); }
-const realUnread = c => !!(c.last && c.last.by!==S.me && c.last.at>(S.lastRead[c.id]||0));
+const realUnread = c => !!(c.last && c.last.by!==S.me && c.last.at>Math.max(S.lastRead[c.id]||0, readFloor()));
 function ucText(c){ if (!realUnread(c)) return ""; const n=UC[c.id]||1; return n>99? "99+" : String(n); }
 function ucClear(cid){ if (UC[cid]) { delete UC[cid]; ucSave(); } }
 function countIncoming(){
@@ -4455,7 +4468,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
