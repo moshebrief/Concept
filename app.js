@@ -1303,6 +1303,14 @@ function confirmDeleteStage(s){
     h("button",{class:"primary wide danger", onclick:()=>{ close(); for (const t of S.tasks.filter(t=>t.status===s.id && canSeeTask(t))) store.update("tasks/"+t.id,{status:"todo"}).catch(()=>{}); const i=STATUSES.findIndex(z=>z.id===s.id); if (i>=0) STATUSES.splice(i,1); savePrefsDoc(); render(); }}, svg(IC.trash), "Delete stage"),
     h("button",{class:"ghost wide", onclick:close}, "Cancel")]);
 }
+// Hold a task card: move it to another stage (phones can't drag cards between columns).
+function cardMenu(t, el){
+  const dot=c=>`<circle cx="12" cy="12" r="6" fill="${c}" stroke="none"/>`;
+  ctxMenu(el, [
+    ...STATUSES.filter(s=>s.id!==stOf(t)).map(s=>({label:"Move to "+s.name, icon:dot(s.c), fn:()=>{ moveTask(t.id, s.id); haptic(); toast("Moved to "+s.name); }})),
+    {label:"Open task", icon:ICF.goto, fn:()=>openTask(t.id)}
+  ], {menuWidth:240});
+}
 function stagePicker(t, x, y){
   const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
   scrim.append(h("div",{class:"popmenu", style:`left:${Math.min(x-100, innerWidth-208)}px;top:${Math.min(y+6, innerHeight-STATUSES.length*42-20)}px`},
@@ -4068,7 +4076,7 @@ function renderBoard(){
     if (!list.length) cards.append(h("div",{class:"colempty"}, h("span",{}, "No tasks in "+s.name)));
     list.forEach(t=>{
       const late=isLate(t.due,t.status);
-      cards.append(h("button",{class:"card pri-"+(t.priority||"normal"), draggable:S.canWrite?"true":null, onclick:()=>openTask(t.id),
+      cards.append((el=>{ if (S.canWrite) longPress(el, ()=>cardMenu(t, el)); return el; })(h("button",{class:"card pri-"+(t.priority||"normal"), draggable:S.canWrite?"true":null, onclick:()=>openTask(t.id),
         ondragstart:e=>{e.dataTransfer.setData("text/plain",t.id); e.currentTarget.classList.add("dragging");}, ondragend:e=>e.currentTarget.classList.remove("dragging")},
         h("div",{class:"ttl"}, t.title),
         (t.notes||"").trim()? h("div",{class:"tnote"}, t.notes.trim().slice(0,160)) : "",
@@ -4083,7 +4091,7 @@ function renderBoard(){
           t.thread? h("span",{class:"cchat", title:"Has a conversation"}, svg(IC.chat)):"",
           h("span",{class:"grow"}),
           t.assignee? avatar(t.assignee,"sm") : h("span",{class:"noav", title:"Unassigned"}, svg(ICF.none)))
-      ));
+      )));
     });
     col.append(cards); board.append(col);
   });
@@ -4196,7 +4204,7 @@ function renderDrawer(){
   // ---- title
   body.append(h("textarea",{class:"td2title", id:"t-title", rows:"1", placeholder:"Task title", disabled:ro, oninput:e=>{ d.title=e.target.value; e.target.style.height="auto"; e.target.style.height=e.target.scrollHeight+"px"; }, onkeydown:e=>{ if(e.key==="Enter"){ e.preventDefault(); saveTask(); } }}, d.title));
   // ---- status: segmented control
-  body.append(h("div",{class:"td2seg", role:"group", "aria-label":"Status"}, STATUSES.map(s=>h("button",{class:"td2segb","aria-pressed":String(d.status===s.id), style:`--c:${s.c}`, disabled:ro, onclick:()=>{ d.status=s.id; render(); }}, h("i"), s.name))));
+  body.append(h("div",{class:"td2seg", role:"group", "aria-label":"Status"}, STATUSES.map(s=>h("button",{class:"td2segb","aria-pressed":String(d.status===s.id), style:`--c:${s.c}`, disabled:ro, onclick:()=>{ d.status=s.id; haptic(); if (S.openTask && S.openTask!=="new") moveTask(S.openTask, s.id); render(); }}, h("i"), s.name))));
   // ---- compact symbol chips: who · when · priority
   const who=d.assignee;
   const dueTxt = d.due? new Date(d.due+"T12:00:00").toLocaleDateString([], {month:"short", day:"numeric"}) : "";
