@@ -3604,7 +3604,12 @@ function updateDots(){
 function autoGrow(t){ t.style.height="auto"; t.style.height=Math.min(160,t.scrollHeight+2)+"px"; }
 
 function renderLines(){
-  if (S.newFlow) return renderFlow();
+  if (S.newFlow) {
+    const f=renderFlow(); if (window.innerWidth>860) return f;
+    // on a phone the chat list stays underneath (dimmed) and New chat slides up over it, like WhatsApp
+    const nf=S.newFlow; let base; S.newFlow=null; try { base=renderLines(); } finally { S.newFlow=nf; }
+    f.classList.add("onlist"); base.classList.add("hasflow"); base.append(h("div",{class:"flowdim", "aria-hidden":"true"}), f); return base;
+  }
   const q=S.q.toLowerCase();
   const chans = S.channels.filter(c => !q || chanTitle(c).toLowerCase().includes(q) || (c.last&&c.last.text||"").toLowerCase().includes(q));
   const fab = S.canWrite? h("button",{class:"fab chatfab","aria-label":"New chat", onclick:()=>openNewChat()}, svg('<path d="M4 20l1.2-4A8 8 0 1 1 8 18.8z"/><path d="M12 9v6M9 12h6"/>')) : "";
@@ -4159,7 +4164,13 @@ function pickAssignee(d, t){
 
 // new conversation modal
 function openNewChat(){ S.newFlow={step:"pick", sel:[], name:"", icon:"", q:""}; S.inThread=false; S.view="chats"; render(); setTimeout(()=>{ const i=$("#nf-q"); if (i) i.focus(); },30); }
-function closeFlow(){ S.newFlow=null; render(); }
+function closeFlow(){
+  const f=document.querySelector("section.flow");
+  if (!f || window.innerWidth>860 || f.classList.contains("leave")) { S.newFlow=null; render(); return; }
+  f.classList.remove("enter"); f.classList.add("leave");              // slides back down, then it's gone
+  const dim=f.parentElement && f.parentElement.querySelector(":scope > .flowdim"); if (dim) dim.classList.add("leave");
+  setTimeout(()=>{ S.newFlow=null; render(); }, ms(260));
+}
 const GROUP_ICONS=["💬","🚀","📣","🛠️","🎯","📦","🎨","📈","☕","🏠","⚽","🎉"];
 // Start a chat with any phone number — laid out like the iPhone's own "New Contact" screen.
 function openChatByNumber(){
@@ -4201,7 +4212,7 @@ function openChatByNumber(){
   draw(); document.body.append(o);
   setTimeout(()=>{ const i=$("#nc-num"); if (i && !num) { const f=$("#nc-first"); if (f) f.focus(); } else if (i) i.focus(); }, 80);
 }
-function flowRedraw(){ const old=document.querySelector("section.flow"); if (!old) { render(); return; } const nw=renderFlow(); const l=old.querySelector(".list"), st=l? l.scrollTop : 0; old.className=nw.className.replace(" enter",""); swapKids(old, [...nw.childNodes]); }
+function flowRedraw(){ const old=document.querySelector("section.flow"); if (!old) { render(); return; } const nw=renderFlow(); const l=old.querySelector(".list"), st=l? l.scrollTop : 0; old.className=nw.className.replace(" enter","")+(old.classList.contains("onlist")?" onlist":""); swapKids(old, [...nw.childNodes]); }
 function renderFlow(){
   const F=S.newFlow; const others=S.team.filter(id=>id!==S.me).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
   const q=F.q.toLowerCase(); const match=others.filter(id=>!q || nameOf(id).toLowerCase().includes(q));
