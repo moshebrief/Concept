@@ -161,7 +161,6 @@ function avatar(id, cls=""){
   const el = h("span",{class:"av mgav "+cls, title:fullName(id)});
   const pu=(typeof PROF!=="undefined" && PROF[id] && PROF[id].photo!==undefined)? PROF[id].photo : p.avatarUrl;
   if (pu) el.append(h("img",{src:pu, alt:"", onerror:e=>e.target.remove()}));
-  else if (/\b(sm|td2av)\b/.test(cls)) { const t=initials(nm); if (t) { el.append(h("span",{class:"mgi"}, t)); if (t.length>1) el.classList.add("mg2"); } else el.append(svg(PERSON_SIL)); }   // tiny chips keep the letter so you can tell people apart
   else { el.classList.add("wa-av"); el.append(svg(PERSON_SIL)); }
   return el;
 }
@@ -948,7 +947,7 @@ function showOutgoing(call){
     const st = cur.status==="answered"? "Answered" : cur.status==="declined"? "Declined" : cur.status==="missed"? "No answer" : cur.status==="ended"? "Call ended" : "Ringing…";
     o.replaceChildren(
       h("div",{class:"cs-top"}, h("span",{class:"cs-kind"}, svg(call.kind==="video"? IC.video : IC.phone), call.kind==="video"? "Task Message video call":"Task Message voice call")),
-      h("div",{class:"cs-mid"}, h("div",{class:"cs-av"+(cur.status==="ringing"?" pulse":"")}, call.title? h("span",{class:"glyph", style:`background:${colorFor(call.channel)};width:120px;height:120px;font-size:46px`}, call.title[0].toUpperCase()) : avatar(peer,"xl")), h("b",{class:"cs-name"}, callTitle(call)), h("span",{class:"cs-st"}, st)),
+      h("div",{class:"cs-mid"}, h("div",{class:"cs-av"+(cur.status==="ringing"?" pulse":"")}, call.title? h("span",{class:"glyph mgav wa-av wa-grp", style:"width:120px;height:120px"}, svg(GROUP_SIL)) : avatar(peer,"xl")), h("b",{class:"cs-name"}, callTitle(call)), h("span",{class:"cs-st"}, st)),
       phone? h("div",{class:"cs-phone"}, "Or call their phone: ", h("a",{href:"tel:"+phone.replace(/[^\d+]/g,""), class:"selectable"}, phone)) : "",
       h("div",{class:"cs-acts"},
         h("div",{class:"cs-btn"}, h("button",{class:"round end", "aria-label":"End call", onclick:()=>{ if (cur.status==="ringing") store.update("calls/"+call.id,{status:"ended"}).catch(()=>{}); closeCallUI(); }}, svg(IC.phone)), h("span",{},"End")),
@@ -993,7 +992,7 @@ function renderCalls(){
   w.append(h("div",{class:"seg-label"},"Recent"));
   if (!mine.length) w.append(h("p",{class:"note"},"No recent calls"));
   else w.append(h("div",{class:"ulist"}, mine.map(c=>{
-    if (c.kind==="phone") return h("div",{class:"urow callrow"}, c.peer? avatar(c.peer,"lg") : h("span",{class:"glyph", style:"background:var(--muted)"}, svg(ICF.cell)),
+    if (c.kind==="phone") return h("div",{class:"urow callrow"}, c.peer? avatar(c.peer,"lg") : h("span",{class:"glyph mgav wa-av"}, svg(PERSON_SIL)),
       h("span",{class:"ctx"}, h("b",{}, c.peer? nameOf(c.peer).replace(/^Example:\s*/,"") : c.number), h("span",{class:"cdir"}, svg('<path d="M7 17L17 7M9 7h8v8"/>'), "Phone · ", c.peer? c.number+" · ":"", fmtShort(c.at))),
       h("a",{class:"iconbtn callback", href:"tel:"+digits(c.number), "aria-label":"Call again", title:"Call again", onclick:()=>logPhoneCall(c.number)}, svg(ICF.cell)));
     const out=c.from===S.me; const missed=!out && (c.status==="missed"||c.status==="ringing"&&now()-c.at>RING_MS);
@@ -2946,7 +2945,7 @@ async function answerInvite(v, accept){
 function inviteCards(){
   const inc=incomingInvites(); if (!inc.length) return "";
   return h("div",{class:"invcards"}, inc.map(v=>h("div",{class:"invcard"},
-    h("span",{class:"glyph", style:"background:var(--cobalt)"}, svg(ICF.all)),
+    h("span",{class:"glyph mgav wa-av wa-grp"}, svg(GROUP_SIL)),
     h("span",{class:"ivx"}, h("b",{}, v.teamName||"A team"), h("span",{}, (v.byName||"Someone")+" invited you to join")),
     h("button",{class:"ghost ivno", "aria-label":"Decline", title:"Decline", onclick:()=>answerInvite(v,false)}, svg(IC.x)),
     h("button",{class:"primary ivyes", onclick:()=>answerInvite(v,true)}, "Join"))));
@@ -3960,15 +3959,15 @@ function renderBoard(){
 
   const chanF = S.filter.startsWith("chan:")? S.channels.find(c=>c.id===S.filter.slice(5)) : null;
   const restricted = !!tm && tm.visibility==="assigned" && tm.owner!==S.me;
-  const chip=(id, content, label)=>h("button",{class:"chip ichip","aria-pressed":String(S.filter===id), title:label, "aria-label":label, onclick:()=>{S.filter=id; render();}}, content);
+  const chip=(id, content, label, text)=>h("button",{class:"chip ichip"+(text?" pchip":""),"aria-pressed":String(S.filter===id), title:label, "aria-label":label, onclick:()=>{S.filter=id; render();}}, content, text? h("span",{class:"pcname"}, text) : "");
   const vbtn=(v,icon,l)=>h("button",{"aria-pressed":String((S.taskView==="list"?"list":"stage")===v), title:l, "aria-label":l, onclick:()=>{ S.taskView=v; ls.set("taskView",v); render(); }}, svg(icon));
   wrap.append(h("header",{class:"bhead"},
     h("div",{class:"toprow"}, h("h1",{class:"h1"},"Tasks"), h("span",{class:"grow"}),
       h("div",{class:"vtoggle", role:"group", "aria-label":"Task view"}, vbtn("stage",ICF.stage,"Stage view"), vbtn("list",ICF.listv,"List view")), profBtn()),
     h("div",{class:"chips"},
-      chip("all", svg(ICF.all), "All tasks"), chip("me", avatar(S.me,"sm"), "Assigned to me"),
+      chip("all", svg(ICF.all), "All tasks"), chip("me", avatar(S.me,"sm"), "Assigned to me", "Me"),
       restricted? "" : chip("none", svg(ICF.none), "Unassigned"),
-      restricted? "" : [...new Set(visibleTasks().map(t=>t.assignee).filter(id=>id && id!==S.me))].map(id=>chip(id, avatar(id,"sm"), nameOf(id).replace(/^Example:\s*/,""))),
+      restricted? "" : [...new Set(visibleTasks().map(t=>t.assignee).filter(id=>id && id!==S.me))].map(id=>chip(id, avatar(id,"sm"), nameOf(id).replace(/^Example:\s*/,""), nameOf(id).replace(/^Example:\s*/,"").split(" ")[0])),
       chanF? chip(S.filter, svg(IC.chat), "From "+chanTitle(chanF)) : "")
   ));
   const tasks=filteredTasks();

@@ -2906,3 +2906,8 @@ html body .lqpage .lqwrap{width:min(880px,92vw)}
   .lines.hasflow > section.flow.onlist:not(.enter):not(.leave) ~ .flowdim, .lines.hasflow > .flowdim:not(.leave){}
 }
 @keyframes fdIn{from{opacity:0}} @keyframes fdOut{to{opacity:0}}
+
+/* Tasks people filter: WhatsApp picture + first name */
+.chips .ichip.pchip{width:auto!important;padding:0 12px 0 3px!important;gap:6px;display:inline-flex;align-items:center;border-radius:999px}
+.chips .ichip.pchip .pcname{font:500 14px var(--f-body);white-space:nowrap}
+.chips .ichip.pchip .av{width:26px!important;height:26px!important;flex:none}
