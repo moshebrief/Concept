@@ -2916,7 +2916,7 @@ html body .lqpage .lqwrap{width:min(880px,92vw)}
    in the same frosted glass and the same height, like Apple's own apps ===== */
 @media (max-width:860px){
   :root{--dock-h:56px}
-  html body .app .rail{left:max(12px,env(safe-area-inset-left,0px))!important;right:auto!important;transform:none!important;
+  html body .app:has(.vfab:not(.fabstack), .chatfab) .rail{left:max(12px,env(safe-area-inset-left,0px))!important;right:auto!important;transform:none!important;
     width:min(400px, calc(100% - 24px - var(--dock-h) - 10px))!important}
   html body .app .fab.vfab:not(.fabstack):not(.mini), html body .app .lines .fab.chatfab{
     position:fixed!important;left:auto!important;right:max(12px,env(safe-area-inset-right,0px))!important;bottom:var(--dock-b)!important;
@@ -2928,4 +2928,8 @@ html body .lqpage .lqwrap{width:min(880px,92vw)}
   html body .app .fab.vfab:not(.fabstack):not(.mini)::after, html body .app .lines .fab.chatfab::after{display:none!important}
   html body .app .fab.vfab:not(.fabstack):not(.mini) svg.i, html body .app .lines .fab.chatfab svg.i{width:25px!important;height:25px!important;stroke:var(--cobalt)!important;stroke-width:2.1!important;filter:none!important}
   html body .app .fab.vfab:not(.fabstack):not(.mini):active, html body .app .lines .fab.chatfab:active{transform:scale(.92)}
+}
+/* Settings (no "new" button): the bar spans the whole width */
+@media (max-width:860px){
+  html body .app:not(:has(.vfab:not(.fabstack), .chatfab)) .rail{left:max(12px,env(safe-area-inset-left,0px))!important;right:max(12px,env(safe-area-inset-right,0px))!important;transform:none!important;width:auto!important}
 }
