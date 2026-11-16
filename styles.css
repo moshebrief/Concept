@@ -2891,18 +2891,18 @@ html body .lqpage .lqwrap{width:min(880px,92vw)}
 .ldnote{display:block!important;text-align:center}
 .ldnote svg.i{display:inline-block;vertical-align:-1px;margin-right:4px}
 
-/* New chat on a phone: slides up from the bottom like WhatsApp's, and back down when closed (same calm speed) */
+/* New chat on a phone: slides in from the right like opening a chat, and back out to the right when closed */
 @media (max-width:860px){
-  html body section.flow.enter{animation:flowUp .34s cubic-bezier(.32,.72,0,1) both!important}
-  html body section.flow.leave{animation:flowDown .26s cubic-bezier(.4,0,.7,1) both!important;pointer-events:none}
+  html body section.flow.enter{animation:flowUp .38s cubic-bezier(.32,.72,0,1) both!important}
+  html body section.flow.leave{animation:flowDown .34s cubic-bezier(.32,.72,0,1) both!important;pointer-events:none}
 }
-@keyframes flowUp{from{transform:translate3d(0,100%,0)}to{transform:none}}
-@keyframes flowDown{from{transform:none}to{transform:translate3d(0,100%,0)}}
+@keyframes flowUp{from{transform:translate3d(100%,0,0)}to{transform:none}}
+@keyframes flowDown{from{transform:none}to{transform:translate3d(100%,0,0)}}
 @media (max-width:860px){
   .lines.hasflow{position:relative;overflow:hidden}
-  .lines.hasflow > section.flow.onlist{position:absolute;inset:0;z-index:40;background:var(--surface);box-shadow:0 -8px 30px rgba(0,0,0,.12)}
-  .lines.hasflow > .flowdim{position:absolute;inset:0;z-index:39;background:rgba(0,0,0,.28);animation:fdIn .34s ease both;pointer-events:none}
-  .lines.hasflow > .flowdim.leave{animation:fdOut .26s ease both}
+  .lines.hasflow > section.flow.onlist{position:absolute;inset:0;z-index:40;background:var(--surface);box-shadow:-10px 0 28px rgba(0,0,0,.14)}
+  .lines.hasflow > .flowdim{position:absolute;inset:0;z-index:39;background:rgba(0,0,0,.14);animation:fdIn .38s ease both;pointer-events:none}
+  .lines.hasflow > .flowdim.leave{animation:fdOut .34s ease both}
   .lines.hasflow > section.flow.onlist:not(.enter):not(.leave) ~ .flowdim, .lines.hasflow > .flowdim:not(.leave){}
 }
 @keyframes fdIn{from{opacity:0}} @keyframes fdOut{to{opacity:0}}

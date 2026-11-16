@@ -4169,7 +4169,7 @@ function closeFlow(){
   if (!f || window.innerWidth>860 || f.classList.contains("leave")) { S.newFlow=null; render(); return; }
   f.classList.remove("enter"); f.classList.add("leave");              // slides back down, then it's gone
   const dim=f.parentElement && f.parentElement.querySelector(":scope > .flowdim"); if (dim) dim.classList.add("leave");
-  setTimeout(()=>{ S.newFlow=null; render(); }, ms(260));
+  setTimeout(()=>{ S.newFlow=null; render(); }, ms(340));
 }
 const GROUP_ICONS=["💬","🚀","📣","🛠️","🎯","📦","🎨","📈","☕","🏠","⚽","🎉"];
 // Start a chat with any phone number — laid out like the iPhone's own "New Contact" screen.
