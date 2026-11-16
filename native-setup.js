@@ -10,6 +10,10 @@ const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"))
 const APP_ID = cfg.appId;
 const VERSION = pkg.version;                       // shown in the stores, e.g. 1.0.0
 const BUILD = String(parseInt(process.env.BUILD_NUMBER || process.env.PROJECT_BUILD_NUMBER || "1", 10) + 0);
+// iPhone build number: Codemagic's BUILD_NUMBER counts each workflow separately, so the App Store and the
+// TestFlight workflows would reuse numbers Apple has already seen (and Apple rejects the upload).
+// PROJECT_BUILD_NUMBER counts every build of the app, so it only ever goes up.
+const IOS_BUILD = String(Math.max(parseInt(process.env.PROJECT_BUILD_NUMBER || "0", 10), parseInt(process.env.BUILD_NUMBER || "1", 10)) + 0);
 
 const log = (...a) => console.log("[native-setup]", ...a);
 const read = p => fs.readFileSync(p, "utf8");
@@ -146,7 +150,7 @@ function ios() {
   let pbx = read(pbxP);
 
   // Version, iPhone only, entitlements
-  pbx = pbx.replace(/CURRENT_PROJECT_VERSION = [^;]+;/g, `CURRENT_PROJECT_VERSION = ${BUILD};`)
+  pbx = pbx.replace(/CURRENT_PROJECT_VERSION = [^;]+;/g, `CURRENT_PROJECT_VERSION = ${IOS_BUILD};`)
            .replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${VERSION};`)
            .replace(/TARGETED_DEVICE_FAMILY = "[^"]*";/g, `TARGETED_DEVICE_FAMILY = 1;`)
            .replace(/TARGETED_DEVICE_FAMILY = [0-9,]+;/g, `TARGETED_DEVICE_FAMILY = 1;`);
@@ -296,7 +300,7 @@ function ios() {
       write(sdP, sd);
     }
   }
-  log(`iOS ready — ${APP_ID} version ${VERSION} (${BUILD})`);
+  log(`iOS ready — ${APP_ID} version ${VERSION} (build ${IOS_BUILD})`);
 }
 
 const cmd = process.argv[2];
