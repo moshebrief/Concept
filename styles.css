@@ -2747,3 +2747,11 @@ html body .lineitem .badge.num{font:600 12.5px/20px var(--f-body)!important;min-
 /* the mic under your finger while holding: soft blue circle with a white mic, as in WhatsApp */
 html body .main.chatmain .crow .micbtn.pressed{background:color-mix(in srgb,var(--cobalt) 62%,#fff)!important;border-color:transparent!important;color:#fff!important}
 html body .main.chatmain .crow .micbtn.pressed svg.i{stroke:#fff!important;color:#fff!important}
+
+/* ===== Group chats: each person's profile photo next to their messages, like WhatsApp ===== */
+.stream .msg.ingrp{padding-left:36px}
+.stream .msg.ingrp > .mav{position:absolute;left:0;top:0;width:30px;height:30px;padding:0;border:0;background:none;border-radius:50%;z-index:1;-webkit-tap-highlight-color:transparent}
+.stream .msg.ingrp > .mav .av{width:30px!important;height:30px!important;font-size:12px}
+.stream .msg.ingrp > .who{margin-left:12px}
+.stream .msg.ingrp.selmode{padding-left:72px}
+.stream .msg.ingrp.selmode > .mav{left:36px}

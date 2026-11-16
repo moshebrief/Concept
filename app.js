@@ -187,7 +187,7 @@ function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(
 function subscribeAll(){
   loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E();
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
-  store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
+  store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); profileSignal(rows); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
   store.sub("invites", rows => { S.invites=rows; scheduleRender(); });
   store.sub("contacts", async rows => { S.allContacts=Object.fromEntries(rows.map(r=>[r.id, r.ids||[]])); S.contacts=S.allContacts[S.me]||[]; await resolvePeople(Object.keys(S.allContacts)); scheduleRender(); });
@@ -2032,7 +2032,15 @@ async function saveProfileField(f, v, vis){
   applyProfiles(); render(true);
   if (S.mode!=="live") return;
   await guarded(store.set(`profile/${S.me}/${f}`, {v, vis:p.vis[f]}));
+  store.update("team/"+S.me, {pv:now()}).catch(()=>{});   // a tiny signal so other phones fetch the new photo right away
 }
+// Re-read everyone's photo and About: when someone changes theirs, and when the app comes back to the front.
+const PV={}; let PV_T=0;
+function profileSignal(rows){
+  let changed=false; for (const r of rows) { const v=r.pv||0; if (PV[r.id]!==undefined && PV[r.id]!==v) changed=true; PV[r.id]=v; }
+  if (changed) loadProfileData();
+}
+document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && Date.now()-PV_T>15000) { PV_T=Date.now(); loadProfileData(); } });
 // Older versions kept "About" inside the always-visible profile; move it into the private record.
 async function migrateAbout(mine){
   if (!mine || !mine.about) return;
@@ -3627,6 +3635,7 @@ function renderMsg(m, cont, chan){
   const ch=chan||S.channels.find(c=>c.id===S.active)||{}; const sel=S.selecting && S.sel.includes(m.id); const rich=m.kind==="media"||m.kind==="contact"||m.kind==="location"; const pl=rich? plainP(m) : null;
   const el = h("div",{style:mine?null:`--tint:${(S.people[m.by]&&S.people[m.by].color)||colorFor(m.by)}`, class:`msg${mine?" mine":""}${cont?" cont":""}${task?" knotted":""}${m.pending?" pending":""}${rich?" rich k-"+m.kind:""}${S.justTied===m.id?" justtied":""}${S.selecting?" selmode":""}${sel?" selected":""}`, id:"msg-"+m.id, onclick:e=>{ if (S.selecting && !m.deleted){ e.stopPropagation(); toggleSel(m.id); } }});
   if (S.selecting) el.append(h("span",{class:"selck"}, sel? svg(ICF.check):""));
+  if (!mine && ch.kind!=="dm") { el.classList.add("ingrp"); if (!cont) el.append(h("button",{class:"mav", tabindex:"-1", "aria-label":"Message "+nameOf(m.by).replace(/^Example:\s*/,""), onclick:e=>{ e.stopPropagation(); if (!S.selecting && m.by!==S.me) ensureDM(m.by).then(cid=>{ if (cid) selectChannel(cid); }); }}, avatar(m.by, "mavi"))); }
   if (!cont && !mine && ch.kind!=="dm") el.append(h("div",{class:"who"}, nameOf(m.by).replace(/^Example:\s*/,"")));
   const strip = h("div",{class:"strip", tabindex:"0", "aria-label":"Message. Hold for options, swipe right to reply, swipe left to make a task", onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); holdMenu(m, e.currentTarget); } }});
   if (m.fwd) strip.append(h("div",{class:"fwdlabel"}, svg(m.fwd>=5? ICF.fwd2 : ICF.fwd), m.fwd>=5? "Forwarded many times" : "Forwarded"));
@@ -4391,7 +4400,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, openMediaPreview, setKb, revealFocused, KB, X:{openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
