@@ -165,7 +165,11 @@ function avatar(id, cls=""){
   else { el.classList.add("wa-av"); el.append(svg(PERSON_SIL)); }
   return el;
 }
-function chanTitle(c){ if (!c) return ""; if (c.kind==="task"){ const t=S.tasks.find(x=>x.id===c.taskId); return t? `CN-${t.num} · ${t.title}` : (c.name||"Task conversation"); } if (c.kind==="dm"){ const o=(c.members||[]).find(m=>m!==S.me)||S.me; return fullName(o).replace(/^Example:\s*/,""); } return c.name||"Untitled"; }
+// "Message yourself": a chat with just you, like WhatsApp — for notes, links and reminders to yourself.
+const myOwnName = () => (((S.people[S.me]||{}).name)||"You").replace(/^Example:\s*/,"");
+const isSelfChat = c => !!c && c.kind==="dm" && (c.members||[]).filter(Boolean).every(m=>m===S.me);
+function openSelfChat(){ S.newFlow=null; createChannel("", [S.me], "dm"); }
+function chanTitle(c){ if (!c) return ""; if (isSelfChat(c)) return myOwnName()==="You"? "You" : myOwnName()+" (You)"; if (c.kind==="task"){ const t=S.tasks.find(x=>x.id===c.taskId); return t? `CN-${t.num} · ${t.title}` : (c.name||"Task conversation"); } if (c.kind==="dm"){ const o=(c.members||[]).find(m=>m!==S.me)||S.me; return fullName(o).replace(/^Example:\s*/,""); } return c.name||"Untitled"; }
 function chanGlyph(c){
   if (c.kind==="dm"){ const o=(c.members||[]).find(m=>m!==S.me)||S.me; return avatar(o,"lg"); }
   if (c.kind==="task"){ const t=S.tasks.find(x=>x.id===c.taskId); const g=h("span",{class:"glyph tglyph", style:`--st:${t? (STATUSES.find(s=>s.id===stOf(t))||STATUSES[0]).c : "var(--muted)"}`}, svg(IC.knot));
@@ -2294,7 +2298,7 @@ const TICK1='<path d="M5 12.5l4.2 4.2L19 7"/>', TICK2='<path d="M2 12.5l4.2 4.2L
 function ticks(m, c){
   if (m.by!==S.me) return "";
   if (m.pending) return h("span",{class:"tk pend", title:"Sending"}, svg(CLOCK));
-  const others=((c&&c.members)||[]).filter(u=>u!==S.me); if (!others.length) return h("span",{class:"tk", title:"Sent"}, svg(TICK1));
+  const others=((c&&c.members)||[]).filter(u=>u!==S.me); if (!others.length) return isSelfChat(c)? h("span",{class:"tk read", title:"Saved"}, svg(TICK2)) : h("span",{class:"tk", title:"Sent"}, svg(TICK1));
   const read = RR() && others.every(u=>(c["r_"+u]||0)>=m.at);
   const deliv = others.every(u=>Math.max(c["d_"+u]||0, c["r_"+u]||0)>=m.at);
   return h("span",{class:"tk"+(read?" read":""), title: read? "Read" : deliv? "Delivered" : "Sent"}, svg(read||deliv? TICK2 : TICK1));
@@ -3702,6 +3706,7 @@ function renderThread(){
 
 function theadSub(c){
   if (c.kind==="task") { const t=S.tasks.find(x=>x.id===c.taskId); const par=S.channels.find(z=>z.id===c.parent); return t? "CN-"+t.num+" · "+stName(stOf(t))+(par? " · "+chanTitle(par):"") : ""; }
+  if (isSelfChat(c)) return "Message yourself";
   if (c.kind==="dm") return presenceLine(c) || (S.teamDocs[(c.members||[]).find(x=>x!==S.me)]||{}).about||"";
   return (c.members||[]).map(id=>nameOf(id).replace(/^Example:\s*/,"").split(" ")[0]).join(", ");
 }
@@ -4238,8 +4243,11 @@ function renderFlow(){
     const saved=match.filter(id=>S.contacts.includes(id)).sort((a,b)=>nameOf(a).localeCompare(nameOf(b))), more=match.filter(id=>!S.contacts.includes(id));
     const go=id=>()=>{ S.newFlow=null; createChannel("", [S.me,id], "dm"); };
     const invites=(S.addr||[]).filter(c=>!c.on && (!q || c.n.toLowerCase().includes(q) || c.p.some(p=>p.includes(q))));
-    if (!match.length && !invites.length) list.append(empty());
-    if (saved.length) list.append(h("div",{class:"seg-label"},"Contacts on Task Message"), ...saved.map(id=>person(id,{onclick:go(id)})));
+    const myName=myOwnName(), meRow=!q || "you message yourself".includes(q) || myName.toLowerCase().includes(q);
+    const me=meRow? h("div",{class:"contact meself", role:"button", tabindex:"0", onclick:openSelfChat, onkeydown:e=>{ if (e.key==="Enter") openSelfChat(); }},
+      h("span",{class:"cav"}, avatar(S.me,"lg")), h("span",{class:"ctx"}, h("b",{}, myName==="You"? "You" : myName+" (You)"), h("span",{}, "Message yourself"))) : null;
+    if (saved.length || me) list.append(h("div",{class:"seg-label"},"Contacts on Task Message"), ...(me? [me] : []), ...saved.map(id=>person(id,{onclick:go(id)})));
+    if (!match.length && !invites.length && !me) list.append(empty());
     if (more.length) list.append(h("div",{class:"seg-label"},"Others on Task Message"), ...more.map(id=>person(id,{onclick:go(id), add:true})));
     if (invites.length) list.append(h("div",{class:"seg-label"},"Invite to Task Message"), lazyRows(invites, inviteRow));
     if (NATIVE && !q && S.addr && S.addr.length) list.append(h("p",{class:"note contactsnote"}, IOS? "Missing someone? On your iPhone open Settings, tap Apps, tap Task Message, tap Contacts and choose Full Access. Then tap Update phone contacts." : "Missing someone? Tap Update phone contacts."));
@@ -4653,7 +4661,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
