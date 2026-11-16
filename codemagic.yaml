@@ -49,7 +49,7 @@ workflows:
           failure: true
 
   # ------------------------------------------------------------------ iOS
-  ios-release:
+  ios-release: &ios
     name: iPhone (App Store)
     instance_type: mac_mini_m2
     max_build_duration: 90
@@ -112,3 +112,20 @@ workflows:
         submit_to_testflight: false
         submit_to_app_store: true
         release_type: AFTER_APPROVAL
+
+  # Same iPhone build, but it goes only to TestFlight (no Apple review for you and your team's own
+  # testers): use it to try new changes on your phone within about half an hour.
+  ios-testflight:
+    <<: *ios
+    name: iPhone (TestFlight, for testing)
+    publishing:
+      email:
+        recipients:
+          - moshebriefme@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
