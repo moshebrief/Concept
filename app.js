@@ -646,7 +646,7 @@ async function sendVoice(blob, dur, peaks, target, vextra={}, caption=""){
     if (S.replyTo && !target) { msg.replyTo=S.replyTo; S.replyTo=null; }
     msg.at=S.pend.find(p=>p.id===mid)?.at||msg.at;
     await guarded(store.set(`channels/${cid}/messages/${mid}`, msg));
-    if (S.mode==="demo") dropPending(mid);
+    if (S.mode==="demo") dropPending(mid); else { const pm=S.pend.find(p=>p.id===mid); if (pm) { pm.pending=false; scheduleRender(); } }
     guarded(store.update(`channels/${cid}`, {last: venv? {enc:venv, text:"", kind:"voice", by:S.me, at:msg.at} : {text:caption, kind:"voice", by:S.me, at:msg.at}})).catch(()=>{});
     if (S.asTask && !target) { S.asTask=false; quickTask([{id:mid, ...msg}]); }
     scrollDown=true; scheduleRender();
@@ -1972,15 +1972,30 @@ function makeDocStore(sb){
     async del(path){ const {error}=await sb.from("docs").delete().eq("path", path); if (error) throw sbErr(error); },
     async get(path){ const {data, error}=await sb.from("docs").select("data").eq("path", path).maybeSingle(); if (error) throw sbErr(error); return data? data.data : null; },
     sub(col, cb){
-      const map=new Map(); let alive=true, ready=false;
+      // Live list of one collection. Phones drop the live connection when the app goes to the background,
+      // and anything that changed in that gap would be missed, so: reconnect when the link breaks, and
+      // re-read the whole list whenever it (re)connects or the app comes back to the screen.
+      const map=new Map(); let alive=true, ready=false, ch=null, retry=null, loading=null, again=false;
       const emit=()=>{ if (alive && ready) cb([...map.entries()].map(([p,d])=>({id:p.split("/").pop(), ...d}))); };
-      const ch=sb.channel("c:"+col+":"+Math.random().toString(36).slice(2))
-        .on("postgres_changes", {event:"INSERT", schema:"public", table:"docs", filter:"col=eq."+col}, pl=>{ map.set(pl.new.path, pl.new.data); emit(); })
-        .on("postgres_changes", {event:"UPDATE", schema:"public", table:"docs", filter:"col=eq."+col}, pl=>{ map.set(pl.new.path, pl.new.data); emit(); })
-        .on("postgres_changes", {event:"DELETE", schema:"public", table:"docs"}, pl=>{ const p=pl.old && pl.old.path; if (p && map.delete(p)) emit(); })
-        .subscribe();
-      (async()=>{ let from=0; for (;;) { const {data, error}=await sb.from("docs").select("path,data").eq("col", col).range(from, from+999); if (error || !data) break; data.forEach(r=>map.set(r.path, r.data)); if (data.length<1000) break; from+=1000; } ready=true; emit(); })();
-      return ()=>{ alive=false; sb.removeChannel(ch); };
+      const load=async()=>{ if (loading) { again=true; return loading; }
+        loading=(async()=>{ do { again=false; const fresh=new Map(); let from=0, ok=true;
+            for (;;) { const {data, error}=await sb.from("docs").select("path,data").eq("col", col).range(from, from+999); if (error || !data) { ok=false; break; } data.forEach(r=>fresh.set(r.path, r.data)); if (data.length<1000) break; from+=1000; }
+            if (ok && alive) { map.clear(); fresh.forEach((d,p)=>map.set(p,d)); ready=true; emit(); } } while (again && alive); })().finally(()=>{ loading=null; });
+        return loading; };
+      let first=true;
+      const connect=()=>{ if (!alive) return; if (ch) { try { sb.removeChannel(ch); } catch {} }
+        ch=sb.channel("c:"+col+":"+Math.random().toString(36).slice(2))
+          .on("postgres_changes", {event:"INSERT", schema:"public", table:"docs", filter:"col=eq."+col}, pl=>{ map.set(pl.new.path, pl.new.data); emit(); })
+          .on("postgres_changes", {event:"UPDATE", schema:"public", table:"docs", filter:"col=eq."+col}, pl=>{ map.set(pl.new.path, pl.new.data); emit(); })
+          .on("postgres_changes", {event:"DELETE", schema:"public", table:"docs"}, pl=>{ const p=pl.old && pl.old.path; if (p && map.delete(p)) emit(); })
+          .subscribe(st=>{ if (!alive) return;
+            if (st==="SUBSCRIBED") { if (!first) load(); first=false; }
+            else if (st==="CHANNEL_ERROR" || st==="TIMED_OUT" || st==="CLOSED") { clearTimeout(retry); retry=setTimeout(()=>{ connect(); load(); }, 1500); } }); };
+      connect(); load();
+      let lastWake=0;
+      const wake=()=>{ if (!alive || document.visibilityState==="hidden" || Date.now()-lastWake<3000) return; lastWake=Date.now(); load(); if (ch && ch.state && ch.state!=="joined" && ch.state!=="joining") connect(); };
+      document.addEventListener("visibilitychange", wake); addEventListener("online", wake); addEventListener("focus", wake);
+      return ()=>{ alive=false; clearTimeout(retry); document.removeEventListener("visibilitychange", wake); removeEventListener("online", wake); removeEventListener("focus", wake); try { sb.removeChannel(ch); } catch {} };
     }
   };
 }
@@ -2343,6 +2358,7 @@ async function sendRich(cid, kind, payload, caption="", extra={}, id){
   if (await canSeal(members)) { const a=await seal(caption||"", members); msg.enc=a.env; msg.text=""; const b=await seal(JSON.stringify(payload), members); msg.penc=b.env; }
   else { msg.text=caption||""; msg.payload=payload; }
   await guarded(store.set(`channels/${cid}/messages/${id}`, msg));
+  { const pm=S.pend.find(p=>p.id===id); if (pm && S.mode!=="demo") { pm.pending=false; scheduleRender(); } }
   const items=payload.items||[]; const sub = kind==="media"? (items[0]||{}).t : kind;
   const last={by:S.me, at:msg.at, kind, sub, n:items.length||1}; if (msg.enc) { last.enc=msg.enc; last.text=""; } else last.text=(caption||"").slice(0,120);
   guarded(store.update(`channels/${cid}`, {last})).catch(()=>{});
