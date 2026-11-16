@@ -298,7 +298,7 @@ function oldStartTaskFromMessage(m){
   S.openTask="new"; S.actFor=null; render();
   setTimeout(()=>{ const i=$("#t-title"); if (i){ i.focus(); i.select(); } }, 30);
 }
-function newBlankTask(status){ S.draftTask={subtasks:[], title:"", notes:"", status:(typeof status==="string" && STATUSES.some(x=>x.id===status))? status : STATUSES[0].id, assignee:S.filter!=="all"&&S.filter!=="me"?S.filter:(S.filter==="me"?S.me:""), due:"", priority:"normal", channel:""}; S.openTask="new"; render(); setTimeout(()=>{ const i=$("#t-title"); if(i) i.focus(); },30); }
+function newBlankTask(status){ S.draftTask={subtasks:[], title:"", notes:"", status:(typeof status==="string" && STATUSES.some(x=>x.id===status))? status : STATUSES[0].id, assignee:S.filter!=="all"&&S.filter!=="me"?S.filter:(S.filter==="me"?S.me:""), due:"", priority:"normal", list:(S.tlist && S.tlist!=="all" && S.tlist!=="none" && taskLists().some(l=>l.id===S.tlist))? S.tlist : "", channel:""}; S.openTask="new"; render(); setTimeout(()=>{ const i=$("#t-title"); if(i) i.focus(); },30); }
 async function saveTask(){
   const d=S.draftTask; if (!d.title.trim()) { toast("Give the task a title first."); return; }
   if (S.openTask==="new") {
@@ -315,7 +315,7 @@ async function saveTask(){
     const changes=[]; if (prev.status!==d.status) changes.push("moved to "+stName(d.status)); if (prev.assignee!==d.assignee) changes.push(d.assignee? "assigned "+nameOf(d.assignee): "unassigned");
     const log=[...(prev.log||[])]; if (changes.length) log.push({at:now(), by:S.me, what:changes.join(", ")}); else log.push({at:now(), by:S.me, what:"edited"});
     if (prev.thread && d.assignee && d.assignee!==prev.assignee) { const th=S.channels.find(c=>c.id===prev.thread); if (th && !(th.members||[]).includes(d.assignee)) store.update("channels/"+th.id, {members:[...(th.members||[]), d.assignee]}).catch(()=>{}); }
-    await guarded(store.update("tasks/"+S.openTask, {title:d.title.trim(), notes:d.notes, status:d.status, assignee:d.assignee, due:d.due, priority:d.priority, repeat:d.repeat||"", subtasks:d.subtasks||[], files:d.files||[], log:log.slice(-20)}));
+    await guarded(store.update("tasks/"+S.openTask, {title:d.title.trim(), notes:d.notes, status:d.status, assignee:d.assignee, due:d.due, priority:d.priority, repeat:d.repeat||"", list:d.list||"", subtasks:d.subtasks||[], files:d.files||[], log:log.slice(-20)}));
     toast("Saved");
     if (prev.status!=="done" && d.status==="done") afterDone({...prev, title:d.title.trim(), notes:d.notes, assignee:d.assignee, due:d.due, priority:d.priority, repeat:d.repeat||"", subtasks:d.subtasks||[]});
   }
@@ -1026,7 +1026,7 @@ const profBtn = () => S.me? h("button",{class:"profbtn", title:"Profile and sett
 function openSettings(){ S.view="settings"; S.openTask=null; S.newFlow=null; ls.set("view","settings"); render(); }
 const toprow = (title, ...extras) => h("div",{class:"toprow"}, h("h1",{class:"h1"},title), h("span",{class:"grow"}), ...extras, profBtn());
 async function loadPins(){
-  if (DB) { store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="prefs")||{}; S.pins=d.pins||[]; S.blocked=d.blocked||[]; setStages(d.stages); S.nt={tone:d.tone||"note", groupTone:d.groupTone||"chime", tones:d.tones||{}, mute:d.mute||{}, cleared:d.cleared||{}, unr:d.unr||[], arch:d.arch||[]}; scheduleRender(); }); }
+  if (DB) { store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="prefs")||{}; S.pins=d.pins||[]; S.blocked=d.blocked||[]; setStages(d.stages); S.nt={tone:d.tone||"note", groupTone:d.groupTone||"chime", tones:d.tones||{}, mute:d.mute||{}, cleared:d.cleared||{}, unr:d.unr||[], arch:d.arch||[], tl:d.tl||[]}; scheduleRender(); }); }
   else { S.pins = ls.get("pins", ["launch"]); S.blocked=ls.get("blocked", []); setStages(ls.get("stages", null)); }
 }
 async function togglePin(cid){
@@ -1272,7 +1272,7 @@ function setStages(arr){
   STATUSES.splice(0, STATUSES.length, ...a);
 }
 async function savePrefsDoc(){
-  const n=S.nt; const doc={pins:S.pins, blocked:S.blocked||[], stages:STATUSES.map(s=>({id:s.id,name:s.name,c:s.c})), tone:n.tone, groupTone:n.groupTone, tones:n.tones||{}, mute:n.mute||{}, cleared:n.cleared||{}, unr:n.unr||[], arch:n.arch||[]};
+  const n=S.nt; const doc={pins:S.pins, blocked:S.blocked||[], stages:STATUSES.map(s=>({id:s.id,name:s.name,c:s.c})), tone:n.tone, groupTone:n.groupTone, tones:n.tones||{}, mute:n.mute||{}, cleared:n.cleared||{}, unr:n.unr||[], arch:n.arch||[], tl:n.tl||[]};
   if (DB) { try { await store.set("data/users/"+S.me+"/prefs", doc); } catch { toast("Couldn't save. Check your connection."); } }
   else { ls.set("pins", S.pins); ls.set("stages", doc.stages); }
 }
@@ -3830,9 +3830,72 @@ function canSeeTask(t){
 const visibleTasks = () => S.tasks.filter(canSeeTask);
 const ICF = { bellx:'<path d="M6 16V11a6 6 0 0 1 9.4-4.9M18 10.5V16l1.5 2H9"/><path d="M10 20.5h4M4.5 4.5l15 15"/>', music:'<path d="M9 18V5.8l10-2.3V16"/><circle cx="6.6" cy="18" r="2.4"/><circle cx="16.6" cy="16" r="2.4"/>', speaker:'<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>', banner:'<rect x="3.5" y="4" width="17" height="7" rx="2.5"/><path d="M6.5 15h11M6.5 19h7"/>', dotchat:'<path d="M13 5H5.5A1.5 1.5 0 0 0 4 6.5v8A1.5 1.5 0 0 0 5.5 16H7v3.5l4.5-3.5h7a1.5 1.5 0 0 0 1.5-1.5V11"/><circle cx="18.5" cy="5.5" r="2.5" fill="currentColor"/>', block:'<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>', flag2:'<path d="M5.5 21V4.5M5.5 4.5h11l-2 4 2 4h-11"/>', camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>', doc:'<path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/>', pin2:'<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>', contact:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="10" r="2.8"/><path d="M6.8 18c1.1-2.3 3-3.4 5.2-3.4s4.1 1.1 5.2 3.4"/>', smile:'<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14c.9 1.4 2.1 2.1 3.5 2.1s2.6-.7 3.5-2.1"/><circle cx="9.2" cy="10" r="1" fill="currentColor"/><circle cx="14.8" cy="10" r="1" fill="currentColor"/>', kbd:'<rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13.5h10"/>', fwd2:'<path d="M11 5l6 6-6 6"/><path d="M16 5l6 6-6 6"/><path d="M17 11H9a6 6 0 0 0-6 6v2"/>', clip:'<path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.4 3.4 0 0 1 4.8 4.8l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/>', image:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20 16l-5-5-8 8"/>', fwd:'<path d="M14 5l6 6-6 6"/><path d="M20 11h-9a6 6 0 0 0-6 6v2"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', chev:'<path d="M7 10l5 5 5-5"/>', lock:'<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>', book:'<path d="M5 4.5h12.5a1.5 1.5 0 0 1 1.5 1.5v13.5H6.5A1.5 1.5 0 0 1 5 18z"/><circle cx="12" cy="10.5" r="2.4"/><path d="M8.5 16c.5-1.6 1.8-2.5 3.5-2.5s3 .9 3.5 2.5M19 8h1.5M19 12h1.5"/>', more:'<circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none"/>', selm:'<rect x="4" y="4" width="16" height="16" rx="5"/><path d="M8.5 12.2l2.4 2.4 4.8-5"/>', list:'<path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>', stage:'<rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/>', listv:'<path d="M8.5 6H20M8.5 12H20M8.5 18H20"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor"/>', info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>', moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', drop:'<path d="M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5z"/>', bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4"/>', vib:'<rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4 9v6M20 9v6"/>', grid:'<circle cx="6" cy="6" r="1.4"/><circle cx="12" cy="6" r="1.4"/><circle cx="18" cy="6" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/><circle cx="6" cy="18" r="1.4"/><circle cx="12" cy="18" r="1.4"/><circle cx="18" cy="18" r="1.4"/>', cell:'<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>', media:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M10 9.5v5l4.2-2.5z" fill="currentColor"/>', all:'<circle cx="8" cy="9" r="2.6"/><circle cx="16" cy="9" r="2.6"/><path d="M3 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4M11 18c.5-2.6 2.4-4 5-4s4.5 1.4 5 4"/>', none:'<circle cx="12" cy="9" r="3.2" stroke-dasharray="2.5 2"/><path d="M5.5 19c.7-3 3.2-4.6 6.5-4.6s5.8 1.6 6.5 4.6" stroke-dasharray="2.5 2"/>', gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>', flag:'<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>', cal:'<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>', check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>', personplus:'<circle cx="10" cy="8" r="3.4"/><path d="M3.5 20c.6-3.6 3.2-5.4 6.5-5.4 1.4 0 2.6.3 3.6.9M18 14v6M15 17h6"/>', goto:'<path d="M7 17L17 7M9 7h8v8"/>' };
 
+// ---------- Task lists (like Reminders / Todoist): Work, Home, Clients… ----------
+// Shared with your team when you're in one (so everyone sees the same lists), otherwise just yours.
+const LIST_COLORS=["#007AFF","#34C759","#FF9500","#FF3B30","#AF52DE","#FF2D55","#5AC8FA","#8E8E93"];
+const taskLists = () => { const tm=curTeam(); return ((tm? tm.lists : S.nt.tl)||[]).filter(l=>l && l.id); };
+const listById = id => taskLists().find(l=>l.id===id);
+function curList(){ const v=S.tlist||ls.get("tlist","all"); if (v==="all" || v==="none" || listById(v)) return v; return "all"; }
+function setCurList(v){ S.tlist=v; ls.set("tlist", v); render(); }
+async function saveTaskLists(lists){
+  const tm=curTeam();
+  if (tm) { tm.lists=lists; render(); await guarded(store.update("teams/"+tm.id, {lists})).catch(()=>toast("Couldn't save the list")); }
+  else { S.nt.tl=lists; saveNt(); render(); }
+}
+function listsBar(){
+  const lists=taskLists(), cur=curList(), all=visibleTasks().filter(t=>stOf(t)!=="done");
+  const count=id=>all.filter(t=>id==="all"? true : id==="none"? !(t.list && listById(t.list)) : t.list===id).length;
+  const pill=(id, name, color)=>{ const el=h("button",{class:"tlpill"+(cur===id?" on":""), style:color? `--lc:${color}` : "", "aria-pressed":String(cur===id), onclick:()=>setCurList(id)},
+      color? h("i",{class:"tldot"}) : id==="all"? svg('<path d="M4 6.500h16M4 12h16M4 17.500h16"/>') : svg('<circle cx="12" cy="12" r="8"/>'), h("span",{}, name), h("b",{}, String(count(id))));
+    const l=listById(id); if (l) longPress(el, (x,y,src)=>listMenu(l, src||el)); return el; };
+  return h("div",{class:"tlists", role:"group", "aria-label":"Lists"},
+    pill("all", "All"), ...lists.map(l=>pill(l.id, l.name, l.color)),
+    lists.length && all.some(t=>!(t.list && listById(t.list)))? pill("none", "No list") : "",
+    S.canWrite? h("button",{class:"tlpill tlnew", "aria-label":"New list", onclick:()=>editTaskList(null)}, svg(IC.plus), h("span",{}, lists.length? "" : "New list")) : "");
+}
+function editTaskList(l, after){
+  let name=l? l.name : "", color=l? l.color : LIST_COLORS[taskLists().length%LIST_COLORS.length];
+  sheet(l? "Edit list" : "New list", (draw, close)=>{
+    const go=async()=>{ const n=name.trim(); if (!n) return; const lists=taskLists().map(x=>({...x}));
+      let id; if (l) { const x=lists.find(x=>x.id===l.id); x.name=n.slice(0,40); x.color=color; id=l.id; } else { id="tl"+now().toString(36)+uidShort().slice(0,3); lists.push({id, name:n.slice(0,40), color, at:now()}); }
+      close(); haptic(); await saveTaskLists(lists); if (!l) { if (after) after(id); else setCurList(id); } };
+    return [h("div",{class:"tlpreview", style:`--lc:${color}`}, h("span",{}, svg('<path d="M8 7h11M8 12h11M8 17h11"/><circle cx="4.500" cy="7" r="1.300" fill="currentColor"/><circle cx="4.500" cy="12" r="1.300" fill="currentColor"/><circle cx="4.500" cy="17" r="1.300" fill="currentColor"/>'))),
+      h("input",{class:"st-fnamein", id:"tlname", placeholder:"List name, like Work or Home", maxlength:"40", value:name, autocomplete:"off", oninput:e=>{ name=e.target.value; const b=$("#tlsave"); if (b) b.disabled=!name.trim(); }, onkeydown:e=>{ if (e.key==="Enter") go(); }}),
+      h("div",{class:"st-fcolors", role:"radiogroup", "aria-label":"List color"}, LIST_COLORS.map(c=>h("button",{class:"st-fcolor", role:"radio", "aria-checked":String(c===color), "aria-label":"Color", style:`--c:${c}`, onclick:()=>{ color=c; draw(); setTimeout(()=>{ const i=$("#tlname"); if (i) { i.focus(); i.setSelectionRange(name.length,name.length); } },10); }}))),
+      curTeam()? h("p",{class:"note", style:"text-align:center;margin:0"}, "Everyone in "+(curTeam().name||"your team")+" sees this list.") : "",
+      h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary", id:"tlsave", disabled:!name.trim(), onclick:go}, l? "Save" : "Create"))];
+  });
+  setTimeout(()=>{ const i=$("#tlname"); if (i) i.focus(); }, 320);
+}
+function listMenu(l, src){
+  ctxMenu(src, [
+    {label:"Edit name and color", icon:IC.edit, fn:()=>editTaskList(l)},
+    {label:"Delete list", icon:IC.trash, danger:true, fn:()=>deleteTaskList(l)}], {align:"left", menuWidth:240});
+}
+function deleteTaskList(l){
+  const n=visibleTasks().filter(t=>t.list===l.id).length;
+  sheet("Delete \u201c"+l.name+"\u201d?", (draw, close)=>[
+    h("p",{class:"note", style:"margin:0 4px 6px"}, n? "Its "+n+" task"+(n===1?"":"s")+" stay, with no list." : "The list is empty."),
+    h("div",{class:"ulist sgroup delopts"}, h("button",{class:"srow pick dangerrow", onclick:async()=>{ close(); const before=taskLists();
+      await saveTaskLists(before.filter(x=>x.id!==l.id)); if (curList()===l.id) setCurList("all");
+      for (const t of visibleTasks().filter(t=>t.list===l.id)) store.update("tasks/"+t.id, {list:""}).catch(()=>{});
+      toast("List deleted"); }}, h("span",{class:"stx"}, h("b",{}, "Delete list")))),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"))]);
+}
+function listChip(d, ro){
+  const l=listById(d.list);
+  return h("button",{class:"td2chip tlchip"+(l?" set":""), style:l? `--lc:${l.color}` : "", disabled:ro, title:l? "List: "+l.name : "Add to a list", "aria-label":l? "List: "+l.name+". Tap to change" : "Add to a list",
+    onclick:()=>pickTaskList(d.list, id=>{ d.list=id; render(); })}, l? h("i",{class:"tldot"}) : svg('<path d="M8 7h11M8 12h11M8 17h11"/><circle cx="4.500" cy="7" r="1.200" fill="currentColor"/><circle cx="4.500" cy="12" r="1.200" fill="currentColor"/><circle cx="4.500" cy="17" r="1.200" fill="currentColor"/>'), l? h("span",{}, l.name) : "");
+}
+function pickTaskList(cur, done){
+  sheet("Move to list", (draw, close)=>[h("div",{class:"ulist sgroup st-fpick"},
+    h("button",{class:"srow pick", onclick:()=>{ close(); done(""); }}, h("span",{class:"tldot big", style:"--lc:var(--muted)"}), h("span",{class:"stx"}, h("b",{}, "No list")), !cur? svg(ICF.check) : ""),
+    ...taskLists().map(l=>h("button",{class:"srow pick", onclick:()=>{ close(); done(l.id); }}, h("span",{class:"tldot big", style:`--lc:${l.color}`}), h("span",{class:"stx"}, h("b",{}, l.name)), cur===l.id? svg(ICF.check) : "")),
+    S.canWrite? h("button",{class:"srow pick", onclick:()=>{ close(); editTaskList(null, id=>done(id)); }}, h("span",{class:"st-fpic", style:"color:var(--cobalt)"}, svg(IC.plus)), h("span",{class:"stx"}, h("b",{class:"blue"}, "New list"))) : "")]);
+}
 function filteredTasks(){
-  const f=S.filter;
-  return visibleTasks().filter(t => f==="all" || (f==="me" && t.assignee===S.me) || (f==="none" && !t.assignee) || (f.startsWith("chan:") && t.channel===f.slice(5)) || t.assignee===f);
+  const f=S.filter, L=curList();
+  return visibleTasks().filter(t => (L==="all" || (L==="none"? !(t.list && taskLists().some(l=>l.id===t.list)) : t.list===L))).filter(t => f==="all" || (f==="me" && t.assignee===S.me) || (f==="none" && !t.assignee) || (f.startsWith("chan:") && t.channel===f.slice(5)) || t.assignee===f);
 }
 function needTeam(){ if (curTeam()) return false; toast("Create your team first, then you can add tasks."); S.view="team"; ls.set("view","team"); render(); return true; }
 // ---------- Notes: a private place to keep important things (like Google Keep) ----------
@@ -3977,6 +4040,7 @@ function renderBoard(){
       restricted? "" : [...new Set(visibleTasks().map(t=>t.assignee).filter(id=>id && id!==S.me))].map(id=>chip(id, avatar(id,"sm"), nameOf(id).replace(/^Example:\s*/,""), nameOf(id).replace(/^Example:\s*/,"").split(" ")[0])),
       chanF? chip(S.filter, svg(IC.chat), "From "+chanTitle(chanF)) : "")
   ));
+  wrap.querySelector(".bhead .toprow").after(listsBar());
   const tasks=filteredTasks();
   if (S.taskView==="list") { wrap.append(renderTaskList(tasks)); if (S.canWrite) wrap.append(h("button",{class:"fab vfab", "aria-label":"New task", title:"New task", onclick:newBlankTask}, svg(IC.plus))); return wrap; }
   const board=h("div",{class:"board", id:"board"});
@@ -4009,6 +4073,7 @@ function renderBoard(){
         (t.notes||"").trim()? h("div",{class:"tnote"}, t.notes.trim().slice(0,160)) : "",
         h("div",{class:"bot"},
           h("span",{class:"tid"},"CN-"+t.num),
+          curList()==="all" && listById(t.list)? h("span",{class:"tltag", style:`--lc:${listById(t.list).color}`}, h("i",{class:"tldot"}), listById(t.list).name) : "",
           (t.subtasks||[]).length? h("span",{class:"subchip"}, svg(ICF.list), t.subtasks.filter(x=>x.done).length+"/"+t.subtasks.length) : "",
           t.priority==="high"? h("span",{class:"flag", title:"High priority"}, svg(ICF.flag)) : "",
           t.due? h("span",{class:"due"+(late?" late":""), title:late?"Overdue":"Due"}, svg(ICF.cal), fmtDue(t.due)) : "",
@@ -4089,7 +4154,7 @@ function openTeamSettings(){
 
 function openTask(id){
   const t=S.tasks.find(x=>x.id===id); if (!t || !canSeeTask(t)) return;
-  S.openTask=id; S.draftTask={files:(t.files||[]).slice(), subtasks:(t.subtasks||[]).map(x=>({...x})), title:t.title, notes:t.notes||"", status:t.status||"todo", assignee:t.assignee||"", due:t.due||"", priority:t.priority||"normal", repeat:t.repeat||"", channel:t.channel, fromMsg:t.fromMsg, fromText:t.fromText, fromBy:t.fromBy};
+  S.openTask=id; S.draftTask={files:(t.files||[]).slice(), subtasks:(t.subtasks||[]).map(x=>({...x})), title:t.title, notes:t.notes||"", status:t.status||"todo", assignee:t.assignee||"", due:t.due||"", priority:t.priority||"normal", repeat:t.repeat||"", list:t.list||"", channel:t.channel, fromMsg:t.fromMsg, fromText:t.fromText, fromBy:t.fromBy};
   S.actFor=null; S.confirmDel=false; render();
 }
 let LAST_DRAWER=null;
@@ -4148,7 +4213,8 @@ function renderDrawer(){
       svg(ICF.flag)),
     h("button",{class:"td2chip rep"+(d.repeat?" set":""), title:repeatName(d.repeat)+" (tap to change)", "aria-label":"Repeat: "+repeatName(d.repeat)+". Tap to change", disabled:ro, onclick:()=>{ const i=REPEATS.findIndex(r=>r[0]===(d.repeat||"")); d.repeat=REPEATS[(i+1)%REPEATS.length][0]; render(); }},
       svg(ICX.repeat)),
-    d.repeat? h("span",{class:"td2due td2rep"}, repeatName(d.repeat)) : ""));
+    d.repeat? h("span",{class:"td2due td2rep"}, repeatName(d.repeat)) : "",
+    listChip(d, ro)));
   // ---- subtasks + photos + voice memos
   body.append(h("div",{class:"td2card td2subs"}, renderTaskFiles(d, ro, renderSubtasks(d, t, isNew, ro))));
   // ---- notes
@@ -4960,7 +5026,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
