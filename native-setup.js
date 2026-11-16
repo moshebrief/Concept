@@ -8,7 +8,7 @@ const ROOT = __dirname;
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, "capacitor.config.json"), "utf8"));
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const APP_ID = cfg.appId;
-const VERSION = pkg.version;                       // shown in the stores, e.g. 1.0.0
+const VERSION = process.env.TESTFLIGHT_NEXT_VERSION ? pkg.version.replace(/(\d+)$/, n => String(+n + 1)) : pkg.version;                       // shown in the stores, e.g. 1.0.0
 const BUILD = String(parseInt(process.env.BUILD_NUMBER || process.env.PROJECT_BUILD_NUMBER || "1", 10) + 0);
 // iPhone build number: Codemagic's BUILD_NUMBER counts each workflow separately, so the App Store and the
 // TestFlight workflows would reuse numbers Apple has already seen (and Apple rejects the upload).
