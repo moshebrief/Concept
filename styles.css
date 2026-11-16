@@ -2911,3 +2911,21 @@ html body .lqpage .lqwrap{width:min(880px,92vw)}
 .chips .ichip.pchip{width:auto!important;padding:0 12px 0 3px!important;gap:6px;display:inline-flex;align-items:center;border-radius:999px}
 .chips .ichip.pchip .pcname{font:500 14px var(--f-body);white-space:nowrap}
 .chips .ichip.pchip .av{width:26px!important;height:26px!important;flex:none}
+
+/* ===== Phone: the "new" button (New chat / New task / New note) sits right next to the tab bar,
+   in the same frosted glass and the same height, like Apple's own apps ===== */
+@media (max-width:860px){
+  :root{--dock-h:56px}
+  html body .app .rail{left:max(12px,env(safe-area-inset-left,0px))!important;right:auto!important;transform:none!important;
+    width:min(400px, calc(100% - 24px - var(--dock-h) - 10px))!important}
+  html body .app .fab.vfab:not(.fabstack):not(.mini), html body .app .lines .fab.chatfab{
+    position:fixed!important;left:auto!important;right:max(12px,env(safe-area-inset-right,0px))!important;bottom:var(--dock-b)!important;
+    width:var(--dock-h)!important;height:var(--dock-h)!important;border-radius:50%!important;padding:0!important;
+    background:var(--g-fill)!important;-webkit-backdrop-filter:blur(24px) saturate(1.9)!important;backdrop-filter:blur(24px) saturate(1.9)!important;
+    border:1px solid var(--g-line)!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important;color:var(--cobalt)!important;z-index:36;
+    transition:transform .18s cubic-bezier(.2,.9,.25,1.3)}
+  html body .app .fab.vfab:not(.fabstack):not(.mini)::before, html body .app .lines .fab.chatfab::before,
+  html body .app .fab.vfab:not(.fabstack):not(.mini)::after, html body .app .lines .fab.chatfab::after{display:none!important}
+  html body .app .fab.vfab:not(.fabstack):not(.mini) svg.i, html body .app .lines .fab.chatfab svg.i{width:25px!important;height:25px!important;stroke:var(--cobalt)!important;stroke-width:2.1!important;filter:none!important}
+  html body .app .fab.vfab:not(.fabstack):not(.mini):active, html body .app .lines .fab.chatfab:active{transform:scale(.92)}
+}
