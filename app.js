@@ -397,6 +397,7 @@ const CHUNK = 160000; // base64 chars per stored part
 const VOICE_URLS = {}; const PLAYER = new Audio(); PLAYER.preload="auto"; let playing=null;
 const fmtDur = s => { s=Math.max(0,Math.round(s||0)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); };
 let REC=null;
+const recSecs = (r=REC) => !r? 0 : Math.max(0, ((r.paused? r.pausedAt : now())-r.t0-(r.pausedTotal||0))/1000);
 function pickMime(){ if (!window.MediaRecorder) return null; for (const t of ["audio/webm;codecs=opus","audio/mp4","audio/webm","audio/ogg;codecs=opus"]) { try { if (MediaRecorder.isTypeSupported(t)) return t; } catch {} } return ""; }
 async function startRec(cb, opts={}){
   if (typeof cb!=="function") cb=null;
@@ -405,7 +406,7 @@ async function startRec(cb, opts={}){
   REC = {pending:true, t0:now(), levels:[], chunks:[], cancel:false, cb, hold:!!opts.hold, cid:S.active};
   S.recFor = cb? "task" : "chat"; S.rec=true; if (navigator.vibrate) try{ navigator.vibrate(15); }catch{}
   if (REC.hold) holdUI(true); else render(true);
-  REC.timer = setInterval(()=>{ const el=$("#recTime"); if (el && REC) el.textContent=fmtDur((now()-REC.t0)/1000); }, 250);
+  REC.timer = setInterval(()=>{ const el=$("#recTime"); if (el && REC) el.textContent=fmtDur(recSecs()); }, 250);
   let stream=null;
   try { if (!navigator.mediaDevices || !window.MediaRecorder) throw 0; stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}); }
   catch { clearInterval(REC&&REC.timer); REC=null; S.rec=false; holdUI(false); render(true); openVoiceFallback(cb); return; }
@@ -421,7 +422,7 @@ async function startRec(cb, opts={}){
     const r=REC; REC=null; S.rec=false; holdUI(false); r.stream.getTracks().forEach(t=>t.stop()); try{ r.srcNode.disconnect(); if (r.ac!==AC) r.ac.close(); }catch{}
     clearInterval(r.timer); clearInterval(r.act); cancelAnimationFrame(r.raf); if (!r.cb) sendAct("stop", r.cid);
     if (r.cancel) { render(true); return; }
-    const dur=(now()-r.t0)/1000; if (dur<0.6) { render(true); toast("Hold on a little longer to record"); return; }
+    prevStop(); const dur=recSecs(r); if (dur<0.6) { render(true); toast("Hold on a little longer to record"); return; }
     const blob = new Blob(r.chunks, {type:(r.mr.mimeType||mime||"audio/webm").split(";")[0]});
     const live=peaksFromLevels(r.levels);
     const flat=Math.max(...live)-Math.min(...live)<.15;
@@ -433,13 +434,89 @@ async function startRec(cb, opts={}){
   mr.start(250); S.rec=true;
   if (!cb) { sendAct("recording"); REC.act=setInterval(()=>sendAct("recording", REC&&REC.cid), 2500); }
   if (REC.stopAfter) { setTimeout(()=>{ if (REC===early) { try { early.mr.stop(); } catch {} } }, 50); }
-  REC.timer = setInterval(()=>{ const el=$("#recTime"); const sec=(now()-REC.t0)/1000; if (el) el.textContent=fmtDur(sec); if (sec>=180) stopRec(false); }, 250);
+  REC.timer = setInterval(()=>{ const el=$("#recTime"); const sec=recSecs(); if (el && !REC.paused) el.textContent=fmtDur(sec); if (sec>=180) stopRec(false); }, 250);
   const buf=new Uint8Array(an.frequencyBinCount);
-  const loop=()=>{ if (!REC) return; an.getByteTimeDomainData(buf); let sq=0; for (const v of buf) { const x=(v-128)/128; sq+=x*x; } const lv=Math.sqrt(sq/buf.length); REC.levels.push(lv);
+  const loop=()=>{ if (!REC) return; an.getByteTimeDomainData(buf); let sq=0; for (const v of buf) { const x=(v-128)/128; sq+=x*x; } const lv=Math.sqrt(sq/buf.length); if (REC.paused) { REC.raf=requestAnimationFrame(loop); return; } REC.levels.push(lv); drawRecWave();
     if (!REC.bars || !REC.bars.length || !REC.bars[0].isConnected) REC.bars=document.querySelectorAll("#recBars i"); const bars=REC.bars; if (bars.length){ const tail=REC.levels.slice(-bars.length); bars.forEach((b,i)=>b.style.transform=`scaleY(${Math.max(.1,Math.min(1,Math.sqrt(tail[i]||0)*2.2))})`); }
     REC.raf=requestAnimationFrame(loop); };
   loop();
   if (!REC.stopAfter) { if (REC.hold) holdUI(true); else render(true); }
+}
+// ---- Locked recording, laid out like WhatsApp: timer + live sound wave on top; trash, pause/resume and send below.
+// Paused: the top row becomes a little player so you can listen before sending. ----
+const MICF='<rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>';
+const PREV={a:null, url:null, raf:0};
+function prevStop(){ try { if (PREV.a) PREV.a.pause(); } catch {} cancelAnimationFrame(PREV.raf); if (PREV.url) { try { URL.revokeObjectURL(PREV.url); } catch {} } PREV.a=null; PREV.url=null; }
+function recPanel(){
+  const paused=!!(REC && REC.paused), secs=recSecs();
+  const nd=e=>e.preventDefault();
+  const top = paused
+    ? h("div",{class:"vrtop"}, h("div",{class:"vrplayer"},
+        h("button",{class:"vrplay", id:"vrPlay", "aria-label":"Play recording", onmousedown:nd, onclick:prevToggle}, svg('<path d="M8 5.5v13l11-6.500z" fill="currentColor" stroke="none"/>')),
+        h("div",{class:"vrtrack", id:"vrTrack", onpointerdown:prevSeek}, h("i",{class:"vrline"}), h("i",{class:"vrdot", id:"vrDot"})),
+        h("span",{class:"vrdur mono", id:"vrDur"}, fmtDur(secs))))
+    : h("div",{class:"vrtop"}, h("span",{class:"rectime mono", id:"recTime"}, fmtDur(secs)), h("canvas",{class:"vrwave", id:"recWave", "aria-hidden":"true"}));
+  return h("div",{class:"vrec"+(paused?" paused":"")}, top,
+    h("div",{class:"vrbot"},
+      h("button",{class:"vrbtn vrtrash", "aria-label":"Delete recording", title:"Delete", onmousedown:nd, onclick:()=>{ prevStop(); stopRec(true); haptic(); }}, svg(IC.trash)),
+      paused
+        ? h("button",{class:"vrbtn vrmid", "aria-label":"Continue recording", title:"Continue recording", onmousedown:nd, onclick:recResume}, svg(MICF))
+        : h("button",{class:"vrbtn vrmid", "aria-label":"Pause recording", title:"Pause", onmousedown:nd, onclick:recPause}, svg('<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>')),
+      h("button",{class:"vrbtn vrsend", "aria-label":"Send voice note", title:"Send", onmousedown:nd, onclick:()=>{ prevStop(); stopRec(false); }}, svg(IC.send))));
+}
+function recPause(){
+  if (!REC || REC.pending || REC.paused) return;
+  try { REC.mr.pause(); } catch { return; }
+  REC.paused=true; REC.pausedAt=now(); haptic(); sendAct("stop", REC.cid); clearInterval(REC.act); REC.act=null;
+  try { REC.mr.requestData(); } catch {}
+  render(true);
+}
+function recResume(){
+  if (!REC || !REC.paused) return; prevStop();
+  try { REC.mr.resume(); } catch { return; }
+  REC.pausedTotal=(REC.pausedTotal||0)+(now()-REC.pausedAt); REC.paused=false; haptic();
+  if (!REC.cb) { sendAct("recording"); REC.act=setInterval(()=>sendAct("recording", REC&&REC.cid), 2500); }
+  render(true);
+}
+// The rolling sound wave: a dotted line, with a bar for each moment of sound coming in from the right.
+function drawRecWave(){
+  const cv=$("#recWave"); if (!cv || !REC) return;
+  const n=++REC.frame || (REC.frame=1); if (n%3!==0) { REC.acc=Math.max(REC.acc||0, REC.levels[REC.levels.length-1]||0); return; }
+  (REC.wave||(REC.wave=[])).push(Math.max(REC.acc||0, REC.levels[REC.levels.length-1]||0)); REC.acc=0; if (REC.wave.length>400) REC.wave.splice(0, 100);
+  const dpr=Math.min(3, devicePixelRatio||1), w=cv.clientWidth, hh=cv.clientHeight; if (!w) return;
+  if (cv.width!==Math.round(w*dpr)) { cv.width=Math.round(w*dpr); cv.height=Math.round(hh*dpr); }
+  const x=cv.getContext("2d"); x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,w,hh);
+  const ink=getComputedStyle(cv).color, step=4, mid=hh/2, bars=REC.wave, count=Math.min(bars.length, Math.floor(w/step));
+  x.fillStyle=ink; x.globalAlpha=.45;
+  for (let px=1; px<w-count*step; px+=step) { x.beginPath(); x.arc(px, mid, .9, 0, 6.3); x.fill(); }
+  x.globalAlpha=1;
+  for (let i=0;i<count;i++) { const lv=bars[bars.length-count+i], bh=Math.max(2, Math.min(hh, Math.sqrt(lv)*2.4*hh)), px=w-(count-i)*step+1; x.beginPath(); if (x.roundRect) x.roundRect(px, mid-bh/2, 2, bh, 1); else x.rect(px, mid-bh/2, 2, bh); x.fill(); }
+}
+// Listen to what you've recorded so far (while paused).
+async function prevToggle(){
+  if (!REC || !REC.paused) return;
+  if (PREV.a && !PREV.a.paused) { PREV.a.pause(); prevUI(); return; }
+  if (!PREV.a) {
+    if (!REC.chunks.length) await new Promise(r=>setTimeout(r, 250));
+    if (!REC || !REC.chunks.length) { toast("Nothing to play yet"); return; }
+    const blob=new Blob(REC.chunks, {type:(REC.mr.mimeType||"audio/webm").split(";")[0]});
+    PREV.url=URL.createObjectURL(blob); PREV.a=new Audio(PREV.url);
+    PREV.a.onended=()=>{ try { PREV.a.currentTime=0; } catch {} prevUI(); };
+    PREV.a.onerror=()=>{ prevStop(); prevUI(); toast("Can't play it back yet. You can still send it or keep recording."); };
+  }
+  try { await PREV.a.play(); } catch { return; }
+  const tick=()=>{ prevUI(); if (PREV.a && !PREV.a.paused) PREV.raf=requestAnimationFrame(tick); }; tick();
+}
+function prevUI(){
+  const total=recSecs()||1, a=PREV.a, t=a? Math.min(total, a.currentTime||0) : 0, on=!!(a && !a.paused);
+  const dot=$("#vrDot"), btn=$("#vrPlay"), d=$("#vrDur");
+  if (dot) dot.style.left=(t/total*100)+"%";
+  if (d) d.textContent=fmtDur(on || t>0? t : total);
+  if (btn && btn.dataset.on!==String(on)) { btn.dataset.on=String(on); btn.replaceChildren(svg(on? '<path d="M8 5.500v13M16 5.500v13" stroke-width="3"/>' : '<path d="M8 5.5v13l11-6.500z" fill="currentColor" stroke="none"/>')); btn.setAttribute("aria-label", on? "Pause" : "Play recording"); }
+}
+function prevSeek(e){
+  const tr=e.currentTarget, a=PREV.a; if (!a) return; const r=tr.getBoundingClientRect();
+  try { a.currentTime=Math.max(0, Math.min(1, (e.clientX-r.left)/r.width))*recSecs(); } catch {} prevUI();
 }
 // ---- WhatsApp-style voice button: hold to record, release to send, slide left to cancel, slide up to lock ----
 let HOLD=null;
@@ -447,8 +524,8 @@ function holdUI(on){
   const row=document.querySelector(".crow"); if (!row) return;
   row.classList.toggle("holding", !!on);
   const old=row.querySelector(".holdbar"); if (on && old) return; if (old) old.remove();
-  if (on) row.prepend(h("div",{class:"holdbar"}, h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, "0:00"),
-    h("span",{class:"slidecancel", id:"slideCancel"}, svg(IC.back), "Slide to cancel"),
+  if (on) row.prepend(h("div",{class:"holdbar"}, h("span",{class:"recmic"}, svg(MICF)), h("span",{class:"rectime mono", id:"recTime"}, "0:00"),
+    h("span",{class:"slidecancel", id:"slideCancel"}, "Slide to cancel", svg(IC.back)),
     h("span",{class:"lockhint", id:"lockHint"}, svg(ICF.lock), svg('<path d="M7 14l5-5 5 5"/>'))));
 }
 function micDown(e){
@@ -1730,7 +1807,7 @@ function renderTaskFiles(d, ro, box){
     h("button",{class:"attb", title:"Add subtask", "aria-label":"Add subtask", onclick:()=>{ const i=$("#st-new"); if (i) { i.closest(".subrow").classList.add("show"); i.focus(); } }}, svg(ICF.list)),
     h("button",{class:"attb", title:"Add photo", "aria-label":"Add photo", onclick:addTaskPhotos}, svg(ICF.image)),
     h("button",{class:"attb", title:"Record voice memo", "aria-label":"Record voice memo", onclick:()=>startRec(storeTaskVoice)}, svg(IC.mic))));
-  if (S.rec && S.recFor==="task") box.append(h("div",{class:"recbar small"}, h("button",{class:"rectrash","aria-label":"Cancel recording", onclick:()=>stopRec(true)}, svg(IC.trash)), h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, fmtDur(REC? (now()-REC.t0)/1000:0)), h("div",{class:"recbars", id:"recBars"}, Array.from({length:24},()=>h("i"))), h("button",{class:"micbtn sending savecheck","aria-label":"Save voice memo", onclick:()=>stopRec(false)}, svg(ICF.check))));
+  if (S.rec && S.recFor==="task") box.append(h("div",{class:"recbar small"}, h("button",{class:"rectrash","aria-label":"Cancel recording", onclick:()=>stopRec(true)}, svg(IC.trash)), h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, fmtDur(recSecs())), h("div",{class:"recbars", id:"recBars"}, Array.from({length:24},()=>h("i"))), h("button",{class:"micbtn sending savecheck","aria-label":"Save voice memo", onclick:()=>stopRec(false)}, svg(ICF.check))));
   const imgs=d.files.filter(f=>f.kind==="image"), voices=d.files.filter(f=>f.kind==="voice" && !f.fromMsg);
   if (imgs.length) box.append(h("div",{class:"tthumbs"}, imgs.map(f=>{ const src=f.localUrl||blobUrl(f.asset); return h("div",{class:"tthumb"}, h("img",{src, alt:"", onclick:()=>viewPhoto(src)}), ro? "" : h("button",{class:"tdel","aria-label":"Remove photo", onclick:()=>set(d.files.filter(x=>x.id!==f.id))}, svg(IC.x))); })));
   voices.forEach(f=>box.append(h("div",{class:"tvoice"}, renderVoice({id:"tv-"+f.id, voice:f.voice}), ro? "" : h("button",{class:"iconbtn sm","aria-label":"Remove voice memo", onclick:()=>set(d.files.filter(x=>x.id!==f.id))}, svg(IC.x)))));
@@ -3598,13 +3675,7 @@ function renderComposer(c){
   const bp=dmPeer(c); if (bp && isBlocked(bp)) { inner.append(h("button",{class:"blockedbar", onclick:()=>setBlocked(bp,false)}, "You blocked this contact. ", h("b",{},"Tap to unblock."))); return box; }
   if (S.replyTo || S.editing) inner.append(replyBarEl());
   if (S.rec && S.recFor!=="task") {
-    inner.append(h("div",{class:"recbar"},
-      h("button",{class:"rectrash", "aria-label":"Cancel recording", title:"Delete", onmousedown:e=>e.preventDefault(), onclick:()=>stopRec(true)}, svg(IC.trash)),
-      h("span",{class:"recdot"}), h("span",{class:"rectime mono", id:"recTime"}, fmtDur(REC? (now()-REC.t0)/1000 : 0)),
-      h("div",{class:"recbars", id:"recBars", "aria-hidden":"true"}, Array.from({length:40},()=>h("i"))),
-      h("button",{class:"reckeep", "aria-label":"Stop and add a message", title:"Add a message", onmousedown:e=>e.preventDefault(), onclick:()=>stopRec(false, true)}, svg(IC.edit)),
-      h("button",{class:"micbtn sending", "aria-label":"Send voice note", title:"Send", onmousedown:e=>e.preventDefault(), onclick:()=>stopRec(false)}, svg(IC.send))
-    ));
+    inner.append(recPanel());
     // keep the message box (invisible) so an open keyboard stays open while recording, like WhatsApp
     inner.append(h("textarea",{id:"composer", class:"kbkeep", rows:"1", tabindex:"-1", "aria-hidden":"true"}));
     return box;

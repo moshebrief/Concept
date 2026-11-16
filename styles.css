@@ -2712,3 +2712,35 @@ html body .lineitem .badge.num{font:600 12.5px/20px var(--f-body)!important;min-
 /* task notes: room to scroll the box you're typing in well clear of the keyboard */
 :root.kb-open .td2body{padding-bottom:160px!important}
 :root.kb-open .scrim.page > .modal{padding-bottom:120px}
+
+/* ===== Voice note recording, laid out like WhatsApp ===== */
+/* holding: blinking red mic, timer, "Slide to cancel ‹" */
+.holdbar .recmic{display:grid;place-items:center;color:#FF3B30;animation:recblink 1s ease-in-out infinite;flex:none}
+.holdbar .recmic svg.i{width:22px;height:22px;stroke:#FF3B30}
+.holdbar .rectime{font-size:17px!important;font-weight:400!important}
+.holdbar .slidecancel{margin-left:auto!important;margin-right:auto!important;gap:4px!important}
+.holdbar .slidecancel svg.i{width:15px!important;height:15px!important}
+/* locked: two rows */
+.vrec{display:flex;flex-direction:column;gap:8px;padding:8px 6px 4px;border-radius:22px}
+@media (max-width:860px){ .main.chatmain .compose .vrec{background:var(--g-fill);border:.5px solid var(--g-line);box-shadow:var(--g-shadow);-webkit-backdrop-filter:blur(18px) saturate(180%);backdrop-filter:blur(18px) saturate(180%)} }
+.vrtop{display:flex;align-items:center;gap:12px;min-height:40px;padding:0 10px}
+.vrtop .rectime{font:400 17px var(--f-body);font-variant-numeric:tabular-nums;min-width:42px;color:var(--ink)}
+.vrwave{flex:1;min-width:0;height:30px;color:var(--ink);opacity:.7;display:block}
+.vrplayer{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:40px;padding:0 14px 0 6px;border-radius:20px;background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.vrplay{width:32px;height:32px;display:grid;place-items:center;color:var(--ink);flex:none;border-radius:50%}
+.vrplay svg.i{width:22px;height:22px}
+.vrtrack{flex:1;min-width:0;height:32px;position:relative;cursor:pointer;touch-action:none}
+.vrline{position:absolute;left:0;right:0;top:50%;border-top:2px dotted color-mix(in srgb,var(--ink) 38%,transparent);transform:translateY(-1px)}
+.vrdot{position:absolute;left:0;top:50%;width:11px;height:11px;border-radius:50%;background:var(--cobalt);transform:translate(-50%,-50%)}
+.vrdur{font:400 15px var(--f-body);font-variant-numeric:tabular-nums;color:var(--ink);flex:none}
+.vrbot{display:flex;align-items:center;justify-content:space-between;padding:0 4px}
+.vrbtn{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;color:var(--ink);background:none;border:0;-webkit-tap-highlight-color:transparent;transition:transform .12s}
+.vrbtn:active{transform:scale(.9)}
+.vrbtn svg.i{width:24px;height:24px}
+.vrbtn.vrmid{color:#FF3B30}
+.vrbtn.vrmid svg.i{width:30px;height:30px;stroke:#FF3B30;stroke-width:1.9}
+.vrbtn.vrsend{width:38px;height:38px;background:var(--cobalt);color:#fff;margin-right:3px}
+.vrbtn.vrsend svg.i{width:19px;height:19px;stroke:#fff;stroke-width:2.2;transform:rotate(-90deg)}
+/* the mic under your finger while holding: soft blue circle with a white mic, as in WhatsApp */
+html body .main.chatmain .crow .micbtn.pressed{background:color-mix(in srgb,var(--cobalt) 62%,#fff)!important;border-color:transparent!important;color:#fff!important}
+html body .main.chatmain .crow .micbtn.pressed svg.i{stroke:#fff!important;color:#fff!important}
