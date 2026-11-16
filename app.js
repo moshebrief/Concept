@@ -197,10 +197,10 @@ function subscribeAll(){
     if (!S.active || !S.channels.find(c=>c.id===S.active)) S.active = S.channels[0] ? S.channels[0].id : null;
     IB.ready=true;
     decryptMany(S.channels.map(c=>c.last&&c.last.enc)).then(ch=>{ if (ch) scheduleRender(); });
-    LOCAL.save("channels", S.channels); syncSoon(); noticeIncoming(S.channels); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
+    LOCAL.save("channels", S.channels); syncSoon(); noticeIncoming(S.channels); countIncoming(); rtSync(); ackDelivered(); if (S.inThread && S.view==="chats") ackRead(S.channels.find(c=>c.id===S.active));
     openMsgs(); scheduleRender();
   });
-  store.sub("tasks", async rows => { const have=new Set(rows.map(r=>r.id)); for (const k of [...PEND_TASKS.keys()]) if (have.has(k)) PEND_TASKS.delete(k); S.tasks=rows.concat([...PEND_TASKS.values()]).sort((a,b)=>(a.num||0)-(b.num||0)); primeNum(); await resolvePeople(rows.flatMap(t=>[t.assignee,t.createdBy]).filter(Boolean)); scheduleRender(); });
+  store.sub("tasks", async rows => { const have=new Set(rows.map(r=>r.id)); for (const k of [...PEND_TASKS.keys()]) if (have.has(k)) PEND_TASKS.delete(k); S.tasks=rows.concat([...PEND_TASKS.values()]).sort((a,b)=>(a.num||0)-(b.num||0)); primeNum(); await resolvePeople(rows.flatMap(t=>[t.assignee,t.createdBy]).filter(Boolean)); scheduleRender(); dailySummary(); });
 }
 function openMsgs(){
   if (S.msgsFor===S.active) return;
@@ -223,14 +223,14 @@ function openMsgs(){
   });
 }
 let _initP=null; function initPromise(){ return Promise.race([new Promise(r=>{ const t=setInterval(()=>{ if (E2E.ready){ clearInterval(t); r(); } },50); setTimeout(()=>{ clearInterval(t); r(); },1500); })]); }
-function markRead(){ if (!S.active) return; if ((S.nt.unr||[]).includes(S.active)) { S.nt.unr=S.nt.unr.filter(x=>x!==S.active); saveNt(); } const c=S.channels.find(x=>x.id===S.active); const t=(c&&c.last&&c.last.at)||now(); S.lastRead[S.active]=t; ls.set("lastRead", S.lastRead); if (S.inThread || window.innerWidth>860) ackRead(c); }
+function markRead(){ if (!S.active) return; ucClear(S.active); if ((S.nt.unr||[]).includes(S.active)) { S.nt.unr=S.nt.unr.filter(x=>x!==S.active); saveNt(); } const c=S.channels.find(x=>x.id===S.active); const t=(c&&c.last&&c.last.at)||now(); S.lastRead[S.active]=t; ls.set("lastRead", S.lastRead); if (S.inThread || window.innerWidth>860) ackRead(c); }
 const unread = c => (c.last && c.last.by!==S.me && c.last.at > (S.lastRead[c.id]||0) && c.id!==S.active) || ((S.nt.unr||[]).includes(c.id) && !(c.id===S.active && S.inThread));
 
 // ---------- actions ----------
 async function sendMessage(text){
   text=text.trim(); const vd=S.vdraft && S.vdraft.cid===S.active? S.vdraft : null;
   if ((!text && !vd) || !S.active) return;
-  clearTimeout(TYP_STOP); sendAct("stop");
+  clearTimeout(TYP_STOP); sendAct("stop"); UNREAD_MARK=null;
   if (vd && !S.editing) { S.vdraft=null; if (DRAFT_AUDIO) DRAFT_AUDIO.pause(); render(true); sendVoice(vd.blob, vd.dur, vd.peaks, null, {}, text); return; }
   const chn=S.channels.find(c=>c.id===S.active)||{}; const members=chn.members||[S.me];
   if (S.editing) { const id=S.editing; S.editing=null; if (await canSeal(members)) { const {env}=await seal(text, members); await guarded(store.update(`channels/${S.active}/messages/${id}`, {enc:env, text:"", edited:true})); } else await guarded(store.update(`channels/${S.active}/messages/${id}`, {text, edited:true})); render(true); return; }
@@ -294,8 +294,9 @@ async function saveTask(){
     const changes=[]; if (prev.status!==d.status) changes.push("moved to "+stName(d.status)); if (prev.assignee!==d.assignee) changes.push(d.assignee? "assigned "+nameOf(d.assignee): "unassigned");
     const log=[...(prev.log||[])]; if (changes.length) log.push({at:now(), by:S.me, what:changes.join(", ")}); else log.push({at:now(), by:S.me, what:"edited"});
     if (prev.thread && d.assignee && d.assignee!==prev.assignee) { const th=S.channels.find(c=>c.id===prev.thread); if (th && !(th.members||[]).includes(d.assignee)) store.update("channels/"+th.id, {members:[...(th.members||[]), d.assignee]}).catch(()=>{}); }
-    await guarded(store.update("tasks/"+S.openTask, {title:d.title.trim(), notes:d.notes, status:d.status, assignee:d.assignee, due:d.due, priority:d.priority, subtasks:d.subtasks||[], files:d.files||[], log:log.slice(-20)}));
+    await guarded(store.update("tasks/"+S.openTask, {title:d.title.trim(), notes:d.notes, status:d.status, assignee:d.assignee, due:d.due, priority:d.priority, repeat:d.repeat||"", subtasks:d.subtasks||[], files:d.files||[], log:log.slice(-20)}));
     toast("Saved");
+    if (prev.status!=="done" && d.status==="done") afterDone({...prev, title:d.title.trim(), notes:d.notes, assignee:d.assignee, due:d.due, priority:d.priority, repeat:d.repeat||"", subtasks:d.subtasks||[]});
   }
   S.openTask=null; S.draftTask=null; render();
 }
@@ -303,7 +304,7 @@ async function moveTask(id, status){
   const t=S.tasks.find(x=>x.id===id); if (!t || t.status===status) return;
   const log=[...(t.log||[]), {at:now(), by:S.me, what:"moved to "+stName(status)}].slice(-20);
   await guarded(store.update("tasks/"+id, {status, log}));
-  if (status==="done") toast("CN-"+t.num+" marked done");
+  if (status==="done") { toast("CN-"+t.num+" marked done"); afterDone(t); }
   if (S.openTask===id && S.draftTask) S.draftTask.status=status;
 }
 async function deleteTask(id){
@@ -340,13 +341,13 @@ function navGo(dir, fn){
   const el=document.querySelector(dir==="fwd"? ".main.chatmain" : ".lines");
   if (el && el.animate) el.animate(dir==="fwd"? [{transform:"translateX(18px)", opacity:0},{transform:"none", opacity:1}] : [{opacity:.4},{opacity:1}], {duration:230, easing:"cubic-bezier(.2,.8,.2,1)"});
 }
-function selectChannel(id){ const wasIn=S.inThread && S.view==="chats"; S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true;
+function selectChannel(id){ noteUnreadFrom(id); S.cfKeep=id; const wasIn=S.inThread && S.view==="chats"; S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true;
   if (wasIn) { render(); return; }
   // Get this chat's saved messages ready first, so the chat appears once, already filled in.
   const show=()=>navGo("fwd", ()=>render());
   if (S.msgs.length || !S._lm) show(); else Promise.race([S._lm, new Promise(r=>setTimeout(r,160))]).then(show);
 }
-function goBackToList(){ navGo("back", ()=>{ S.inThread=false; render(); }); }
+function goBackToList(){ UNREAD_MARK=null; S.cfKeep=null; navGo("back", ()=>{ S.inThread=false; render(); }); }
 // Every button gives a small "press" — it dips when touched and springs back when released.
 (function pressFeedback(){
   const SEL="button, a, [role=button], label.td2chip, .lineitem, .card, .contact, .srow.pick, .srow.pick1, .apick";
@@ -898,7 +899,7 @@ const profBtn = () => S.me? h("button",{class:"profbtn", title:"Profile and sett
 function openSettings(){ S.view="settings"; S.openTask=null; S.newFlow=null; ls.set("view","settings"); render(); }
 const toprow = (title, ...extras) => h("div",{class:"toprow"}, h("h1",{class:"h1"},title), h("span",{class:"grow"}), ...extras, profBtn());
 async function loadPins(){
-  if (DB) { store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="prefs")||{}; S.pins=d.pins||[]; S.blocked=d.blocked||[]; setStages(d.stages); S.nt={tone:d.tone||"note", groupTone:d.groupTone||"chime", tones:d.tones||{}, mute:d.mute||{}, cleared:d.cleared||{}, unr:d.unr||[]}; scheduleRender(); }); }
+  if (DB) { store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="prefs")||{}; S.pins=d.pins||[]; S.blocked=d.blocked||[]; setStages(d.stages); S.nt={tone:d.tone||"note", groupTone:d.groupTone||"chime", tones:d.tones||{}, mute:d.mute||{}, cleared:d.cleared||{}, unr:d.unr||[], arch:d.arch||[]}; scheduleRender(); }); }
   else { S.pins = ls.get("pins", ["launch"]); S.blocked=ls.get("blocked", []); setStages(ls.get("stages", null)); }
 }
 async function togglePin(cid){
@@ -914,6 +915,7 @@ function rowMenu(c, x, y, el, mouse){
     {label: ur? "Mark as read" : "Mark as unread", icon: ur? ICF.check : ICF.dotchat, fn:()=>toggleUnread(c)},
     {label: mu? "Unmute" : "Mute", icon: mu? ICF.bell : ICF.bellx, fn:()=> mu? setMute(c.id, null) : openMute(c)},
     {label:"Notification tone", icon:ICF.music, fn:()=>openChatNotif(c)},
+    isTop? {label: archSet().has(c.id)? "Unarchive" : "Archive", icon:ICX.archive, fn:()=>toggleArchive(c)} : null,
     {label:"Delete chat", icon:IC.trash, danger:true, fn:()=>confirmDeleteChat(c)}], {align:"left"}); return; }
   const scrim=h("div",{class:"scrim clear", onclick:e=>{ if (e.target===scrim) scrim.remove(); }, oncontextmenu:e=>{ e.preventDefault(); scrim.remove(); }});
   const go=fn=>()=>{ scrim.remove(); fn(); };
@@ -922,6 +924,7 @@ function rowMenu(c, x, y, el, mouse){
     h("button",{role:"menuitem", onclick:go(()=>toggleUnread(c))}, svg(ur? ICF.check : ICF.dotchat), ur? "Mark as read" : "Mark as unread"),
     h("button",{role:"menuitem", onclick:go(()=>mu? setMute(c.id, null) : openMute(c))}, svg(mu? ICF.bell : ICF.bellx), mu? "Unmute" : "Mute"),
     h("button",{role:"menuitem", onclick:go(()=>openChatNotif(c))}, svg(ICF.music), "Notification tone"),
+    isTop? h("button",{role:"menuitem", onclick:go(()=>toggleArchive(c))}, svg(ICX.archive), archSet().has(c.id)? "Unarchive chat" : "Archive chat") : "",
     h("button",{role:"menuitem", class:"dangerrow", onclick:go(()=>confirmDeleteChat(c))}, svg(IC.trash), "Delete chat"));
   scrim.append(m); document.body.append(scrim);
 }
@@ -948,13 +951,16 @@ function ctxMenu(src, items, opt={}){
   const vw=innerWidth, vh=innerHeight;
   const pr=h("div",{style:"position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)"}); document.body.append(pr);
   const cs=getComputedStyle(pr), safeT=(parseFloat(cs.paddingTop)||0)+12, safeB=(parseFloat(cs.paddingBottom)||0)+12; pr.remove();
-  const MW=Math.min(opt.menuWidth||254, vw-32), MH=items.length*46+(items.filter(i=>i.danger).length? 8 : 0), GAP=8;
+  const MW=Math.min(opt.menuWidth||254, vw-32), GAP=8; let MH=items.length*46+(items.filter(i=>i.danger).length? 8 : 0);
   const wrap=h("div",{class:"lpm"+(opt.cls?" "+opt.cls:""), role:"dialog", "aria-label":"Options"});
   const back=h("div",{class:"lpmback"});
   const head=opt.header||null; let HH=0;
   if (head) { head.classList.add("lpmhead"); head.style.visibility="hidden"; document.body.append(head); HH=head.offsetHeight+GAP; head.remove(); head.style.visibility=""; }
   // the lifted item stays where it is if everything fits; otherwise it moves so the bar above and the menu below both fit
-  const LH=Math.min(r.height, vh*0.42);
+  // on a small screen with a long menu: first the lifted item gets shorter, then the menu scrolls
+  const avail=vh-safeT-safeB-HH-GAP; let LH=Math.min(r.height, vh*0.42);
+  if (LH+MH>avail) LH=Math.max(Math.min(LH, 48), Math.min(LH, avail-MH));
+  const menuScroll=LH+MH>avail; if (menuScroll) MH=Math.max(138, avail-LH);
   let top=r.top; const need=HH+LH+GAP+MH;
   if (top-HH < safeT) top=safeT+HH;
   if (top+LH+GAP+MH > vh-safeB) top=Math.max(safeT+HH, vh-safeB-MH-GAP-LH);
@@ -970,7 +976,7 @@ function ctxMenu(src, items, opt={}){
   lift.classList.add("lpmlift"); [lift, ...lift.querySelectorAll("*")].forEach(n=>{ n.classList && n.classList.remove("pressing","tap","anim","armed","swiping"); n.removeAttribute && n.removeAttribute("id"); });
   Object.assign(lift.style,{position:"fixed", left:(opt.ctxClass && opt.align==="right"? r.left-4 : r.left)+"px", top:r.top+"px", width:(r.width+(opt.ctxClass? 4 : 0))+"px", height:(r.height>LH? LH+"px" : (opt.ctxClass? "auto" : r.height+"px")), margin:"0"}); lift.style.setProperty("--dy", (top-r.top)+"px");
   if (r.height>LH) lift.classList.add("clip");
-  const menu=h("div",{class:"lpmmenu", role:"menu", style:`left:${left}px;top:${menuTop}px;width:${MW}px;transform-origin:${alignRight? "100%" : "0"} ${fitsBelow?"0":"100%"}`});
+  const menu=h("div",{class:"lpmmenu", role:"menu", style:`left:${left}px;top:${menuTop}px;width:${MW}px;${menuScroll? "max-height:"+MH+"px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;" : ""}transform-origin:${alignRight? "100%" : "0"} ${fitsBelow?"0":"100%"}`});
   // the finger that opened the menu is still down: ignore the tap it makes when it lifts
   let closing=false, ready=false; const arm=()=>setTimeout(()=>{ ready=true; }, 60);
   addEventListener("pointerup", arm, {once:true, capture:true}); setTimeout(()=>{ ready=true; }, 900);
@@ -1005,6 +1011,7 @@ function renderSettings(){
     visRow(ICF.image, "Profile photo", "photo"),
     visRow(ICF.info, "About", "about"),
     row(TICK2, "Read receipts", toggle("readReceipts", true), "If you turn this off, you won't send or see blue ticks"),
+    row(ICX.eye, "Last seen and online", toggle("lastSeen", true), "If you turn this off, you won't see other people's either"),
     row(ICF.lock, "End-to-end encryption", h("span",{class:"sval mono", id:"fp"}, E2E.ready? "On" : "Off"))));
   fingerprint().then(f=>{ const el=$("#fp"); if (el && f) el.textContent=f; });
   appUsage().then(b=>{ const el=$("#s-store"); if (el && b) el.textContent=fmtSize(b); });
@@ -1017,7 +1024,13 @@ function renderSettings(){
     h("button",{class:"srow pick", onclick:openStorage}, h("span",{class:"sic", style:"background:#34C759"}, svg(STORAGE_IC)), h("span",{class:"stx"}, h("b",{},"Storage and data"), h("span",{}, "Manage what's saved on this phone")), h("span",{class:"sval", id:"s-store"}, ""), svg(IC.arrow)),
     row(IC.send, "Enter key sends", toggle("enterSends", true)),
     row(IC.knot, "Swipe left to make task", h("div",{class:"segmini", role:"group", "aria-label":"Swipe left"}, [["open","Open task"],["silent","Just add"]].map(([v,l])=>h("button",{"aria-pressed":String((p.swipeTask||"open")===v), onclick:()=>setPref("swipeTask",v)}, l)))),
+    h("button",{class:"srow pick", onclick:openStarred}, h("span",{class:"sic", style:"background:#FFCC00"}, svg(ICX.star)), h("span",{class:"stx"}, h("b",{},"Starred messages")), h("span",{class:"sval"}, String(Object.keys(STARS).length||"")), svg(IC.arrow)),
     row(IC.pin, "Pinned chats", h("span",{class:"sval"}, S.pins.length+"/5"))));
+  w.append(...group("Automations",
+    row(ICF.cal, "Smart due dates", toggle("auto_dates", true), "\"Send it by Friday\" sets the task's due date to Friday. \"Urgent\" makes it high priority."),
+    row(ICF.personplus, "Auto-assign", toggle("auto_assign", true), "The person you @mention gets the task. In a private chat, whoever was asked gets it."),
+    row(IC.reply, "Tell the chat when it's done", toggle("auto_tellchat", false), "Replies \"✅ Done\" to the message the task came from"),
+    row(ICF.bell, "Daily task summary", toggle("auto_summary", true), "When you open the app: what's due today and what's overdue")));
   const nMuted=S.channels.filter(c=>mutedId(c.id)).length, nCustom=Object.keys(S.nt.tones||{}).length;
   const pickRow=(icon, title, val, fn, sub)=>h("button",{class:"srow pick", onclick:fn}, h("span",{class:"sic"}, svg(icon)), h("span",{class:"stx"}, h("b",{},title), sub? h("span",{},sub):""), h("span",{class:"sval"}, val), svg(IC.arrow));
   w.append(...group("Notifications",
@@ -1131,7 +1144,7 @@ function setStages(arr){
   STATUSES.splice(0, STATUSES.length, ...a);
 }
 async function savePrefsDoc(){
-  const n=S.nt; const doc={pins:S.pins, blocked:S.blocked||[], stages:STATUSES.map(s=>({id:s.id,name:s.name,c:s.c})), tone:n.tone, groupTone:n.groupTone, tones:n.tones||{}, mute:n.mute||{}, cleared:n.cleared||{}, unr:n.unr||[]};
+  const n=S.nt; const doc={pins:S.pins, blocked:S.blocked||[], stages:STATUSES.map(s=>({id:s.id,name:s.name,c:s.c})), tone:n.tone, groupTone:n.groupTone, tones:n.tones||{}, mute:n.mute||{}, cleared:n.cleared||{}, unr:n.unr||[], arch:n.arch||[]};
   if (DB) { try { await store.set("data/users/"+S.me+"/prefs", doc); } catch { toast("Couldn't save. Check your connection."); } }
   else { ls.set("pins", S.pins); ls.set("stages", doc.stages); }
 }
@@ -1190,14 +1203,15 @@ async function quickTask(msgs, opts={}){
   const title = ((ch && ch.kind!=="task" && chanTitle(ch)) || msgText(msgs[0]).split("\n")[0].trim() || (msgs.length+" messages")).slice(0,90);
   const notes = msgs.length>1? msgs.map(m=>nameOf(m.by).replace(/^Example:\s*/,"")+": "+msgText(m)).join("\n") : msgText(msgs[0]);
   const id="t"+now().toString(36)+uidShort().slice(0,3);
+  const sf=smartFields(msgs, ch);
   try {
-    saveTaskFast(id, {title, notes, status:STATUSES[0].id, assignee:"", due:"", priority:"normal", channel:cid, fromMsg:msgs[0].id, fromMsgs:msgs.map(m=>m.id), fromText:msgs.map(msgText).join("\n"), fromBy:msgs[0].by, team:(curTeam()||{}).id||"", createdBy:S.me, at:now(), subtasks:[], log:[{at:now(), by:S.me, what:"created from "+(msgs.length>1? msgs.length+" messages":"a message")}]}, ()=>{
+    saveTaskFast(id, {title, notes, status:STATUSES[0].id, assignee:sf.assignee, due:sf.due, priority:sf.priority, channel:cid, fromMsg:msgs[0].id, fromMsgs:msgs.map(m=>m.id), fromText:msgs.map(msgText).join("\n"), fromBy:msgs[0].by, team:(curTeam()||{}).id||"", createdBy:S.me, at:now(), subtasks:[], log:[{at:now(), by:S.me, what:"created from "+(msgs.length>1? msgs.length+" messages":"a message")}]}, ()=>{
       for (const m of msgs) store.update(`channels/${cid}/messages/${m.id}`, {taskId:id}).catch(()=>{});
       copyVoiceToTask(id, msgs);
     });
     for (const m of msgs) { const x=(S.msgs||[]).find(y=>y.id===m.id); if (x) x.taskId=id; }
     S.justTied=msgs[0].id; S.actFor=null; S.selecting=false; S.sel=[]; render(true);
-    if (opts.open) openTask(id); else if (!opts.silent) toast("Added to "+STATUSES[0].name, {label:"Open", fn:()=>openTask(id)});
+    if (opts.open) openTask(id); else if (!opts.silent) toast("Added to "+STATUSES[0].name+(sf.note? " · "+sf.note : ""), {label:"Open", fn:()=>openTask(id)});
     return id;
   } catch {}
 }
@@ -1457,18 +1471,26 @@ function holdMenu(m, src){
     {label:"Reply", icon:IC.reply, fn:()=>startReply(m)},
     plain(m)!==false? {label:"Forward", icon:ICF.fwd, fn:()=>forwardMenu(m)} : null,
     plain(m)? {label:"Copy", icon:ICF.copy, fn:()=>copyMsg(m)} : null,
+    {label: isStar(m)? "Unstar" : "Star", icon:ICX.star, fn:()=>toggleStar(m)},
     task? {label:"Open task", icon:IC.knot, fn:()=>openTask(task.id)} : {label:"Make task", icon:IC.knot, fn:()=>quickTask([m], {open:(S.prefs.swipeTask||"open")!=="silent"})},
     task && canThread(task)? {label:"Task conversation", icon:IC.thread, fn:()=>openTaskChat(task)} : null,
     plain(m)? {label:"Save to Notes", icon:ICN.note, fn:()=>saveMsgToNotes(m)} : null,
     mine && !m.kind && plain(m)!==false? {label:"Edit", icon:IC.edit, fn:()=>{ S.editing=m.id; render(true); }} : null,
+    mine && !m.pending? {label:"Info", icon:ICX.info, fn:()=>openMsgInfo(m)} : null,
     {label:"Select", icon:ICF.selm, fn:()=>{ S.selecting=true; S.sel=[m.id]; render(true); }},
+    !mine? {label:"Delete", icon:IC.trash, danger:true, fn:()=>confirmDeleteMsg(m)} : null,
     mine? {label:"Delete", icon:IC.trash, danger:true, fn:()=>confirmDeleteMsg(m)} : {label:"Report", icon:ICF.flag2, danger:true, fn:()=>openReport({title:"Report message", user:m.by, channel:S.active, message:m.id, text:msgText(m)})}];
   const row=src.closest(".msg");
   ctl=ctxMenu(src, items, {header:pill, cls:"msgmenu", align: mine? "right" : "left", menuWidth:230, ctxClass: row? row.className.replace(/\b(swiping|swr|swl|justtied|tasked)\b/g,"")+" lpmrow" : ""});
 }
 function confirmDeleteMsg(m){
-  sheet("Delete message?", (draw, close)=>[h("p",{class:"note", style:"margin:0"}, "It will be deleted for everyone in this chat."),
-    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary danger-bg", onclick:()=>{ close(); deleteMsg(m); }}, "Delete"))]);
+  const mine=m.by===S.me && !m.pending;
+  sheet("Delete message?", (draw, close)=>[
+    h("div",{class:"ulist sgroup delopts"},
+      mine? h("button",{class:"srow pick dangerrow", onclick:()=>{ close(); deleteMsg(m); }}, h("span",{class:"stx"}, h("b",{}, "Delete for everyone"))) : "",
+      h("button",{class:"srow pick dangerrow", onclick:()=>{ close(); hideMsg(m); }}, h("span",{class:"stx"}, h("b",{}, "Delete for me")))),
+    h("p",{class:"note", style:"margin:10px 4px 0"}, mine? "\"Delete for everyone\" removes it from this chat for all. \"Delete for me\" only hides it on this phone." : "This only hides the message on this phone. The other people in the chat still see it."),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"))]);
 }
 function swipeTask(m){
   const mode=S.prefs.swipeTask||"open";
@@ -2040,7 +2062,7 @@ function iconBadge(){
 }
 function watchBadge(){ if (S.mode!=="live") return;
   store.sub("data/users/"+S.me, rows=>{ const d=rows.find(r=>r.id==="badge"); if (!d) return; const k=Object.keys(d.c||{}).sort().join(","); if (k!==IB.last) { IB.last=null; iconBadge(); } }); }
-function msgsFor(cid){ const have=new Set(S.msgs.map(m=>m.id)); const cl=(S.nt.cleared||{})[cid]||0; const all=S.msgs.concat(S.pend.filter(p=>p.cid===cid && !have.has(p.id))).filter(m=>!cl || (m.at||0)>cl); return (S.blocked||[]).length? all.filter(m=>!isBlocked(m.by)) : all; }
+function msgsFor(cid){ const have=new Set(S.msgs.map(m=>m.id)); const cl=(S.nt.cleared||{})[cid]||0; const all=S.msgs.concat(S.pend.filter(p=>p.cid===cid && !have.has(p.id))).filter(m=>(!cl || (m.at||0)>cl) && !HID[m.id]); return (S.blocked||[]).length? all.filter(m=>!isBlocked(m.by)) : all; }
 const newMsgId = () => "m"+now().toString(36)+uidShort().slice(0,4);
 
 // ===================== typing & recording indicators =====================
@@ -2050,8 +2072,10 @@ function rtSync(){
   const want=new Set(S.channels.slice(0,60).map(c=>c.id));
   for (const [cid,ch] of RT.chans) if (!want.has(cid)) { try { SB.removeChannel(ch); } catch {} RT.chans.delete(cid); }
   for (const cid of want) if (!RT.chans.has(cid)) {
-    const ch=SB.channel("chat:"+cid, {config:{broadcast:{self:false}}});
-    ch.on("broadcast", {event:"act"}, ({payload})=>onAct(cid, payload)).subscribe();
+    const ch=SB.channel("chat:"+cid, {config:{broadcast:{self:false}, presence:{key:S.me}}});
+    ch.on("broadcast", {event:"act"}, ({payload})=>onAct(cid, payload))
+      .on("presence", {event:"sync"}, ()=>{ try { RT.online[cid]=Object.keys(ch.presenceState()); } catch {} refreshPresenceUI(); })
+      .subscribe(st=>{ if (st==="SUBSCRIBED") trackMe(cid, ch); });
     RT.chans.set(cid, ch);
   }
 }
@@ -2480,7 +2504,7 @@ function muteText(c){ const u=muteUntil(c.id); if (u===0) return "Always"; if (u
 function saveNt(){ ls.set("nt", S.nt); savePrefsDoc(); }
 function setMute(cid, until){ const m={...(S.nt.mute||{})}; if (until===null) delete m[cid]; else m[cid]=until; S.nt.mute=m; saveNt(); render(true); toast(until===null? "Unmuted" : "Muted"); }
 function setChatTone(cid, id){ const t={...(S.nt.tones||{})}; if (!id) delete t[cid]; else t[cid]=id; S.nt.tones=t; saveNt(); }
-function toggleUnread(c){ const u=S.nt.unr||[]; if (unread(c)) { S.nt.unr=u.filter(x=>x!==c.id); S.lastRead[c.id]=now(); ls.set("lastRead",S.lastRead); } else S.nt.unr=[...new Set([...u, c.id])]; saveNt(); render(true); }
+function toggleUnread(c){ const u=S.nt.unr||[]; if (unread(c)) { S.nt.unr=u.filter(x=>x!==c.id); S.lastRead[c.id]=now(); ls.set("lastRead",S.lastRead); ucClear(c.id); } else S.nt.unr=[...new Set([...u, c.id])]; saveNt(); render(true); }
 
 // --- sound ---
 let AC=null; const toneBuf={};
@@ -3410,6 +3434,7 @@ function renderLines(){
   return h("section",{class:"lines","aria-label":"Conversations"}, fab,
     h("div",{class:"lines-head toprow"}, h("h1",{class:"h1"},"Chats"), h("span",{class:"grow"}), profBtn()),
     h("label",{class:"search"}, svg(IC.search), h("input",{id:"q", placeholder:"Search", value:S.q, oninput:e=>{S.q=e.target.value; patchList(); updateTypingUI(); }})),
+    chatChips(),
     inviteCards(),
     h("div",{class:"list", id:"list"}, ...listChildren()));
 }
@@ -3419,7 +3444,7 @@ function listChildren(){
   const ids=new Set(S.channels.map(c=>c.id));
   const isSub = c => c.kind==="task" && c.parent && ids.has(c.parent);
   const subMatch = new Set(chans.filter(isSub).map(c=>c.parent));
-  const top = S.channels.filter(c => !isSub(c) && (chans.includes(c) || subMatch.has(c.id)));
+  const top = chatFilter(S.channels.filter(c => !isSub(c) && (chans.includes(c) || subMatch.has(c.id))), q);
   const act = c => Math.max((c.last&&c.last.at)||c.at||0, ...subsOf(c.id).map(x=>(x.last&&x.last.at)||x.at||0));
   for (let i=top.length-1; i>=0; i--) { const cl=(S.nt.cleared||{})[top[i].id]; if (cl && act(top[i])<=cl && top[i].id!==S.active) top.splice(i,1); }
   top.sort((a,b)=>act(b)-act(a));
@@ -3439,13 +3464,13 @@ function listChildren(){
       const row=h("button",{class:"lineitem subitem", "aria-current":String(x.id===S.active && (S.inThread || window.innerWidth>860)), onclick:()=>selectChannel(x.id)},
         h("span",{class:"glyph tglyph sm", style:`--st:${st? st.c : "var(--muted)"}`}, svg(IC.knot)),
         h("span",{style:"min-width:0"}, h("div",{class:"nm"}, t? h("span",{class:"tidmini", style:`--c:${st.c}`},"CN-"+t.num) : "", " ", t? t.title : chanTitle(x)), h("div",{class:"pv"}, h("span",{class:"pvt", "data-cid":x.id}, x.last? (x.last.by!==S.me? nameOf(x.last.by).replace(/^Example:\s*/,"").split(" ")[0]+": ":"")+lastPreview(x.last) : (st? st.name : "")))),
-        h("span",{class:"meta"}, x.last? h("span",{class:"mono"}, fmtShort(x.last.at)):"", h("span",{class:"metaicons"}, isMuted(x)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", unread(x)? h("span",{class:"badge"+(isMuted(x)?" muted":"")},"1"):"")));
+        h("span",{class:"meta"}, x.last? h("span",{class:"mono"}, fmtShort(x.last.at)):"", h("span",{class:"metaicons"}, isMuted(x)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", unread(x)? h("span",{class:"badge"+(isMuted(x)?" muted":"")+(ucText(x)?" num":"")}, ucText(x)):"")));
       longPress(row,(px,py,el,mouse)=>rowMenu(x,px,py,el,mouse)); return swipeWrap(row, x); }))];
   };
   const itemEl = c => h("button",{class:"lineitem"+(unread(c)? " unread" : ""), "aria-current":String(c.id===S.active && S.inThread || (c.id===S.active && window.innerWidth>860)), onclick:()=>selectChannel(c.id)},
     chanGlyph(c),
     h("span",{style:"min-width:0"}, h("div",{class:"nm"}, chanTitle(c)), h("div",{class:"pv"}, c.last && c.last.by===S.me? ticks({by:S.me, at:c.last.at}, c) : "", h("span",{class:"pvt", "data-cid":c.id}, c.last? (c.kind!=="dm" && c.last.by!==S.me? nameOf(c.last.by).replace(/^Example:\s*/,"").split(" ")[0]+": ":"")+lastPreview(c.last) : ""))),
-    h("span",{class:"meta"}, c.last? h("span",{class:"mono"}, fmtShort(c.last.at)):"", h("span",{class:"metaicons"}, isMuted(c)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", S.pins.includes(c.id)? h("span",{class:"pinmark", title:"Pinned"}, svg(IC.pin)):"", unread(c)? h("span",{class:"badge"+(isMuted(c)?" muted":"")+(c.last&&(c.last.mentions||[]).includes(S.me)?" at":"")}, c.last&&(c.last.mentions||[]).includes(S.me)? "@" : "1"):""))
+    h("span",{class:"meta"}, c.last? h("span",{class:"mono"}, fmtShort(c.last.at)):"", h("span",{class:"metaicons"}, isMuted(c)? h("span",{class:"mutemark", title:"Muted"}, svg(ICF.bellx)):"", S.pins.includes(c.id)? h("span",{class:"pinmark", title:"Pinned"}, svg(IC.pin)):"", unread(c)? h("span",{class:"badge"+(isMuted(c)?" muted":"")+(c.last&&(c.last.mentions||[]).includes(S.me)?" at":"")+(ucText(c)?" num":"")}, c.last&&(c.last.mentions||[]).includes(S.me)? "@" : ucText(c)):""))
   );
   function taskConvos(q){
     if (!curTeam()) return h("div",{class:"empty",style:"margin-top:30px"}, h("p",{},"Create a team on the Team tab to see task conversations."));
@@ -3460,7 +3485,7 @@ function listChildren(){
         h("span",{class:"meta"}, l? h("span",{class:"mono"}, fmtShort(l.at)):"", ch&&unread(ch)? h("span",{class:"badge"},"new"):""));
     });
   }
-  return [!S.channels.length && S.mode!=="loading" ? h("div",{class:"empty",style:"margin-top:30px"}, h("p",{},"No chats yet")) : "", ...pinned.flatMap(c=>[item(c)].flat()), ...rest.flatMap(c=>[item(c)].flat())];
+  return [!top.length && S.mode!=="loading" ? h("div",{class:"empty",style:"margin-top:30px"}, h("p",{}, q? "No results" : emptyFilterMsg())) : "", ...pinned.flatMap(c=>[item(c)].flat()), ...rest.flatMap(c=>[item(c)].flat())];
 }
 
 function renderThread(){
@@ -3495,7 +3520,7 @@ function renderThread(){
 
 function theadSub(c){
   if (c.kind==="task") { const t=S.tasks.find(x=>x.id===c.taskId); const par=S.channels.find(z=>z.id===c.parent); return t? "CN-"+t.num+" · "+stName(stOf(t))+(par? " · "+chanTitle(par):"") : ""; }
-  if (c.kind==="dm") return (S.teamDocs[(c.members||[]).find(x=>x!==S.me)]||{}).about||"";
+  if (c.kind==="dm") return presenceLine(c) || (S.teamDocs[(c.members||[]).find(x=>x!==S.me)]||{}).about||"";
   return (c.members||[]).map(id=>nameOf(id).replace(/^Example:\s*/,"").split(" ")[0]).join(", ");
 }
 // Only messages that just arrived animate in; re-drawing the screen never replays animations (no blinking).
@@ -3506,9 +3531,10 @@ function buildSpine(c){
   if (E2E.ready) spine.append(h("div",{class:"e2enote"}, svg(ICF.lock), "End-to-end encrypted"));
   const all=msgsFor(c.id); const from=Math.max(0, all.length-S.msgLimit);
   if (from>0) spine.append(h("button",{class:"loadmore", onclick:e=>{ e.stopPropagation(); const st=$("#stream"); const h0=st.scrollHeight; S.msgLimit+=150; patchThread($(".chatmain")); st.scrollTop=st.scrollHeight-h0; }}, "Load earlier messages"));
-  let lastDay=null, lastBy=null, lastAt=0;
+  let lastDay=null, lastBy=null, lastAt=0; SPINE_BUILD++;
   for (let i=from; i<all.length; i++) { const m=all[i];
     const dk=dayKey(m.at); if (dk!==lastDay){ spine.append(h("div",{class:"day"}, fmtDay(m.at))); lastDay=dk; lastBy=null; }
+    const ud=unreadDivider(all, i, c); if (ud) { spine.append(ud); lastBy=null; }
     const cont = lastBy===m.by && m.at-lastAt<5*60000 && !m.taskId; lastBy=m.by; lastAt=m.at;
     const el=renderMsg(m, cont, c);
     if (sameChat && !SEEN_MSG.has(m.id)) el.classList.add("fresh");
@@ -3536,7 +3562,7 @@ function renderMsg(m, cont, chan){
     const cap=plain(m); if (cap) strip.append(h("span",{class:"tx mcap"}, richText(cap)));
   }
   else { const tx=shown(m); strip.append(h("span",{class:"tx"+(plain(m)===false?" locked":"")}, plain(m)? richText(tx) : tx)); }
-  strip.append(h("span",{class:"mt"}, m.edited? "edited · ":"", fmtTime(m.at), ticks(m, ch)));
+  strip.append(h("span",{class:"mt"}, isStar(m)? h("span",{class:"mstar", title:"Starred"}, svg(ICX.star)) : "", m.edited? "edited · ":"", fmtTime(m.at), ticks(m, ch)));
   el.append(h("span",{class:"swi swi-r","aria-hidden":"true"}, svg(IC.reply)));
   el.append(h("div",{class:"brow"}, strip,
     !m.deleted && !m.pending && !S.selecting && S.canWrite && plain(m)!==false? h("button",{class:"fwdbtn", title:"Forward", "aria-label":"Forward message", onclick:e=>{ e.stopPropagation(); forwardMenu(m); }}, svg(ICF.fwd)) : "",
@@ -3875,7 +3901,7 @@ function openTeamSettings(){
 
 function openTask(id){
   const t=S.tasks.find(x=>x.id===id); if (!t || !canSeeTask(t)) return;
-  S.openTask=id; S.draftTask={files:(t.files||[]).slice(), subtasks:(t.subtasks||[]).map(x=>({...x})), title:t.title, notes:t.notes||"", status:t.status||"todo", assignee:t.assignee||"", due:t.due||"", priority:t.priority||"normal", channel:t.channel, fromMsg:t.fromMsg, fromText:t.fromText, fromBy:t.fromBy};
+  S.openTask=id; S.draftTask={files:(t.files||[]).slice(), subtasks:(t.subtasks||[]).map(x=>({...x})), title:t.title, notes:t.notes||"", status:t.status||"todo", assignee:t.assignee||"", due:t.due||"", priority:t.priority||"normal", repeat:t.repeat||"", channel:t.channel, fromMsg:t.fromMsg, fromText:t.fromText, fromBy:t.fromBy};
   S.actFor=null; S.confirmDel=false; render();
 }
 let LAST_DRAWER=null;
@@ -3916,7 +3942,10 @@ function renderDrawer(){
       h("input",{type:"date", id:"t-due", class:"td2date", value:d.due, disabled:ro, "aria-label":"Due date", onchange:e=>{ d.due=e.target.value; render(); }})),
     d.due? h("span",{class:"td2due"+(overdue?" late":"")}, dueTxt, ro? "" : h("button",{class:"td2chx", "aria-label":"Remove due date", onclick:()=>{ d.due=""; render(); }}, svg(IC.x))) : "",
     h("button",{class:"td2chip pri p-"+PRI[pi][0], title:PRI[pi][1]+" (tap to change)", "aria-label":PRI[pi][1]+". Tap to change", disabled:ro, onclick:()=>{ d.priority=PRI[(pi+1)%3][0]; render(); }},
-      svg(ICF.flag))));
+      svg(ICF.flag)),
+    h("button",{class:"td2chip rep"+(d.repeat?" set":""), title:repeatName(d.repeat)+" (tap to change)", "aria-label":"Repeat: "+repeatName(d.repeat)+". Tap to change", disabled:ro, onclick:()=>{ const i=REPEATS.findIndex(r=>r[0]===(d.repeat||"")); d.repeat=REPEATS[(i+1)%REPEATS.length][0]; render(); }},
+      svg(ICX.repeat)),
+    d.repeat? h("span",{class:"td2due td2rep"}, repeatName(d.repeat)) : ""));
   // ---- subtasks + photos + voice memos
   body.append(h("div",{class:"td2card td2subs"}, renderTaskFiles(d, ro, renderSubtasks(d, t, isNew, ro))));
   // ---- notes
@@ -4063,7 +4092,217 @@ $("#meAv").addEventListener("click", ()=>openSettings());
 document.querySelectorAll(".navb").forEach(b=>b.addEventListener("click",()=>{ S.view=b.dataset.view; ls.set("view",S.view); if (S.view==="chats") S.inThread=false; else S.newFlow=null; if (S.view==="calls") ls.set("callsSeen", now()); if (S.view!=="calls") S.dial.on=false; if (S.view==="board" && S.filter.startsWith("chan:")) {} render(); }));
 window.addEventListener("resize", ()=>{ clearTimeout(window.__rt); window.__rt=setTimeout(()=>render(true),150); });
 
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+// ===================== The rest of what WhatsApp does =====================
+const ICX={
+  star:'<path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8-4.2-4.1 5.8-.8z"/>',
+  archive:'<rect x="3.5" y="4.5" width="17" height="4.5" rx="1.2"/><path d="M5 9v9a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18V9M10 13h4"/>',
+  info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/>',
+  repeat:'<path d="M17 3.5l3 3-3 3"/><path d="M4 11V9.500a3 3 0 0 1 3-3h13"/><path d="M7 20.5l-3-3 3-3"/><path d="M20 13v1.500a3 3 0 0 1-3 3H4"/>',
+  bolt:'<path d="M13 3L5 13.500h6L10 21l8-10.500h-6z"/>',
+  eye:'<path d="M2.500 12S6 5.500 12 5.500 21.500 12 21.500 12 18 18.500 12 18.500 2.500 12 2.500 12z"/><circle cx="12" cy="12" r="2.800"/>'
+};
+
+// ---- Unread counts: the number in the blue badge, like WhatsApp ----
+const UC=ls.get("uc",{}), UCAT=ls.get("ucat",{}), UC_ASKED={}; let UC_BOOT=true;
+function ucSave(){ ls.set("uc",UC); ls.set("ucat",UCAT); }
+const realUnread = c => !!(c.last && c.last.by!==S.me && c.last.at>(S.lastRead[c.id]||0));
+function ucText(c){ if (!realUnread(c)) return ""; const n=UC[c.id]||1; return n>99? "99+" : String(n); }
+function ucClear(cid){ if (UC[cid]) { delete UC[cid]; ucSave(); } }
+function countIncoming(){
+  if (!S.channels.length) return; let ch=false;
+  for (const c of S.channels) { const l=c.last; if (!l || l.by===S.me) continue; const lr=S.lastRead[c.id]||0;
+    const reading = c.id===S.active && S.inThread && S.view==="chats" && document.visibilityState==="visible";
+    if (l.at<=lr || reading) { if (UC[c.id]) { delete UC[c.id]; ch=true; } continue; }
+    if (l.at>(UCAT[c.id]||0)) {
+      const away=UC_BOOT || !UCAT[c.id];   // the app may have been closed while several messages came in: ask for the real number
+      UC[c.id]=(UC[c.id]||0)+1; UCAT[c.id]=l.at; ch=true;
+      if (away && SB && S.mode==="live" && !UC_ASKED[c.id+l.at]) { UC_ASKED[c.id+l.at]=1; fetchCount(c.id, lr); }
+    }
+  }
+  UC_BOOT=false; if (ch) ucSave();
+}
+async function fetchCount(cid, since){
+  try { const {count, error}=await SB.from("docs").select("path", {count:"exact", head:true}).eq("col", "channels/"+cid+"/messages").gt("data->at", since).neq("data->>by", S.me);
+    if (!error && count>0 && UC[cid]!==undefined && count!==UC[cid]) { UC[cid]=count; ucSave(); scheduleRender(); } } catch {}
+}
+
+// ---- "3 unread messages" line inside the chat ----
+let UNREAD_MARK=null;
+function noteUnreadFrom(id){ const c=S.channels.find(x=>x.id===id); UNREAD_MARK=null; if (c && realUnread(c)) UNREAD_MARK={cid:id, at:S.lastRead[id]||0}; }
+function unreadDivider(all, i, c){
+  if (!UNREAD_MARK || UNREAD_MARK.cid!==c.id || UNREAD_MARK.done===SPINE_BUILD) return null;
+  const m=all[i]; if (!(m.at>UNREAD_MARK.at) || m.by===S.me) return null;
+  UNREAD_MARK.done=SPINE_BUILD; const n=all.slice(i).filter(x=>x.by!==S.me).length;
+  if (!UNREAD_MARK.scrolled) { UNREAD_MARK.scrolled=true; requestAnimationFrame(()=>requestAnimationFrame(()=>{ const ud=$("#unreaddiv"), st=$("#stream"); if (ud && st) st.scrollTop+=ud.getBoundingClientRect().top-st.getBoundingClientRect().top-st.clientHeight*.3; })); }
+  return h("div",{class:"unreaddiv", id:"unreaddiv"}, h("span",{}, n+" unread message"+(n===1?"":"s")));
+}
+let SPINE_BUILD=0;
+
+// ---- Chat list filters (All · Unread · Groups) and archived chats ----
+const archSet = () => new Set(S.nt.arch||[]);
+function chatChips(){
+  const na=(S.nt.arch||[]).filter(id=>S.channels.some(c=>c.id===id)).length;
+  if (S.cf==="arch" && !na) S.cf="all";
+  const opts=[["all","All"],["unread","Unread"],["groups","Groups"]]; if (na) opts.push(["arch","Archived"]);
+  return h("div",{class:"nchips chatchips", role:"group", "aria-label":"Show"}, opts.map(([v,l])=>h("button",{class:"nchip", "aria-pressed":String((S.cf||"all")===v), onclick:()=>{ S.cf=v; closeSwipe(false); const st=$("#list"); render(); if (st) { const n=$("#list"); if (n) n.scrollTop=0; } }}, v==="arch"? svg(ICX.archive) : "", l, v==="arch"? h("b",{class:"chipn"}, na) : "")));
+}
+function chatFilter(top, q){
+  const arch=archSet(), f=S.cf||"all";
+  if (q) return top;                                   // searching looks everywhere, archived too
+  if (f==="arch") return top.filter(c=>arch.has(c.id));
+  top=top.filter(c=>!arch.has(c.id));
+  if (f==="unread") return top.filter(c=>unread(c) || subsOf(c.id).some(unread) || (c.id===S.active && S.cfKeep===c.id));
+  if (f==="groups") return top.filter(c=>c.kind!=="dm");
+  return top;
+}
+function emptyFilterMsg(){ const f=S.cf||"all"; return f==="unread"? "No unread chats" : f==="groups"? "No groups yet" : f==="arch"? "No archived chats" : "No chats yet"; }
+function toggleArchive(c){
+  const a=archSet(), was=a.has(c.id); if (was) a.delete(c.id); else a.add(c.id);
+  S.nt.arch=[...a]; if (!was && S.pins.includes(c.id)) S.pins=S.pins.filter(x=>x!==c.id);
+  saveNt(); render(true); toast(was? "Chat unarchived" : "Chat archived", {label:"Undo", fn:()=>toggleArchive(c)});
+}
+
+// ---- Starred messages (kept on this phone, like WhatsApp) ----
+const STARS=ls.get("stars",{});
+const isStar = m => !!STARS[m.id];
+function toggleStar(m){
+  if (STARS[m.id]) delete STARS[m.id]; else STARS[m.id]={cid:S.active, at:m.at, by:m.by, text:String(msgText(m)||"Message").slice(0,300)};
+  ls.set("stars", STARS); render(true); toast(STARS[m.id]? "Message starred" : "Star removed");
+}
+function openStarred(){
+  sheet("Starred messages", (draw, close)=>{
+    const rows=Object.entries(STARS).map(([id,s])=>({id, ...s})).filter(s=>S.channels.some(c=>c.id===s.cid)).sort((a,b)=>b.at-a.at);
+    if (!rows.length) return [h("div",{class:"empty", style:"padding:26px 10px"}, h("p",{}, "Nothing starred yet."), h("p",{class:"note"}, "Touch and hold any message, then tap Star, to find it here later."))];
+    return [h("div",{class:"ulist sgroup starlist"}, rows.map(s=>{ const c=S.channels.find(x=>x.id===s.cid);
+      return h("button",{class:"srow pick starrow", onclick:()=>{ close(); setTimeout(()=>jumpToMessage(s.cid, s.id), 260); }},
+        h("span",{class:"cav"}, avatar(s.by)),
+        h("span",{class:"stx"}, h("b",{}, (s.by===S.me? "You" : nameOf(s.by).replace(/^Example:\s*/,""))+(c && c.kind!=="dm"? " · "+chanTitle(c) : "")), h("span",{class:"startx"}, s.text)),
+        h("span",{class:"sval"}, fmtShort(s.at)),
+        h("button",{class:"iconbtn", "aria-label":"Remove star", title:"Remove star", onclick:e=>{ e.stopPropagation(); delete STARS[s.id]; ls.set("stars",STARS); draw(); scheduleRender(); }}, svg(ICX.star)));
+    }))];
+  });
+}
+
+// ---- Message info: who it reached and who read it ----
+function openMsgInfo(m){
+  const c=S.channels.find(x=>x.id===S.active)||{}; const others=(c.members||[]).filter(u=>u!==S.me);
+  const read=others.filter(u=>RR() && (c["r_"+u]||0)>=m.at);
+  const deliv=others.filter(u=>!read.includes(u) && Math.max(c["d_"+u]||0, c["r_"+u]||0)>=m.at);
+  const rest=others.filter(u=>!read.includes(u) && !deliv.includes(u));
+  const sec=(label, cls, icon, ids)=>!ids.length? [] : [h("div",{class:"seg-label infolab "+cls}, h("span",{class:"tk "+cls}, svg(icon)), label), h("div",{class:"ulist sgroup"}, ids.map(u=>h("div",{class:"srow"}, h("span",{class:"cav"}, avatar(u)), h("span",{class:"stx"}, h("b",{}, nameOf(u).replace(/^Example:\s*/,""))))))];
+  sheet("Message info", ()=>[
+    h("div",{class:"infobub"}, h("div",{class:"infotx"}, String(msgText(m)||"").slice(0,400)), h("div",{class:"infowhen"}, fmtDay(m.at)+" · "+fmtTime(m.at))),
+    ...sec("Read by", "read", TICK2, read), ...sec("Delivered to", "", TICK2, deliv), ...sec(c.kind==="dm"? "Sent" : "Not delivered yet", "", TICK1, rest),
+    !RR()? h("p",{class:"note"}, "Read receipts are off, so you can't see who has read your messages.") : ""]);
+}
+
+// ---- Delete for me ----
+const HID=ls.get("hid",{});
+function hideMsg(m){ HID[m.id]=1; ls.set("hid",HID); if (STARS[m.id]) { delete STARS[m.id]; ls.set("stars",STARS); } render(true); toast("Deleted for you", {label:"Undo", fn:()=>{ delete HID[m.id]; ls.set("hid",HID); render(true); }}); }
+
+// ---- Online / last seen ----
+const LS_ON = () => S.prefs.lastSeen!==false;
+RT.online={};
+function lastSeenText(t){ const d=new Date(t), n=new Date(), y=new Date(); y.setDate(n.getDate()-1);
+  const days=(new Date(n.toDateString())-new Date(d.toDateString()))/864e5;
+  const day = days<=0? "today" : days===1? "yesterday" : days<7? d.toLocaleDateString([], {weekday:"long"}) : d.toLocaleDateString([], {day:"numeric", month:"short"});
+  return "last seen "+day+" at "+fmtTime(t); }
+function presenceLine(c){
+  if (!c || c.kind!=="dm" || !LS_ON()) return ""; const peer=(c.members||[]).find(x=>x!==S.me); if (!peer || isBlocked(peer)) return "";
+  if ((RT.online[c.id]||[]).includes(peer)) return "online";
+  const seen=(S.teamDocs[peer]||{}).seen; return seen? lastSeenText(seen) : "";
+}
+function refreshPresenceUI(){ const sub=$("#thead-sub"); if (!sub || sub.classList.contains("typing")) return; const c=S.channels.find(x=>x.id===S.active); if (!c) return; const t=theadSub(c); sub.textContent=t; sub.dataset.orig=t; }
+function trackMe(cid, ch){ const c=S.channels.find(x=>x.id===cid); if (!c || c.kind!=="dm") return;
+  try { if (LS_ON() && document.visibilityState==="visible") ch.track({at:Date.now()}); else ch.untrack(); } catch {} }
+let SEEN_SENT=0;
+function presenceTick(){
+  for (const [cid,ch] of RT.chans) trackMe(cid, ch);
+  if (S.mode!=="live" || !S.me) return;
+  if (document.visibilityState==="hidden") { const n=Date.now(); if (n-SEEN_SENT<20000) return; SEEN_SENT=n;
+    if (LS_ON()) store.update("team/"+S.me, {seen:n}).catch(()=>{}); else if ((S.teamDocs[S.me]||{}).seen) store.update("team/"+S.me, {seen:0}).catch(()=>{}); }
+}
+document.addEventListener("visibilitychange", presenceTick); addEventListener("pagehide", presenceTick);
+
+// ===================== Automations =====================
+const AUTO = (k, def=true) => { const v=S.prefs["auto_"+k]; return v===undefined? def : !!v; };
+const isoLocal = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+// Reads a due date out of ordinary words: "by Friday", "tomorrow", "in 3 days", "Dec 4", "next week", "end of month"…
+function smartDue(text){
+  const s=" "+String(text||"").toLowerCase().replace(/[’']/g,"'")+" "; const t=new Date(); t.setHours(12,0,0,0);
+  const plus=n=>{ const d=new Date(t); d.setDate(d.getDate()+n); return isoLocal(d); };
+  const NUM={a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10};
+  let m;
+  if (/\bday after tomorrow\b/.test(s)) return plus(2);
+  if (/\b(tomorrow|tmrw|tmw|tomorow)\b/.test(s)) return plus(1);
+  if (/\b(today|tonight|this (morning|afternoon|evening)|eod|end of (the )?day|by noon)\b/.test(s)) return plus(0);
+  if ((m=s.match(/\bin (\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten) (day|week|month)s?\b/))) { const n=NUM[m[1]]||parseInt(m[1],10); if (m[2]==="month") { const d=new Date(t); d.setMonth(d.getMonth()+n); return isoLocal(d); } return plus(n*(m[2]==="week"?7:1)); }
+  if (/\b(end of (the |this )?week|by the weekend|before the weekend)\b/.test(s)) return plus(((5-t.getDay())+7)%7);
+  if (/\b(this|the) weekend\b/.test(s)) return plus(((6-t.getDay())+7)%7);
+  if (/\bnext week\b/.test(s)) return plus(((1-t.getDay())+7)%7 || 7);
+  if (/\bend of (the |this )?month\b/.test(s)) return isoLocal(new Date(t.getFullYear(), t.getMonth()+1, 0, 12));
+  if (/\bnext month\b/.test(s)) return isoLocal(new Date(t.getFullYear(), t.getMonth()+1, 1, 12));
+  const WD={sunday:0,monday:1,mon:1,tuesday:2,tue:2,tues:2,wednesday:3,wed:3,thursday:4,thu:4,thur:4,thurs:4,friday:5,fri:5,saturday:6};
+  if ((m=s.match(/\b(next )?(sunday|monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday)\b/))) { const diff=((WD[m[2]]-t.getDay())+7)%7 || 7; return plus(diff+(m[1] && diff<=(7-t.getDay())%7? 7 : 0)); }
+  const MO=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+  const md=(mo, day, yr)=>{ if (mo<0 || day<1 || day>31) return ""; let d=new Date(yr||t.getFullYear(), mo, day, 12); if (d.getMonth()!==mo) return ""; if (!yr && d<new Date(t.getFullYear(), t.getMonth(), t.getDate())) d=new Date(t.getFullYear()+1, mo, day, 12); return isoLocal(d); };
+  if ((m=s.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? (\d{1,2})(st|nd|rd|th)?\b/))) { const r=md(MO.indexOf(m[1]), +m[2]); if (r) return r; }
+  if ((m=s.match(/\b(\d{1,2})(st|nd|rd|th)? (of )?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/))) { const r=md(MO.indexOf(m[4]), +m[1]); if (r) return r; }
+  if ((m=s.match(/\b(?:by|on|due|before|until|till|for) (?:the )?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))) { const us=!/^en-(gb|au|nz|ie|za|in)|^(?!en)/i.test(navigator.language||"en-US"); const mo=(us? +m[1] : +m[2])-1, day=us? +m[2] : +m[1]; const yr=m[3]? (+m[3]<100? 2000+ +m[3] : +m[3]) : 0; if (mo<12) { const r=md(mo, day, yr); if (r) return r; } }
+  if ((m=s.match(/\b(?:by|on|due|before) the (\d{1,2})(st|nd|rd|th)\b/))) { const day=+m[1]; let r=md(t.getMonth(), day); if (r && new Date(r+"T12:00")<new Date(t.getFullYear(), t.getMonth(), t.getDate())) r=""; return r || md((t.getMonth()+1)%12, day, t.getMonth()===11? t.getFullYear()+1 : 0); }
+  return "";
+}
+const smartUrgent = text => /\b(urgent(ly)?|asap|a\.s\.a\.p|right away|right now|immediately|emergency|critical|top priority)\b|!!!/i.test(String(text||""));
+// Who should do it: the one person @mentioned; or in a one-on-one chat, whoever was asked.
+function smartAssignee(msgs, ch){
+  const can=new Set(peopleForTasks({team:(curTeam()||{}).id||""}));
+  const ments=[...new Set(msgs.flatMap(m=>m.mentions||[]))].filter(u=>can.has(u));
+  if (ments.length===1) return ments[0];
+  if (ch && ch.kind==="dm") { const peer=(ch.members||[]).find(u=>u!==S.me); const who=msgs[0].by===S.me? peer : S.me; return who && can.has(who)? who : ""; }
+  return "";
+}
+function smartFields(msgs, ch){
+  const text=msgs.map(m=>plain(m)||"").join("\n");
+  const due=AUTO("dates")? smartDue(text) : "", priority=AUTO("dates") && smartUrgent(text)? "high" : "normal", assignee=AUTO("assign")? smartAssignee(msgs, ch) : "";
+  const bits=[]; if (due) bits.push("due "+fmtDue(due)); if (assignee) bits.push(assignee===S.me? "assigned to you" : "assigned to "+nameOf(assignee).replace(/^Example:\s*/,"").split(" ")[0]); if (priority==="high") bits.push("high priority");
+  return {due, priority, assignee, note:bits.join(" · ")};
+}
+// A task that repeats makes its next copy the moment it's done.
+const REPEATS=[["","Doesn't repeat"],["daily","Every day"],["weekdays","Every weekday"],["weekly","Every week"],["monthly","Every month"]];
+const repeatName = r => (REPEATS.find(x=>x[0]===r)||REPEATS[0])[1];
+function nextDue(due, rep){
+  const today=new Date(); today.setHours(12,0,0,0); let d=due? new Date(due+"T12:00") : new Date(today);
+  const step=()=>{ if (rep==="daily") d.setDate(d.getDate()+1); else if (rep==="weekdays") { do d.setDate(d.getDate()+1); while (d.getDay()===0 || d.getDay()===6); } else if (rep==="weekly") d.setDate(d.getDate()+7); else d.setMonth(d.getMonth()+1); };
+  step(); let guard=0; while (d<=today && guard++<800) step();
+  return isoLocal(d);
+}
+function afterDone(t){
+  if (!t) return;
+  if (t.repeat && REPEATS.some(r=>r[0]===t.repeat)) {
+    const due=nextDue(t.due, t.repeat), id="t"+now().toString(36)+uidShort().slice(0,3);
+    saveTaskFast(id, {title:t.title, notes:t.notes||"", status:STATUSES[0].id, assignee:t.assignee||"", due, priority:t.priority||"normal", repeat:t.repeat, channel:t.channel||"", team:t.team||"", createdBy:S.me, at:now(),
+      subtasks:(t.subtasks||[]).map(x=>({...x, done:false})), log:[{at:now(), by:S.me, what:"repeats ("+repeatName(t.repeat).toLowerCase()+") after CN-"+t.num}]});
+    setTimeout(()=>toast("Next one added for "+fmtDue(due), {label:"Open", fn:()=>openTask(id)}), 900);
+  }
+  const ch=t.channel && t.fromMsg && S.channels.find(c=>c.id===t.channel && (c.members||[]).includes(S.me));
+  if (ch && S.canWrite) {
+    const tell=()=>sendTextTo(ch.id, "✅ Done", {replyTo:t.fromMsg}).catch(()=>{});
+    if (AUTO("tellchat", false)) tell(); else if (!t.repeat) toast("CN-"+t.num+" marked done", {label:"Tell the chat", fn:tell});
+  }
+}
+// Once a day, when you open the app: what's due.
+let SUM_T=null;
+function dailySummary(){
+  if (!AUTO("summary") || SUM_T) return; const today=isoLocal(new Date()); if (ls.get("sumDay","")===today) return;
+  SUM_T=setTimeout(()=>{ SUM_T=null; if (ls.get("sumDay","")===today || document.querySelector(".scrim, #onboard")) return;
+    const mine=S.tasks.filter(t=>t.status!=="done" && t.due && canSeeTask(t) && (t.assignee===S.me || (!t.assignee && t.createdBy===S.me)));
+    const late=mine.filter(t=>t.due<today).length, due=mine.filter(t=>t.due===today).length; ls.set("sumDay", today);
+    if (!late && !due) return;
+    const parts=[]; if (due) parts.push(due+" task"+(due===1?"":"s")+" due today"); if (late) parts.push(late+" overdue");
+    toast(parts.join(" · "), {label:"View", fn:()=>{ S.view="board"; S.filter="me"; ls.set("view","board"); render(); }});
+  }, 3500);
+}
+
 // Keyboard stays up: tapping the buttons around the message box (plus, mic, task, reply bar, the plus menu,
 // tapping off the plus menu) must not take focus away from the box, or the iPhone drops the keyboard.
 document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (!a || a.id!=="composer") return;
@@ -4079,6 +4318,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 

@@ -2660,3 +2660,35 @@ html body .wa-av .mgi{display:none}
 /* invisible stand-in for the message box during a locked recording (keeps the keyboard open) */
 textarea.kbkeep{position:absolute!important;left:0;bottom:0;width:1px!important;height:1px!important;min-height:0!important;opacity:0!important;padding:0!important;border:0!important;resize:none;pointer-events:none;font-size:16px;caret-color:transparent;background:transparent;color:transparent}
 .compose .inner{position:relative}
+
+/* ===== WhatsApp parity pack ===== */
+/* unread count in the badge */
+html body .lineitem .badge.num{font:600 12.5px/20px var(--f-body)!important;min-width:20px!important;width:auto!important;height:20px!important;padding:0 6px!important;border-radius:10px!important;color:#fff!important;text-align:center}
+/* filter chips under the search box */
+.chatchips{margin:2px 16px 8px;padding:0}
+.chatchips .nchip{height:32px;padding:0 13px;font-size:14px}
+.chatchips .chipn{font-weight:600;opacity:.6;margin-left:2px}
+/* "3 unread messages" line */
+.unreaddiv{display:flex;justify-content:center;margin:12px -12px 10px;padding:5px 0;background:color-mix(in srgb,var(--surface) 62%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.unreaddiv span{font:600 12.5px var(--f-body);color:var(--muted);background:var(--surface);padding:4px 12px;border-radius:999px;box-shadow:0 1px 1px rgba(0,0,0,.05)}
+/* star next to the time */
+.mt .mstar{display:inline-flex;vertical-align:-1px;margin-right:3px}
+.mt .mstar svg.i{width:11px;height:11px;fill:currentColor;stroke:none}
+/* starred list */
+.starrow{align-items:flex-start!important;text-align:left}
+.starrow .startx{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;color:var(--ink);opacity:.85}
+.starrow .iconbtn svg.i{fill:#FFCC00;stroke:#FFCC00}
+.starrow .sval{flex:none;font-size:12px}
+/* message info */
+.infobub{background:var(--bubble-me,var(--cobalt));color:#fff;border-radius:16px;padding:10px 13px;margin:2px 0 14px;max-width:88%;margin-left:auto}
+.infobub .infotx{white-space:pre-wrap;word-break:break-word;font-size:15.5px;line-height:1.35}
+.infobub .infowhen{font-size:11.5px;opacity:.8;text-align:right;margin-top:4px}
+.infolab{display:flex;align-items:center;gap:6px}
+.infolab .tk svg.i{width:17px;height:17px}
+.infolab.read,.infolab .tk.read{color:#34B7F1}
+/* delete options */
+.delopts .srow{justify-content:center;text-align:center}
+.delopts .srow b{color:#FF3B30;font-weight:500}
+/* repeat chip in a task */
+.td2chip.rep.set{color:var(--cobalt)}
+.td2rep{color:var(--cobalt);padding:0 9px}
