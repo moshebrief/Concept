@@ -3054,3 +3054,27 @@ html body .drawer.td2 .td2notes{overflow:hidden;resize:none}
 .td2chip.tlchip span{font:600 14px var(--f-body);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tltag{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--f-body);color:var(--muted);max-width:110px;overflow:hidden;white-space:nowrap}
 .tltag .tldot{width:8px;height:8px}
+
+/* ===== Scheduled messages ===== */
+.schbar{display:flex;align-items:center;gap:8px;width:100%;margin:0 0 6px;padding:8px 12px;border:0;border-radius:14px;cursor:pointer;
+  background:var(--g-fill);-webkit-backdrop-filter:blur(18px) saturate(180%);backdrop-filter:blur(18px) saturate(180%);box-shadow:0 0 0 .5px var(--g-line);color:var(--ink);font:500 14px var(--f-body);text-align:left}
+.schbar svg.i{width:18px;height:18px;color:var(--cobalt);flex:none}
+.schbar svg.i:last-child{width:14px;height:14px;color:var(--muted);margin-left:auto}
+.schbar span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.schprev{display:flex;justify-content:flex-end;margin:2px 0 4px}
+.schbub{max-width:85%;padding:9px 13px;border-radius:18px;border-bottom-right-radius:6px;background:var(--cobalt);color:#fff;font-size:15.5px;line-height:1.35;white-space:pre-wrap;word-break:break-word;margin-left:auto}
+.schopts .srow .sval{font-size:13.5px;color:var(--muted)}
+.schcustom{display:flex;flex-direction:column;gap:10px}
+.schdt{font-size:16px}
+.schnote{display:block;text-align:center;margin:12px 0 0}
+.schnote svg.i{width:12px;height:12px;vertical-align:-1px}
+.schlist{display:flex;flex-direction:column;gap:12px}
+.schitem{background:var(--surface);border-radius:16px;padding:12px;box-shadow:0 0 0 .5px var(--rule);display:flex;flex-direction:column;gap:8px}
+.schwhen{display:flex;align-items:center;gap:6px;color:var(--muted);font:600 13px var(--f-body)}
+.schwhen svg.i{width:15px;height:15px;color:var(--cobalt)}
+.schacts{display:flex;gap:6px;flex-wrap:wrap}
+.schacts .ghost{font-size:14px;padding:6px 12px}
+.schacts .ghost.danger{color:#FF3B30}
+/* the send button lifted above its menu keeps its look */
+.lpm .sendbtn{background:var(--cobalt)!important;color:#fff!important;border-radius:50%!important;display:grid!important;place-items:center!important;border:0!important;box-shadow:0 4px 14px rgba(0,122,255,.35)!important}
+.lpm .sendbtn svg.i{stroke:#fff!important;color:#fff!important}

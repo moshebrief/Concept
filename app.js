@@ -205,7 +205,7 @@ function startDemo(msg){ S.mode="demo"; S.me="me"; demo.seed(); if (!S.active) S
 function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(h("span",{style:"width:9px;height:9px;background:var(--knot);transform:rotate(45deg);flex:none"}), h("span",{},t)); }
 
 function subscribeAll(){
-  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E(); startLinkedWatch();
+  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E(); startLinkedWatch(); loadSched();
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
   store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); profileSignal(rows); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
@@ -3797,6 +3797,7 @@ function renderComposer(c){
     return box;
   }
   inner.append(renderVoiceDraft());
+  { const sb=schedBar(c.id); if (sb) inner.append(sb); }
   if (S.statusReply) inner.append(h("div",{class:"replybar", "data-status":"1"}, svg(IC.reply), h("b",{},"Status"), h("span",{}, S.statusReply.text), h("button",{class:"iconbtn","aria-label":"Cancel", onclick:()=>{S.statusReply=null; render(true);}}, svg(IC.x))));
   const ta = h("textarea",{id:"composer", rows:"1", placeholder: S.asTask? "Task" : "Message", "aria-label":"Message",
     onfocus:()=>{ if (S.emojiOpen) { S.emojiOpen=false; const p=$(".emojipanel"); if (p) p.remove(); const b=$(".emobtn"); if (b) b.replaceChildren(svg(ICF.smile)); } },
@@ -3809,7 +3810,7 @@ function renderComposer(c){
       ta,
       h("button",{class:"inbtn emobtn", "aria-label":S.emojiOpen?"Keyboard":"Emoji", title:"Emoji", onmousedown:e=>e.preventDefault(), onclick:()=>{ S.emojiOpen=!S.emojiOpen; if (S.emojiOpen) { const t=$("#composer"); if (t) t.blur(); } render(true); if (!S.emojiOpen) setTimeout(()=>{ const t=$("#composer"); if (t) t.focus(); }); }}, svg(S.emojiOpen? ICF.kbd : ICF.smile)),
       S.editing? "" : h("button",{class:"inbtn knotbtn","aria-pressed":String(S.asTask), title:"Send this message and turn it into a task", onclick:()=>{S.asTask=!S.asTask; render(true); $("#composer").focus();}}, svg(IC.knot))),
-    h("button",{class:"sendbtn", "aria-label":S.editing?"Save edit":"Send", onmousedown:e=>e.preventDefault(), onclick:()=>{ const t=$("#composer"); const v=t.value; t.value=""; autoGrow(t); t.closest(".crow").classList.remove("has-text"); ls.set("draft:"+S.active,""); sendMessage(v); }}, svg(S.editing?IC.edit:IC.send)),
+    (b=>{ if (!S.editing) longPress(b, ()=>sendMenu(b)); return b; })(h("button",{class:"sendbtn", "aria-label":S.editing?"Save edit":"Send. Touch and hold to schedule", onmousedown:e=>e.preventDefault(), onclick:()=>{ const t=$("#composer"); const v=t.value; t.value=""; autoGrow(t); t.closest(".crow").classList.remove("has-text"); ls.set("draft:"+S.active,""); sendMessage(v); }}, svg(S.editing?IC.edit:IC.send))),
     S.editing? "" : h("button",{class:"micbtn", "aria-label":"Hold to record a voice note", title:"Hold to record", onpointerdown:micDown, onmousedown:e=>e.preventDefault(), oncontextmenu:e=>e.preventDefault(), onclick:e=>{ if (e.detail===0) startRec(); }}, svg(IC.mic))
   ));
   if (S.emojiOpen) inner.append(renderEmojiPanel());
@@ -5011,6 +5012,98 @@ function renderFiles(){
   if (S.canWrite) w.append(h("button",{class:"fab vfab", "aria-label":"Add to Files", title:"Add", onclick:()=>fsAddMenu()}, svg(IC.plus)));
   return w;
 }
+// ===================== Scheduled messages =====================
+// Hold the send button → "Schedule message" → pick a time. The message is locked (end-to-end encrypted) right
+// away and kept in your private folder on the server; at the time, the server puts it in the chat — even if
+// your phone is off. Each chat shows a "scheduled" bar where you can send now, change the time or delete.
+const ICK={clock:'<circle cx="12" cy="12" r="8.500"/><path d="M12 7.500V12l3 2"/>'};
+S.sched=[];
+const schedPath = id => `data/users/${S.me}/sched/${id}`;
+function loadSched(){ if (S.mode!=="live" || !DB) return;
+  store.sub("data/users/"+S.me+"/sched", async rows=>{ S.sched=rows.filter(r=>r && r.cid && r.msg).sort((a,b)=>a.sendAt-b.sendAt);
+    try { await decryptMany(S.sched.map(r=>r.msg.enc).filter(Boolean)); } catch {} scheduleRender(); }); }
+const schedFor = cid => (S.sched||[]).filter(r=>r.cid===cid);
+const schedText = r => { const t=plain(r.msg); return (t===null || t===false)? "Scheduled message" : (t || r.msg.text || ""); };
+function whenText(t){ const d=new Date(t), n=new Date(), tm=fmtTime(t); const y=new Date(n); y.setDate(n.getDate()+1);
+  if (d.toDateString()===n.toDateString()) return "Today at "+tm; if (d.toDateString()===y.toDateString()) return "Tomorrow at "+tm;
+  const days=(new Date(d.toDateString())-new Date(n.toDateString()))/864e5; if (days>0 && days<7) return d.toLocaleDateString([], {weekday:"long"})+" at "+tm;
+  return d.toLocaleDateString([], {month:"short", day:"numeric", ...(d.getFullYear()!==n.getFullYear()? {year:"numeric"} : {})})+" at "+tm; }
+// quick times, like WhatsApp Business / Gmail "schedule send"
+function schedChoices(){
+  const n=new Date(), at=(d,h,m=0)=>{ const x=new Date(n); x.setDate(x.getDate()+d); x.setHours(h,m,0,0); return x.getTime(); };
+  const out=[["In 1 hour", Date.now()+36e5]];
+  if (n.getHours()<17) out.push(["This evening", at(0,18)]); else if (n.getHours()<20) out.push(["Tonight", at(0,21)]);
+  out.push(["Tomorrow morning", at(1,9)], ["Tomorrow afternoon", at(1,14)]);
+  const dow=n.getDay(), toMon=((8-dow)%7)||7; if (toMon>1) out.push([dow===0? "Monday morning" : "Next Monday", at(toMon,9)]);
+  return out;
+}
+function sendMenu(btn){
+  const t=$("#composer"); const text=(t && t.value || "").trim();
+  if (!text || S.editing || !S.active) return;
+  ctxMenu(btn, [
+    {label:"Schedule message", icon:ICK.clock, fn:()=>openSchedule(text)},
+    {label:"Send now", icon:IC.send, fn:()=>btn.click()}], {align:"right", menuWidth:230});
+}
+function localInput(t){ const d=new Date(t); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function openSchedule(text, existing){
+  const cid=existing? existing.cid : S.active; let custom=existing? existing.sendAt : Date.now()+2*36e5; custom=Math.ceil(custom/3e5)*3e5;
+  sheet(existing? "Change time" : "Schedule message", (draw, close)=>{
+    const pick=async when=>{ if (when < Date.now()+30e3) { toast("Pick a time in the future"); return; } close();
+      if (existing) { await guarded(store.update(schedPath(existing.id), {sendAt:when})).catch(()=>{}); toast("Will send "+whenText(when).replace(/^\w/,c=>c.toLowerCase())); return; }
+      await scheduleText(cid, text, when); };
+    return [
+      h("div",{class:"schprev"}, h("div",{class:"schbub"}, text.length>300? text.slice(0,300)+"…" : text)),
+      h("div",{class:"ulist sgroup schopts"}, ...schedChoices().map(([label, when])=>h("button",{class:"srow pick", onclick:()=>pick(when)},
+        h("span",{class:"stx"}, h("b",{}, label)), h("small",{class:"sval"}, whenText(when))))),
+      h("div",{class:"seg-label"}, "Pick date and time"),
+      h("div",{class:"schcustom"},
+        h("input",{type:"datetime-local", class:"st-fnamein schdt", value:localInput(custom), min:localInput(Date.now()+6e4), onchange:e=>{ const v=new Date(e.target.value).getTime(); if (v) custom=v; const s=$("#schgo"); if (s) s.textContent="Schedule for "+whenText(custom); }}),
+        h("button",{class:"primary wide", id:"schgo", onclick:()=>pick(custom)}, "Schedule for "+whenText(custom))),
+      h("p",{class:"note schnote"}, svg(ICF.lock), " Sent at that time even if your phone is off. End-to-end encrypted.")];
+  });
+}
+async function scheduleText(cid, text, when){
+  const chn=S.channels.find(c=>c.id===cid)||{}; const members=chn.members||[S.me];
+  const extra={}; if (S.replyTo) extra.replyTo=S.replyTo;
+  const ments=(S.pendingMentions||[]).filter(mid=>members.includes(mid) && text.includes("@"+nameOf(mid).replace(/^Example:\s*/,"").split(" ")[0])); if (ments.length) extra.mentions=ments;
+  let env=null; if (await canSeal(members)) { try { env=(await seal(text, members)).env; } catch {} }
+  const msg = env? {by:S.me, text:"", enc:env, at:when, ...extra} : {by:S.me, text, at:when, ...extra};
+  const last = env? {enc:env, text:"", by:S.me} : {text:text.slice(0,120), by:S.me}; if (ments.length) last.mentions=ments;
+  const id="s"+now().toString(36)+uidShort().slice(0,4), mid=newMsgId();
+  const t=$("#composer"); if (t) { t.value=""; autoGrow(t); const r=t.closest(".crow"); if (r) r.classList.remove("has-text"); } ls.set("draft:"+cid, ""); S.replyTo=null; S.pendingMentions=[];
+  if (S.mode!=="live") { const r={id, cid, mid, sendAt:when, msg:{...msg, text}, last}; S.sched=[...(S.sched||[]), r].sort((a,b)=>a.sendAt-b.sendAt); render(true);
+    setTimeout(()=>{ if (!S.sched.some(x=>x.id===id)) return; S.sched=S.sched.filter(x=>x.id!==id); if (S.active===cid) addPending({id:mid, cid, by:S.me, at:now(), text}); scheduleRender(); }, Math.max(0, when-Date.now()));
+    toast("Scheduled for "+whenText(when)); return; }
+  try { await guarded(store.set(schedPath(id), {cid, mid, sendAt:when, msg, last, createdAt:now()})); haptic(); toast("Scheduled for "+whenText(when)); render(true); }
+  catch { if (t && !t.value) { t.value=text; t.dispatchEvent(new Event("input",{bubbles:true})); } toast("Couldn't schedule it. Check your connection."); }
+}
+async function sendSchedNow(r){
+  if (S.mode!=="live") { S.sched=S.sched.filter(x=>x.id!==r.id); addPending({id:r.mid, cid:r.cid, by:S.me, at:now(), text:schedText(r)}); render(true); return; }
+  try { await guarded(store.update(schedPath(r.id), {sendAt:now()-1000})); toast("Sending within a minute"); } catch { toast("Couldn't send it now."); }
+}
+async function deleteSched(r){
+  const keep={...r}; S.sched=S.sched.filter(x=>x.id!==r.id); render(true);
+  if (S.mode==="live") { try { await store.del(schedPath(r.id)); } catch { toast("Couldn't delete it."); return; } }
+  toast("Scheduled message deleted", {label:"Undo", fn:async()=>{ if (S.mode==="live") { const {id, ...d}=keep; await store.set(schedPath(id), d).catch(()=>{}); } else { S.sched=[...S.sched, keep].sort((a,b)=>a.sendAt-b.sendAt); render(true); } }});
+}
+function schedBar(cid){
+  const list=schedFor(cid); if (!list.length) return "";
+  return h("button",{class:"schbar", onclick:()=>openSchedList(cid)}, svg(ICK.clock),
+    h("span",{}, list.length===1? "1 scheduled message · "+whenText(list[0].sendAt) : list.length+" scheduled messages · next "+whenText(list[0].sendAt).replace(/^\w/,c=>c.toLowerCase())), svg(IC.arrow));
+}
+function openSchedList(cid){
+  sheet("Scheduled messages", (draw, close)=>{
+    const list=schedFor(cid);
+    if (!list.length) { setTimeout(close, 10); return []; }
+    return [h("div",{class:"schlist"}, list.map(r=>h("div",{class:"schitem"},
+      h("div",{class:"schwhen"}, svg(ICK.clock), whenText(r.sendAt)),
+      h("div",{class:"schbub"}, schedText(r)),
+      h("div",{class:"schacts"},
+        h("button",{class:"ghost", onclick:()=>{ close(); sendSchedNow(r); }}, "Send now"),
+        h("button",{class:"ghost", onclick:()=>{ close(); openSchedule(schedText(r), r); }}, "Change time"),
+        h("button",{class:"ghost danger", onclick:()=>{ deleteSched(r); setTimeout(draw, 50); }}, "Delete")))))];
+  });
+}
 // Keyboard stays up: tapping the buttons around the message box (plus, mic, task, reply bar, the plus menu,
 // tapping off the plus menu) must not take focus away from the box, or the iPhone drops the keyboard.
 document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (!a || a.id!=="composer") return;
@@ -5026,7 +5119,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
