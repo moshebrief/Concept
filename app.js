@@ -339,7 +339,8 @@ function navGo(dir, fn){
   }
   fn();
   const el=document.querySelector(dir==="fwd"? ".main.chatmain" : ".lines");
-  if (el && el.animate) el.animate(dir==="fwd"? [{transform:"translateX(18px)", opacity:0},{transform:"none", opacity:1}] : [{opacity:.4},{opacity:1}], {duration:230, easing:"cubic-bezier(.2,.8,.2,1)"});
+  // older phones without View Transitions: the same slide, done directly on the screen that comes in
+  if (el && el.animate) el.animate(dir==="fwd"? [{transform:"translateX(100%)"},{transform:"none"}] : [{transform:"translateX(-30%)", opacity:.85},{transform:"none", opacity:1}], {duration:dir==="fwd"? 380 : 340, easing:"cubic-bezier(.32,.72,0,1)"});
 }
 function selectChannel(id){ noteUnreadFrom(id); S.cfKeep=id; const wasIn=S.inThread && S.view==="chats"; S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true;
   if (wasIn) { render(); return; }

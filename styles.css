@@ -2200,15 +2200,18 @@ html[data-nav="back"]::view-transition-new(root){animation:vtInL .3s cubic-bezie
 @keyframes ncdown{to{transform:translateY(100%)}}
 @keyframes ncfade{from{background:rgba(0,0,0,0)}}
 @keyframes ncfadeout{to{background:rgba(0,0,0,0)}}
-/* lighter transition: a small drop-in, not a full slide */
-html[data-nav="fwd"]::view-transition-old(root){animation:vtFadeOut .2s ease both!important;box-shadow:none!important}
-html[data-nav="fwd"]::view-transition-new(root){animation:vtDropIn .24s cubic-bezier(.2,.8,.2,1) both!important;box-shadow:none!important}
-html[data-nav="back"]::view-transition-old(root){animation:vtDropOut .2s ease both!important;box-shadow:none!important}
-html[data-nav="back"]::view-transition-new(root){animation:vtFadeIn .22s ease both!important}
-@keyframes vtDropIn{from{transform:translateX(18px);opacity:0}to{transform:none;opacity:1}}
-@keyframes vtDropOut{to{transform:translateX(18px);opacity:0}}
-@keyframes vtFadeOut{to{opacity:.4}}
-@keyframes vtFadeIn{from{opacity:.4}}
+/* Opening a chat: it slides in from the right over the list, like WhatsApp and every iPhone app.
+   Going back: it slides away to the right and the list comes back from the left. */
+::view-transition-group(root){animation-duration:.38s}
+::view-transition-old(root),::view-transition-new(root){mix-blend-mode:normal}
+html[data-nav="fwd"]::view-transition-old(root){animation:vtOutL .38s cubic-bezier(.32,.72,0,1) both!important;z-index:1}
+html[data-nav="fwd"]::view-transition-new(root){animation:vtInR .38s cubic-bezier(.32,.72,0,1) both!important;z-index:2;box-shadow:-10px 0 28px rgba(0,0,0,.14)!important}
+html[data-nav="back"]::view-transition-old(root){animation:vtOutR .34s cubic-bezier(.32,.72,0,1) both!important;z-index:2;box-shadow:-10px 0 28px rgba(0,0,0,.14)!important}
+html[data-nav="back"]::view-transition-new(root){animation:vtInL .34s cubic-bezier(.32,.72,0,1) both!important;z-index:1}
+@keyframes vtInR{from{transform:translateX(100%)}to{transform:none}}
+@keyframes vtOutL{from{transform:none;filter:none}to{transform:translateX(-30%);filter:brightness(.9)}}
+@keyframes vtOutR{from{transform:none}to{transform:translateX(100%)}}
+@keyframes vtInL{from{transform:translateX(-30%);filter:brightness(.9)}to{transform:none;filter:none}}
 /* a sent message drops in softly from the composer; received ones fade up */
 .msg.mine.fresh .brow{animation:sendDrop .18s cubic-bezier(.2,.9,.3,1) both}
 .msg.mine.fresh{animation:none!important}
