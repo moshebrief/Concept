@@ -1848,28 +1848,55 @@ async function setWallpaperPhoto(){
       WP_IMG=data; WP_LOADING=true;
       const saved=await kvSet(wpKey(), data);
       if (saved) { try { localStorage.removeItem("concept:"+wpKey()); } catch {} } else ls.set(wpKey(), data);
-      WP_FADED=false; setPref("wp","photo"); const s=$("#wpsheet"); if (s) s.remove(); openWallpaper();
+      WP_FADED=false; setPref("wp","photo"); if (WP_REDRAW) WP_REDRAW();
       toast(saved? "Wallpaper set" : "Wallpaper set for now — this browser can't save it");
     } catch { toast("That photo couldn't be used."); } }});
   document.body.append(inp); inp.click();
 }
 function wallpaperLayer(main){
   const mode=wpMode(); main.classList.add("wp-"+(mode==="photo" && wpData()? "photo" : mode==="photo"? "tools" : mode));
+  if (mode==="color") main.classList.add("wpc-"+(S.prefs.wpColor||0));
   if (mode==="photo") { const d=wpData(); if (!d) return; const l=h("div",{class:"wplayer"+(WP_FADED?"":" fade"), style:`background-image:url("${wpURL(d)}");--wpdim:${S.prefs.wpDim??0}`}); WP_FADED=true; main.prepend(l); }
 }
+// Chat wallpaper, laid out like WhatsApp: a live preview of a chat on top, the choices below.
+// Tapping a choice changes it right there (the screen stays put) and the chat behind it changes too.
+const WP_COLORS=8; let WP_REDRAW=null;
 function openWallpaper(){
-  const scrim=h("div",{class:"scrim", id:"wpsheet", onclick:e=>{ if (e.target===scrim) scrim.remove(); }});
-  const d=wpData(); const m=wpMode();
-  const opt=(v, label, prev)=>h("button",{class:"wpopt", "aria-pressed":String(m===v), onclick:()=>{ if (v==="photo") { if (!d) { setWallpaperPhoto(); return; } } WP_FADED=v!=="photo"; setPref("wp",v); scrim.remove(); openWallpaper(); }}, prev, label);
-  scrim.append(h("div",{class:"modal wpsheet", role:"dialog", "aria-label":"Chat wallpaper"},
-    h("div",{class:"sheethead"}, h("b",{class:"sheettitle"},"Chat wallpaper"), h("span",{class:"grow"}), h("button",{class:"iconbtn","aria-label":"Close", title:"Close", onclick:()=>scrim.remove()}, svg(IC.x))),
-    h("div",{class:"wpopts"},
-      opt("tools","Tools", h("span",{class:"wpv tools"})),
-      opt("plain","Plain", h("span",{class:"wpv"})),
-      opt("photo","Photo", d? h("span",{class:"wpv photo", style:`background-image:url("${d}")`}) : h("span",{class:"wpv"}, svg(ICF.image)))),
-    m==="photo" && d? h("div",{class:"wpdimrow"}, svg(ICF.moon), h("input",{type:"range", min:"0", max:"0.7", step:"0.05", value:String(S.prefs.wpDim??0), "aria-label":"Dim photo", oninput:e=>{ S.prefs={...S.prefs, wpDim:+e.target.value}; ls.set("prefs",S.prefs); document.querySelectorAll(".wplayer").forEach(x=>x.style.setProperty("--wpdim", e.target.value)); }})) : "",
-    m==="photo"? h("button",{class:"ghost", style:"align-self:center", onclick:setWallpaperPhoto}, svg(ICF.image), "Choose another photo") : ""));
-  document.body.append(scrim);
+  sheet("Chat wallpaper", (draw)=>{
+    WP_REDRAW=draw;
+    const d=wpData(), m=wpMode(), col=S.prefs.wpColor||0, dim=S.prefs.wpDim??0;
+    const pick=(v, extra={})=>{ if (v==="photo" && !d) { setWallpaperPhoto(); return; } WP_FADED=true;
+      S.prefs={...S.prefs, wp:v, ...extra}; ls.set("prefs",S.prefs); applyPrefs(); render(true); haptic(); draw(); };
+    const on=(v, c)=>m===v && (c===undefined || c===col);
+    const tile=(v, label, inner, cls, extra, c)=>h("button",{class:"wptile "+(cls||""), "aria-pressed":String(on(v,c)), "aria-label":label, onclick:()=>pick(v, extra)},
+      inner||"", on(v,c)? h("span",{class:"wpcheck"}, svg(ICF.check)) : "");
+    // live preview
+    const bg = m==="photo" && d? h("div",{class:"wppbg photo", style:`background-image:url("${wpURL(d)}");--wpdim:${dim}`})
+             : h("div",{class:"wppbg "+(m==="color"? "wpc-"+col : m==="plain"? "plain" : "tools")});
+    const preview=h("div",{class:"wpprev", "aria-hidden":"true"}, bg,
+      h("div",{class:"wppchat"},
+        h("div",{class:"wppday"}, "Today"),
+        h("div",{class:"wppb them"}, "Hi! Did you see the new wallpaper?", h("span",{class:"wppt"}, "9:41")),
+        h("div",{class:"wppb me"}, "Looks great 👌", h("span",{class:"wppt"}, "9:42 ✓✓")),
+        h("div",{class:"wppb them"}, "Tap one below to try it", h("span",{class:"wppt"}, "9:42"))));
+    return [
+      preview,
+      h("div",{class:"seg-label"}, "Wallpapers"),
+      h("div",{class:"wpgrid"},
+        tile("tools", "Default", h("span",{class:"wpsw tools"}), "", {}, undefined),
+        tile("plain", "Plain", h("span",{class:"wpsw plain"}), "", {}, undefined),
+        h("button",{class:"wptile wpphoto", "aria-pressed":String(m==="photo" && !!d), "aria-label": d? "Your photo" : "Choose a photo", onclick:()=>pick("photo")},
+          d? h("span",{class:"wpsw", style:`background-image:url("${wpURL(d)}");background-size:cover;background-position:center`}) : h("span",{class:"wpsw add"}, svg(ICF.image), h("small",{}, "Photo")),
+          m==="photo" && d? h("span",{class:"wpcheck"}, svg(ICF.check)) : "")),
+      h("div",{class:"seg-label"}, "Solid colors"),
+      h("div",{class:"wpgrid colors"}, ...Array.from({length:WP_COLORS}, (_,i)=>tile("color", "Color "+(i+1), h("span",{class:"wpsw wpc-"+i}), "", {wpColor:i}, i))),
+      m==="photo" && d? h("div",{class:"ulist sgroup wpopts2"},
+        h("div",{class:"srow wpdim"}, h("span",{class:"stx"}, h("b",{}, "Dim the photo")), h("span",{class:"wpdimctl"}, svg('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/>'), h("input",{type:"range", min:"0", max:"0.7", step:"0.05", value:String(dim), "aria-label":"Dim the photo",
+          oninput:e=>{ const v=+e.target.value; S.prefs={...S.prefs, wpDim:v}; ls.set("prefs",S.prefs); document.querySelectorAll(".wplayer,.wppbg.photo").forEach(x=>x.style.setProperty("--wpdim", v)); }}), svg(ICF.moon))),
+        h("button",{class:"srow pick", onclick:setWallpaperPhoto}, h("span",{class:"stx"}, h("b",{class:"blue"}, "Choose another photo")))) : "",
+      h("p",{class:"note wpnote"}, "Applies to all your chats. Only you see it.")
+    ];
+  }, {onClose:()=>{ WP_REDRAW=null; }});
 }
 
 // ---------- Supabase connection ----------
@@ -4400,7 +4427,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 

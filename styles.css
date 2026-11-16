@@ -2755,3 +2755,48 @@ html body .main.chatmain .crow .micbtn.pressed svg.i{stroke:#fff!important;color
 .stream .msg.ingrp > .who{margin-left:12px}
 .stream .msg.ingrp.selmode{padding-left:72px}
 .stream .msg.ingrp.selmode > .mav{left:36px}
+
+/* ===== Chat wallpaper screen, like WhatsApp ===== */
+/* solid colors: each has a light and a dark version */
+:root{--wpc0:#DCEFE3;--wpc1:#D8E6F5;--wpc2:#EADCF2;--wpc3:#F6DDE3;--wpc4:#F7E6CF;--wpc5:#F2EFC9;--wpc6:#D5EEEC;--wpc7:#E2E4E8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--wpc0:#13261C;--wpc1:#14202F;--wpc2:#221A2C;--wpc3:#2B1A1F;--wpc4:#2C2216;--wpc5:#272515;--wpc6:#132826;--wpc7:#1C1E22}}
+:root[data-theme="dark"]{--wpc0:#13261C;--wpc1:#14202F;--wpc2:#221A2C;--wpc3:#2B1A1F;--wpc4:#2C2216;--wpc5:#272515;--wpc6:#132826;--wpc7:#1C1E22}
+.wpc-0{--wpcol:var(--wpc0)}.wpc-1{--wpcol:var(--wpc1)}.wpc-2{--wpcol:var(--wpc2)}.wpc-3{--wpcol:var(--wpc3)}.wpc-4{--wpcol:var(--wpc4)}.wpc-5{--wpcol:var(--wpc5)}.wpc-6{--wpcol:var(--wpc6)}.wpc-7{--wpcol:var(--wpc7)}
+html body .main.chatmain.wp-color{background-image:none!important;background-color:var(--wpcol)!important}
+/* live preview */
+.wpprev{position:relative;height:250px;border-radius:18px;overflow:hidden;margin:2px 0 6px;box-shadow:0 0 0 .5px var(--rule),0 6px 20px rgba(0,0,0,.08);flex:none}
+.wppbg{position:absolute;inset:0;background-color:var(--chatbg);transition:background-color .25s}
+.wppbg.tools{background-image:var(--wp-tools);background-size:190px 190px}
+.wppbg.plain{background-image:none}
+.wppbg[class*="wpc-"]{background-color:var(--wpcol)}
+.wppbg.photo{background-size:cover;background-position:center}
+.wppbg.photo::after{content:"";position:absolute;inset:0;background:var(--chatbg);opacity:var(--wpdim,0)}
+.wppchat{position:relative;display:flex;flex-direction:column;gap:6px;padding:16px 14px;height:100%;justify-content:flex-end}
+.wppday{align-self:center;font:600 11.5px var(--f-body);color:var(--muted);background:var(--surface);padding:3px 10px;border-radius:8px;margin-bottom:4px;box-shadow:0 1px 1px rgba(0,0,0,.05)}
+.wppb{max-width:74%;padding:7px 11px 6px;border-radius:16px;font-size:15px;line-height:1.3;display:flex;align-items:flex-end;gap:8px;box-shadow:0 1px 1px rgba(0,0,0,.06)}
+.wppb.them{align-self:flex-start;background:var(--surface);color:var(--ink);border-bottom-left-radius:5px}
+.wppb.me{align-self:flex-end;background:var(--cobalt);color:#fff;border-bottom-right-radius:5px}
+.wppt{font-size:10.5px;opacity:.6;white-space:nowrap;flex:none}
+/* choices */
+.wpgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.wpgrid.colors{grid-template-columns:repeat(4,1fr)}
+.wptile{position:relative;padding:0;border:0;background:none;border-radius:14px;-webkit-tap-highlight-color:transparent;transition:transform .15s cubic-bezier(.2,.9,.25,1)}
+.wptile:active{transform:scale(.95)}
+.wpsw{display:grid;place-items:center;align-content:center;gap:4px;width:100%;aspect-ratio:3/4;border-radius:14px;background-color:var(--chatbg);box-shadow:0 0 0 .5px var(--rule) inset;overflow:hidden;color:var(--muted)}
+.wpgrid.colors .wpsw{aspect-ratio:1}
+.wpsw.tools{background-image:var(--wp-tools);background-size:110px 110px}
+.wpsw[class*="wpc-"]{background-color:var(--wpcol)}
+.wpsw.add{background:var(--fill)}
+.wpsw.add svg.i{width:26px;height:26px;color:var(--cobalt)}
+.wpsw.add small{font:600 12px var(--f-body);color:var(--cobalt)}
+.wptile[aria-pressed="true"] .wpsw{box-shadow:0 0 0 2.5px var(--cobalt)}
+.wpcheck{position:absolute;right:6px;bottom:6px;width:22px;height:22px;border-radius:50%;background:var(--cobalt);display:grid;place-items:center;box-shadow:0 0 0 2px var(--surface);animation:wpck .22s cubic-bezier(.2,.9,.25,1.3) both}
+.wpcheck svg.i{width:13px;height:13px;stroke:#fff;stroke-width:3}
+@keyframes wpck{from{transform:scale(.3);opacity:0}}
+.wpopts2{margin-top:14px}
+.wpdim{display:flex;flex-direction:column;align-items:stretch!important;gap:8px;padding-top:12px!important;padding-bottom:12px!important}
+.wpdimctl{display:flex;align-items:center;gap:10px;color:var(--muted)}
+.wpdimctl svg.i{width:18px;height:18px;flex:none}
+.wpdimctl input{flex:1;accent-color:var(--cobalt)}
+b.blue{color:var(--cobalt);font-weight:400}
+.wpnote{text-align:center;margin:14px 0 4px}
