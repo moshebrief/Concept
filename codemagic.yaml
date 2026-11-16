@@ -124,10 +124,6 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.moshebrief.taskmessage
-      vars:
-        # Test builds go out as the NEXT version (e.g. 1.0.3 while 1.0.2 is with Apple), so Apple never
-        # refuses them because the current version is already in review or approved.
-        TESTFLIGHT_NEXT_VERSION: "1"
     publishing:
       email:
         recipients:
