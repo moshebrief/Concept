@@ -1603,6 +1603,7 @@ function holdMenu(m, src){
     task? {label:"Open task", icon:IC.knot, fn:()=>openTask(task.id)} : {label:"Make task", icon:IC.knot, fn:()=>quickTask([m], {open:(S.prefs.swipeTask||"open")!=="silent"})},
     task && canThread(task)? {label:"Task conversation", icon:IC.thread, fn:()=>openTaskChat(task)} : null,
     plain(m)? {label:"Save to Notes", icon:ICN.note, fn:()=>saveMsgToNotes(m)} : null,
+    !m.deleted && !m.pending? {label:"Save to Files", icon:ICS.folder, fn:()=>saveMsgToFiles(m)} : null,
     mine && !m.kind && plain(m)!==false? {label:"Edit", icon:IC.edit, fn:()=>{ S.editing=m.id; render(true); }} : null,
     mine && !m.pending? {label:"Info", icon:ICX.info, fn:()=>openMsgInfo(m)} : null,
     {label:"Select", icon:ICF.selm, fn:()=>{ S.selecting=true; S.sel=[m.id]; render(true); }},
@@ -3153,6 +3154,8 @@ async function buildBackup(withMedia, onp){
     }
     out.msgs[c.id]=list;
   }
+  try { await fsLoad(); const fm=FS_.meta; if (fm && (fm.items.length || fm.folders.length)) { onp && onp("Backing up Files"); out.store={meta:fm, blobs:{}};
+    if (withMedia) for (const it of fm.items) { try { const b=await kvGet(fsKey("fb:"+it.id)); if (b) out.store.blobs[it.id]=b64Of(b); } catch {} } } } catch {}
   onp && onp("Finishing…");
   const raw=await gz(new TextEncoder().encode(JSON.stringify(out)));
   const iv=crypto.getRandomValues(new Uint8Array(12));
@@ -3174,6 +3177,9 @@ async function restoreBackup(data){
   for (const [cid, list] of Object.entries(data.msgs||{})) { const merged=mergeById(list, (await LOCAL.load("m:"+cid))||[]); await kvSet(LOCAL.key("m:"+cid), merged.slice(-5000)); LOCAL.older[cid]=merged; n+=list.length; }
   for (const [vid, b64] of Object.entries(data.voice||{})) await kvSet(LOCAL.key("vd:"+vid), b64);
   for (const [path, b64] of Object.entries(data.files||{})) await kvSet(LOCAL.key("fd:"+path), fromB64(b64).buffer);
+  if (data.store && data.store.meta) { await fsLoad(); const cur=FS_.meta, have=new Set(cur.items.map(i=>i.id)), haveF=new Set(cur.folders.map(f=>f.id));
+    cur.folders.push(...(data.store.meta.folders||[]).filter(f=>!haveF.has(f.id))); cur.items.push(...(data.store.meta.items||[]).filter(i=>!have.has(i.id)));
+    for (const [id, b64] of Object.entries(data.store.blobs||{})) await kvSet(fsKey("fb:"+id), fromB64(b64).buffer); await fsSave(); }
   S.msgsFor=null; openMsgs(); render(true);
   return n;
 }
@@ -3587,6 +3593,7 @@ function render(keepComposer){
   else if (S.view==="calls") app.append(renderCalls());
   else if (S.view==="settings") app.append(renderSettings());
   else if (S.view==="notes") app.append(renderNotes());
+  else if (S.view==="files") app.append(renderFiles());
   else app.append(renderTeam());
   if (S.openTask) app.append(renderDrawer()); else LAST_DRAWER=null;
 
@@ -4645,6 +4652,284 @@ async function openLinkScanner(onDone){
   };
   raf=requestAnimationFrame(tick);
 }
+// ===================== Files: your own storage, kept on this phone =====================
+// Folders (inside folders too) holding anything: messages from any chat (text, photos, videos, voice
+// notes, documents, links, contacts, places) and files added straight from the phone. Nothing is uploaded:
+// everything stays on this device, like your chats, and goes into the encrypted backup.
+const ICS={
+  folder:'<path d="M3.5 7.2A1.700 1.700 0 0 1 5.200 5.500h4.100l1.900 2h7.600a1.700 1.700 0 0 1 1.700 1.700v8.600a1.700 1.700 0 0 1-1.700 1.700H5.200a1.700 1.700 0 0 1-1.700-1.700z"/>',
+  folderFill:'<path d="M3 7a2 2 0 0 1 2-2h4.300l2 2.200H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" stroke="none"/>',
+  doc:'<path d="M7 3.500h6.500L18 8v12.500H7z"/><path d="M13.500 3.500V8H18"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.700.3l3-3a4 4 0 0 0-5.700-5.700l-1.200 1.200"/><path d="M14 10a4 4 0 0 0-5.700-.3l-3 3a4 4 0 0 0 5.700 5.700l1.200-1.200"/>',
+  text:'<path d="M5 6.500h14M5 11h14M5 15.500h9"/>',
+  audio:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.500 11a6.500 6.500 0 0 0 13 0M12 17.500V21"/>',
+  video:'<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.500l5-3v9l-5-3z"/>',
+  image:'<rect x="3.500" y="4.500" width="17" height="15" rx="2.500"/><circle cx="9" cy="10" r="1.700"/><path d="M20.500 16l-5-5-8.500 8.500"/>',
+  pin:'<path d="M12 21s-6.500-5.700-6.500-11a6.500 6.500 0 0 1 13 0C18.500 15.300 12 21 12 21z"/><circle cx="12" cy="10" r="2.300"/>',
+  person:'<circle cx="12" cy="8.500" r="3.500"/><path d="M5 20c.8-3.800 3.600-5.800 7-5.800s6.200 2 7 5.800"/>',
+  move:'<path d="M3.500 7.200a1.700 1.700 0 0 1 1.700-1.700h4.100l1.900 2h7.600a1.700 1.700 0 0 1 1.700 1.700v8.600a1.700 1.700 0 0 1-1.700 1.700H5.200a1.700 1.700 0 0 1-1.700-1.700z"/><path d="M10 13.500h6M13.500 11l2.500 2.500-2.500 2.500"/>',
+  sort:'<path d="M7 5v14M4 16l3 3 3-3M17 19V5M14 8l3-3 3 3"/>',
+  grid:'<rect x="4" y="4" width="7" height="7" rx="1.500"/><rect x="13" y="4" width="7" height="7" rx="1.500"/><rect x="4" y="13" width="7" height="7" rx="1.500"/><rect x="13" y="13" width="7" height="7" rx="1.500"/>',
+  rows:'<path d="M4 6.500h16M4 12h16M4 17.500h16"/>',
+};
+const FOLDER_COLORS=["#007AFF","#34C759","#FF9500","#FF3B30","#AF52DE","#FF2D55","#5AC8FA","#8E8E93"];
+const FKINDS=[["all","All"],["image","Photos"],["video","Videos"],["file","Documents"],["audio","Voice"],["link","Links"],["text","Text"]];
+const FS_={meta:null, urls:{}, loading:null};
+const fsKey = k => S.mode==="live"? LOCAL.key(k) : "demo:"+k;
+async function fsLoad(){
+  if (FS_.meta) return FS_.meta;
+  if (FS_.loading) return FS_.loading;
+  return FS_.loading=(async()=>{
+    let m=null; try { m=await kvGet(fsKey("files:meta")); } catch {}
+    if (!m && S.mode!=="live") m=fsDemo();
+    FS_.meta=m||{folders:[], items:[]}; FS_.loading=null; return FS_.meta;
+  })();
+}
+function fsDemo(){
+  const t=now(), d=864e5;
+  return {folders:[{id:"fd1", name:"Clients", color:"#007AFF", parent:null, at:t-9*d},{id:"fd2", name:"Receipts", color:"#34C759", parent:null, at:t-6*d},{id:"fd3", name:"Ideas", color:"#FF9500", parent:null, at:t-3*d},{id:"fd4", name:"Acme Corp", color:"#AF52DE", parent:"fd1", at:t-2*d}],
+    items:[{id:"fi1", folder:"fd1", kind:"text", title:"Kickoff notes", text:"Kickoff call Tuesday 10am. Bring the pricing sheet and the new logo options.", at:t-5*d, from:{chat:"Launch week", by:"noam"}},
+      {id:"fi2", folder:"fd3", kind:"link", title:"apple.com/design", text:"https://developer.apple.com/design/", at:t-2*d, from:{chat:"Ava", by:"ava"}},
+      {id:"fi3", folder:null, kind:"text", title:"Wi-Fi at the office", text:"Network: Studio-5G\nPassword: on the fridge", at:t-1*d},
+      {id:"fi4", folder:"fd2", kind:"text", title:"Paid the printer — $240", text:"Paid the printer — $240 (invoice 1182)", at:t-4*d, from:{chat:"Lea", by:"lea"}}]};
+}
+async function fsSave(){ const m=FS_.meta; if (!m) return; try { await kvSet(fsKey("files:meta"), m); } catch {} }
+async function fsBlobPut(id, blob){ const buf=await blob.arrayBuffer(); await kvSet(fsKey("fb:"+id), buf); }
+async function fsUrl(it){
+  if (FS_.urls[it.id]) return FS_.urls[it.id];
+  const buf=await kvGet(fsKey("fb:"+it.id)); if (!buf) throw new Error("missing");
+  return FS_.urls[it.id]=URL.createObjectURL(new Blob([buf], {type:it.mime||"application/octet-stream"}));
+}
+async function makeThumb(blob){ try { const u=URL.createObjectURL(blob); const img=new Image(); img.src=u; await img.decode(); const s=Math.min(1, 240/Math.max(img.naturalWidth, img.naturalHeight)); const c=document.createElement("canvas"); c.width=Math.max(1,Math.round(img.naturalWidth*s)); c.height=Math.max(1,Math.round(img.naturalHeight*s)); c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(u); return c.toDataURL("image/jpeg",.72); } catch { return ""; } }
+const fsKindOf = mime => /^image\//.test(mime)? "image" : /^video\//.test(mime)? "video" : /^audio\//.test(mime)? "audio" : "file";
+const fsEsc = t => String(t).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+const URL_RX=/^(https?:\/\/|www\.)\S+$/i;
+async function fsAdd(item, blob){
+  const m=await fsLoad(); const it={id:"fi"+now().toString(36)+uidShort().slice(0,3), at:now(), folder:null, ...item};
+  if (blob) { await fsBlobPut(it.id, blob); it.size=blob.size; it.mime=it.mime||blob.type; if (it.kind==="image") it.thumb=await makeThumb(blob); }
+  m.items.push(it); await fsSave(); return it;
+}
+const fsFolder = id => (FS_.meta&&FS_.meta.folders||[]).find(f=>f.id===id);
+function fsPathName(id){ const parts=[]; let f=fsFolder(id), g=0; while (f && g++<20) { parts.unshift(f.name); f=fsFolder(f.parent); } return parts.join(" › ") || "Files"; }
+function fsDescendants(id){ const out=new Set([id]); let grew=true; while (grew) { grew=false; for (const f of FS_.meta.folders) if (out.has(f.parent) && !out.has(f.id)) { out.add(f.id); grew=true; } } return out; }
+const fsCount = id => { const ds=fsDescendants(id); return FS_.meta.items.filter(i=>ds.has(i.folder)).length; };
+function fsIcon(it){ return it.kind==="image"? ICS.image : it.kind==="video"? ICS.video : it.kind==="audio"? ICS.audio : it.kind==="link"? ICS.link : it.kind==="text"? ICS.text : it.kind==="contact"? ICS.person : it.kind==="location"? ICS.pin : ICS.doc; }
+const fsKindName = k => ({image:"Photo", video:"Video", audio:"Voice note", link:"Link", text:"Text", contact:"Contact", location:"Location", file:"Document"})[k]||"File";
+const fsTint = k => ({image:"#34C759", video:"#FF2D55", audio:"#FF9500", link:"#5856D6", text:"#8E8E93", contact:"#007AFF", location:"#FF3B30", file:"#007AFF"})[k]||"#8E8E93";
+
+// ---- saving a message ----
+async function msgToItems(m){
+  const from={cid:S.active, mid:m.id, by:m.by, chat:chanTitle(S.channels.find(c=>c.id===S.active))};
+  const cap=plain(m)||"";
+  if (m.kind==="voice" && m.voice) { const url=await voiceUrl(m.voice, m.enc); const blob=await (await fetch(url)).blob(); return [{item:{kind:"audio", title:"Voice note ("+fmtDur(m.voice.dur)+")", text:cap, dur:m.voice.dur, mime:m.voice.mime||blob.type, from}, blob}]; }
+  if (m.kind==="media") { const pl=plainP(m); const out=[];
+    for (const it of (pl&&pl.items)||[]) { const url=await ensureMedia(it); const blob=await (await fetch(url)).blob(); const kind=it.t==="video"? "video" : it.t==="file"? fsKindOf(it.mime||blob.type)==="image"? "image" : "file" : "image";
+      out.push({item:{kind, title:it.name||(kind==="video"? "Video" : kind==="image"? "Photo" : "Document"), name:it.name||"", text:cap, mime:it.mime||blob.type, from}, blob}); }
+    return out; }
+  if (m.kind==="contact") { const p=plainP(m)||{}; const phones=(p.phones||p.p||[]).map(x=>x.n||x.number||x).filter(Boolean); return [{item:{kind:"contact", title:p.name||p.n||"Contact", text:[p.name||p.n, ...phones].filter(Boolean).join("\n"), from}}]; }
+  if (m.kind==="location") { const p=plainP(m)||{}; return [{item:{kind:"location", title:"Location", text:`https://maps.apple.com/?ll=${p.lat},${p.lng}`, lat:p.lat, lng:p.lng, from}}]; }
+  const t=cap.trim(); if (!t) return [];
+  const isLink=URL_RX.test(t);
+  return [{item:{kind:isLink? "link" : "text", title:isLink? t.replace(/^https?:\/\//,"").slice(0,60) : t.split("\n")[0].slice(0,80), text:t, from}}];
+}
+function saveMsgToFiles(msgs){
+  msgs=[msgs].flat().filter(Boolean);
+  pickFolder("Save to Files", async (folder)=>{
+    toast("Saving…");
+    try {
+      let n=0; await fsLoad();
+      for (const m of msgs) for (const {item, blob} of await msgToItems(m)) { await fsAdd({...item, folder}, blob); n++; }
+      if (!n) { toast("Nothing to save in this message"); return; }
+      haptic(); toast((n>1? n+" items" : "Saved")+" to "+(folder? fsFolder(folder).name : "Files"), {label:"Open", fn:()=>{ S.view="files"; S.fdir=folder; S.inThread=false; ls.set("view","files"); render(); }});
+      if (S.view==="files") render();
+    } catch { toast("Couldn't save it. Open the message first so it finishes loading, then try again."); }
+  });
+}
+// pick (or make) a folder
+function pickFolder(title, done, opts={}){
+  fsLoad().then(()=>sheet(title, (draw, close)=>{
+    const m=FS_.meta, skip=opts.skip? fsDescendants(opts.skip) : null;
+    const rows=[]; const walk=(pid, depth)=>{ for (const f of m.folders.filter(f=>f.parent===pid).sort((a,b)=>a.name.localeCompare(b.name))) { if (skip && skip.has(f.id)) continue; rows.push([f, depth]); walk(f.id, depth+1); } }; walk(null, 0);
+    return [h("div",{class:"ulist sgroup st-fpick"},
+      h("button",{class:"srow pick", onclick:()=>{ close(); done(null); }}, h("span",{class:"st-fpic", style:"color:var(--muted)"}, svg(ICS.folderFill)), h("span",{class:"stx"}, h("b",{}, "Files")), h("small",{class:"sval"}, "Main")),
+      ...rows.map(([f,depth])=>h("button",{class:"srow pick", onclick:()=>{ close(); done(f.id); }}, h("span",{class:"st-fpic", style:`color:${f.color};margin-left:${depth*24}px`}, svg(ICS.folderFill)), h("span",{class:"stx"}, h("b",{}, f.name)), h("small",{class:"sval"}, String(fsCount(f.id))))),
+      h("button",{class:"srow pick st-fnew", onclick:()=>{ close(); newFolder(opts.inside||null, f=>done(f.id)); }}, h("span",{class:"st-fpic", style:"color:var(--cobalt)"}, svg(IC.plus)), h("span",{class:"stx"}, h("b",{class:"blue"}, "New folder"))))];
+  }));
+}
+function newFolder(parent, after){
+  let name="", color=FOLDER_COLORS[(FS_.meta? FS_.meta.folders.length : 0)%FOLDER_COLORS.length];
+  sheet("New folder", (draw, close)=>{
+    const go=async()=>{ if (!name.trim()) return; await fsLoad(); const f={id:"fd"+now().toString(36)+uidShort().slice(0,3), name:name.trim().slice(0,60), color, parent:parent||null, at:now()}; FS_.meta.folders.push(f); await fsSave(); close(); haptic(); if (after) after(f); else render(); };
+    return [
+      h("div",{class:"st-fnewpreview"}, h("span",{style:`color:${color}`}, svg(ICS.folderFill))),
+      h("input",{class:"st-fnamein", id:"fname", placeholder:"Folder name", maxlength:"60", value:name, autocomplete:"off", oninput:e=>{ name=e.target.value; const b=$("#fcreate"); if (b) b.disabled=!name.trim(); }, onkeydown:e=>{ if (e.key==="Enter") go(); }}),
+      h("div",{class:"st-fcolors", role:"radiogroup", "aria-label":"Folder color"}, FOLDER_COLORS.map(c=>h("button",{class:"st-fcolor", role:"radio", "aria-checked":String(c===color), "aria-label":"Color", style:`--c:${c}`, onclick:()=>{ color=c; draw(); setTimeout(()=>{ const i=$("#fname"); if (i) { i.focus(); i.setSelectionRange(name.length,name.length); } },10); }}))),
+      parent? h("p",{class:"note", style:"text-align:center;margin:0"}, "Inside "+fsPathName(parent)) : "",
+      h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary", id:"fcreate", disabled:!name.trim(), onclick:go}, "Create"))];
+  });
+  setTimeout(()=>{ const i=$("#fname"); if (i) i.focus(); }, 320);
+}
+function renameThing(kind, obj){
+  let v=kind==="folder"? obj.name : obj.title;
+  sheet(kind==="folder"? "Rename folder" : "Rename", (draw, close)=>{
+    const go=async()=>{ if (!v.trim()) return; if (kind==="folder") obj.name=v.trim().slice(0,60); else obj.title=v.trim().slice(0,120); await fsSave(); close(); render(); };
+    return [h("input",{class:"st-fnamein", id:"frename", value:v, maxlength:kind==="folder"?"60":"120", oninput:e=>v=e.target.value, onkeydown:e=>{ if (e.key==="Enter") go(); }}),
+      h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary", onclick:go}, "Save"))];
+  });
+  setTimeout(()=>{ const i=$("#frename"); if (i) { i.focus(); i.select(); } }, 320);
+}
+function folderColor(f){
+  sheet("Folder color", (draw, close)=>[h("div",{class:"st-fcolors big"}, FOLDER_COLORS.map(c=>h("button",{class:"st-fcolor", "aria-checked":String(c===f.color), "aria-label":"Color", style:`--c:${c}`, onclick:async()=>{ f.color=c; await fsSave(); close(); render(); }})))]);
+}
+async function deleteFolder(f){
+  const ds=fsDescendants(f.id), items=FS_.meta.items.filter(i=>ds.has(i.folder)), subs=FS_.meta.folders.filter(x=>ds.has(x.id));
+  const doIt=async()=>{ FS_.meta.folders=FS_.meta.folders.filter(x=>!ds.has(x.id)); FS_.meta.items=FS_.meta.items.filter(i=>!ds.has(i.folder)); await fsSave(); if (ds.has(S.fdir)) S.fdir=f.parent||null; render();
+    let undone=false; toast("Folder deleted", {label:"Undo", fn:async()=>{ undone=true; FS_.meta.folders.push(...subs); FS_.meta.items.push(...items); await fsSave(); render(); }});
+    setTimeout(()=>{ if (!undone) kvDel(items.map(i=>fsKey("fb:"+i.id))); }, 6000); };
+  if (!items.length && subs.length===1) { doIt(); return; }
+  sheet("Delete “"+f.name+"”?", (draw, close)=>[
+    h("p",{class:"note", style:"margin:0 4px 6px"}, "This deletes the folder and the "+items.length+" item"+(items.length===1?"":"s")+" in it from this phone."),
+    h("div",{class:"ulist sgroup delopts"}, h("button",{class:"srow pick dangerrow", onclick:()=>{ close(); doIt(); }}, h("span",{class:"stx"}, h("b",{}, "Delete folder")))),
+    h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"))]);
+}
+async function deleteItems(ids){
+  const set=new Set(ids), gone=FS_.meta.items.filter(i=>set.has(i.id)); FS_.meta.items=FS_.meta.items.filter(i=>!set.has(i.id)); await fsSave(); render();
+  let undone=false; toast(gone.length>1? gone.length+" items deleted" : "Deleted", {label:"Undo", fn:async()=>{ undone=true; FS_.meta.items.push(...gone); await fsSave(); render(); }});
+  setTimeout(()=>{ if (!undone) { kvDel(gone.map(i=>fsKey("fb:"+i.id))); gone.forEach(i=>{ if (FS_.urls[i.id]) { URL.revokeObjectURL(FS_.urls[i.id]); delete FS_.urls[i.id]; } }); } }, 6000);
+}
+function moveItems(ids){ pickFolder("Move to", async folder=>{ for (const i of FS_.meta.items) if (ids.includes(i.id)) i.folder=folder; await fsSave(); haptic(); toast("Moved to "+(folder? fsFolder(folder).name : "Files")); render(); }); }
+function moveFolder(f){ pickFolder("Move “"+f.name+"” to", async parent=>{ f.parent=parent; await fsSave(); toast("Moved"); render(); }, {skip:f.id}); }
+
+// ---- adding from the phone ----
+function fsAddFromPhone(accept){
+  const inp=h("input",{type:"file", multiple:true, accept:accept||"", hidden:true, onchange:async e=>{ const fs=[...(e.target.files||[])]; inp.remove(); if (!fs.length) return; toast("Adding…");
+    let n=0; for (const f of fs) { try { const kind=fsKindOf(f.type); await fsAdd({kind, title:f.name||fsKindName(kind), name:f.name||"", mime:f.type||"application/octet-stream", folder:S.fdir||null}, f); n++; } catch {} }
+    haptic(); toast(n===1? "Added" : n+" items added"); render(); }});
+  document.body.append(inp); inp.click();
+}
+function fsNewText(){
+  let v="";
+  sheet("New text", (draw, close)=>{
+    const go=async()=>{ const t=v.trim(); if (!t) return; const link=URL_RX.test(t); await fsAdd({kind:link? "link":"text", title:link? t.replace(/^https?:\/\//,"").slice(0,60) : t.split("\n")[0].slice(0,80), text:t, folder:S.fdir||null}); close(); haptic(); render(); };
+    return [h("textarea",{class:"st-fnamein st-ftext", id:"ftext", rows:"6", placeholder:"Write or paste anything: a note, a link, a code…", oninput:e=>v=e.target.value}),
+      navigator.clipboard && navigator.clipboard.readText? h("button",{class:"oblink", style:"align-self:flex-start", onclick:async()=>{ try { v=await navigator.clipboard.readText(); const t=$("#ftext"); if (t) t.value=v; } catch { toast("Allow pasting, or long-press the box and tap Paste"); } }}, "Paste from clipboard") : "",
+      h("div",{class:"modalacts"}, h("button",{class:"ghost", onclick:close}, "Cancel"), h("button",{class:"primary", onclick:go}, "Save"))];
+  });
+  setTimeout(()=>{ const t=$("#ftext"); if (t) t.focus(); }, 320);
+}
+function fsAddMenu(){
+  const row=(icon, tint, label, sub, fn)=>h("button",{class:"srow pick st-faddrow", onclick:()=>{ close(); setTimeout(fn, 60); }}, h("span",{class:"sic", style:`background:${tint}`}, svg(icon)), h("span",{class:"stx"}, h("b",{}, label), h("small",{}, sub)));
+  let close=()=>{};
+  sheet(S.fdir? "Add to "+fsFolder(S.fdir).name : "Add to Files", (draw, c)=>{ close=c; return [h("div",{class:"ulist sgroup"},
+    row(ICS.folder, "#007AFF", "New folder", S.fdir? "Inside "+fsFolder(S.fdir).name : "Organize what you save", ()=>newFolder(S.fdir||null)),
+    row(ICS.image, "#34C759", "Photos and videos", "From your photo library", ()=>fsAddFromPhone("image/*,video/*")),
+    row(ICS.doc, "#5856D6", "Documents", "PDFs, files and more", ()=>fsAddFromPhone("")),
+    row(ICS.text, "#FF9500", "Text or link", "Write or paste anything", fsNewText))]; });
+}
+// ---- opening, sharing ----
+async function fsShare(it){
+  try {
+    if (!["image","video","audio","file"].includes(it.kind)) { const t=it.text||it.title; if (navigator.share) await navigator.share({text:t}); else { await navigator.clipboard.writeText(t); toast("Copied"); } return; }
+    const url=await fsUrl(it); const blob=await (await fetch(url)).blob(); const name=it.name||((it.title||"file").replace(/[\\/:*?"<>|]/g,"")+"."+((it.mime||"").split("/")[1]||"bin").replace("jpeg","jpg").replace(/;.*/,""));
+    const FS=NP("Filesystem"), SH=NP("Share");
+    if (FS && SH) { const w=await FS.writeFile({path:name, data:b64Of(await blob.arrayBuffer()), directory:"CACHE"}); await SH.share({files:[w.uri]}); return; }
+    const f=new File([blob], name, {type:blob.type}); if (navigator.canShare && navigator.canShare({files:[f]})) { await navigator.share({files:[f]}); return; }
+    const a=h("a",{href:url, download:name}); document.body.append(a); a.click(); a.remove();
+  } catch (e) { if (!/abort|cancel/i.test(String(e && (e.name||e.message||e)))) toast("Couldn't share this."); }
+}
+async function fsOpen(it){
+  if (it.kind==="image" || it.kind==="video") { try { const url=await fsUrl(it); openViewer([{t:it.kind, local:url, mime:it.mime, name:it.name}], 0, it.text||""); } catch { toast("This file is missing from this phone."); } return; }
+  if (it.kind==="link") { const u=/^https?:/i.test(it.text)? it.text : "https://"+it.text; window.open(u, "_blank", "noopener"); return; }
+  sheet(it.title||fsKindName(it.kind), (draw, close)=>{
+    const body=[];
+    if (it.kind==="audio") { const a=h("audio",{controls:"", class:"st-faudio", preload:"metadata"}); fsUrl(it).then(u=>{ a.src=u; }).catch(()=>toast("This voice note is missing from this phone.")); body.push(a); if (it.text) body.push(h("p",{class:"st-ftxt"}, it.text)); }
+    else if (it.kind==="file") { body.push(h("div",{class:"st-ffilecard"}, h("span",{class:"st-ffileic"}, svg(ICS.doc), h("b",{}, ((it.name||"").split(".").pop()||"").slice(0,4).toUpperCase())), h("div",{}, h("b",{}, it.name||it.title), h("small",{}, [fsKindName(it.kind), it.size? fmtSize(it.size):""].filter(Boolean).join(" · ")))), h("button",{class:"primary wide", onclick:async()=>{ try { const u=await fsUrl(it); const a=h("a",{href:u, download:it.name||"file", target:"_blank", rel:"noopener"}); document.body.append(a); a.click(); a.remove(); } catch { toast("This file is missing from this phone."); } }}, "Open")); }
+    else body.push(h("p",{class:"st-ftxt", html:fsEsc(it.text||"").replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>').replace(/\n/g,"<br>")}));
+    if (it.from) body.push(h("p",{class:"note st-ffrom"}, "From "+(it.from.chat||"a chat")+(it.from.by? " · "+(it.from.by===S.me? "you" : nameOf(it.from.by).replace(/^Example:\s*/,"")) : "")+" · saved "+fmtDay(it.at).toLowerCase()));
+    body.push(h("div",{class:"modalacts st-fopenacts"},
+      it.text && it.kind!=="file"? h("button",{class:"ghost", onclick:async()=>{ try { await navigator.clipboard.writeText(it.text); toast("Copied"); } catch {} }}, "Copy") : "",
+      h("button",{class:"ghost", onclick:()=>fsShare(it)}, "Share"),
+      it.from && it.from.cid && S.channels.some(c=>c.id===it.from.cid)? h("button",{class:"ghost", onclick:()=>{ close(); S.view="chats"; ls.set("view","chats"); jumpToMessage(it.from.cid, it.from.mid); }}, "Show in chat") : ""));
+    return body;
+  });
+}
+function itemMenu(it, src){
+  ctxMenu(src, [
+    {label:"Open", icon:ICN.note||ICS.doc, fn:()=>fsOpen(it)},
+    {label:"Share", icon:ICN.share||ICS.link, fn:()=>fsShare(it)},
+    {label:"Move to…", icon:ICS.move, fn:()=>moveItems([it.id])},
+    {label:"Rename", icon:IC.edit, fn:()=>renameThing("item", it)},
+    it.from && it.from.cid && S.channels.some(c=>c.id===it.from.cid)? {label:"Show in chat", icon:IC.chat, fn:()=>{ S.view="chats"; ls.set("view","chats"); jumpToMessage(it.from.cid, it.from.mid); }} : null,
+    {label:"Delete", icon:IC.trash, danger:true, fn:()=>deleteItems([it.id])}].filter(Boolean), {align:"left", menuWidth:230});
+}
+function folderMenu(f, src){
+  ctxMenu(src, [
+    {label:"Rename", icon:IC.edit, fn:()=>renameThing("folder", f)},
+    {label:"Color", icon:'<circle cx="12" cy="12" r="8.500"/><circle cx="12" cy="12" r="3.500" fill="currentColor"/>', fn:()=>folderColor(f)},
+    {label:"Move to…", icon:ICS.move, fn:()=>moveFolder(f)},
+    {label:"New folder inside", icon:ICS.folder, fn:()=>newFolder(f.id)},
+    {label:"Delete folder", icon:IC.trash, danger:true, fn:()=>deleteFolder(f)}], {align:"left", menuWidth:230});
+}
+
+// ---- the Files screen ----
+function renderFiles(){
+  if (S.fgrid===undefined) S.fgrid=!!ls.get("fgrid", false);
+  const w=h("section",{class:"teamwrap st-fileswrap"});
+  if (!FS_.meta) { fsLoad().then(()=>{ if (S.view==="files") render(); }); w.append(h("div",{class:"empty", style:"margin-top:80px"}, h("span",{class:"spin"}))); return w; }
+  const m=FS_.meta, dir=S.fdir && fsFolder(S.fdir)? S.fdir : (S.fdir=null), q=(S.fq||"").trim().toLowerCase(), kind=S.fk||"all";
+  const here=dir? fsFolder(dir) : null;
+  const inScope = dir? fsDescendants(dir) : null;
+  // header
+  const head = here
+    ? h("header",{class:"st-fhead sub"},
+        h("button",{class:"pageback", "aria-label":"Back", onclick:()=>{ S.fdir=here.parent||null; S.fq=""; render(); }}, svg(IC.back)),
+        h("div",{class:"st-fhtitle"}, h("span",{class:"st-fhfold", style:`color:${here.color}`}, svg(ICS.folderFill)), h("h1",{}, here.name)),
+        h("button",{class:"iconbtn st-fmore", "aria-label":"Folder options", onclick:e=>folderMenu(here, e.currentTarget)}, svg('<circle cx="5.500" cy="12" r="1.600" fill="currentColor"/><circle cx="12" cy="12" r="1.600" fill="currentColor"/><circle cx="18.500" cy="12" r="1.600" fill="currentColor"/>')))
+    : h("header",{class:"toprow"}, h("h1",{class:"h1"}, "Files"), h("span",{class:"grow"}),
+        h("button",{class:"iconbtn st-fview", "aria-label":S.fgrid? "Show as list" : "Show as grid", onclick:()=>{ S.fgrid=!S.fgrid; ls.set("fgrid", S.fgrid); render(); }}, svg(S.fgrid? ICS.rows : ICS.grid)), profBtn());
+  w.append(head,
+    h("label",{class:"search st-fsearch"}, svg(IC.search), h("input",{id:"fq", placeholder: here? "Search in "+here.name : "Search files", value:S.fq||"", autocomplete:"off", oninput:e=>{ S.fq=e.target.value; const c=e.target.selectionStart; render(); const i=$("#fq"); if (i) { i.focus(); try { i.setSelectionRange(c,c); } catch {} } }}),
+      S.fq? h("button",{class:"st-clearq", "aria-label":"Clear search", onclick:()=>{ S.fq=""; render(); }}, svg('<path d="M7 7l10 10M17 7L7 17"/>')) : ""),
+    h("div",{class:"nchips st-fchips", role:"group", "aria-label":"Show"}, FKINDS.map(([k,l])=>h("button",{class:"nchip", "aria-pressed":String(kind===k), onclick:()=>{ S.fk=k; render(); }}, l))));
+  // contents
+  const norm = t => String(t||"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu,"");          // "wifi" finds "Wi-Fi"
+  const nq=norm(q), matchQ = it => !q || [it.title, it.text, it.name, it.from&&it.from.chat, fsKindName(it.kind)].some(t=>String(t||"").toLowerCase().includes(q) || (nq && norm(t).includes(nq)));
+  const matchK = it => kind==="all" || it.kind===kind || (kind==="file" && ["contact","location"].includes(it.kind) && false) || (kind==="text" && ["contact","location"].includes(it.kind));
+  const flat = q || kind!=="all";
+  const items = m.items.filter(it=>(flat? (!inScope || inScope.has(it.folder)) : (it.folder||null)===(dir||null)) && matchQ(it) && matchK(it)).sort((a,b)=>b.at-a.at);
+  const folders = flat? (q? m.folders.filter(f=>(!inScope || inScope.has(f.parent)) && f.name.toLowerCase().includes(q)) : []) : m.folders.filter(f=>(f.parent||null)===(dir||null)).sort((a,b)=>a.name.localeCompare(b.name));
+  const body=h("div",{class:"st-fbody"});
+  if (folders.length || (!flat)) {
+    body.append(h("div",{class:"seg-label"}, flat? "Folders" : here? "Folders" : "Folders"),
+      h("div",{class:"st-fgrid"}, ...folders.map(f=>{ const n=fsCount(f.id); const el=h("button",{class:"st-fcard", onclick:()=>{ S.fdir=f.id; S.fq=""; S.fk="all"; render(); }},
+          h("span",{class:"st-fcico", style:`color:${f.color}`}, svg(ICS.folderFill)), h("b",{}, f.name), h("small",{}, n+" item"+(n===1?"":"s")));
+          longPress(el, (x,y,src)=>folderMenu(f, src||el)); return el; }),
+        !flat? h("button",{class:"st-fcard st-fadd", onclick:()=>newFolder(dir||null)}, h("span",{class:"st-fcico"}, svg(IC.plus)), h("b",{}, "New folder")) : ""));
+  }
+  if (items.length) {
+    const media = items.every(i=>i.kind==="image" || i.kind==="video");
+    body.append(h("div",{class:"seg-label"}, flat? (q? "Results" : FKINDS.find(k=>k[0]===kind)[1]) : here? "In this folder" : "Saved items"));
+    if (S.fgrid || (media && kind!=="all")) body.append(h("div",{class:"st-fphotos"}, items.map(it=>{ const el=h("button",{class:"st-fph", "aria-label":it.title, onclick:()=>fsOpen(it)});
+        if (it.thumb) el.append(h("img",{src:it.thumb, alt:"", loading:"lazy"})); else el.append(h("span",{class:"st-fphic", style:`color:${fsTint(it.kind)}`}, svg(fsIcon(it)), h("small",{}, it.title)));
+        if (it.kind==="video") el.append(h("span",{class:"st-fvid"}, svg('<path d="M8 5.500v13l11-6.500z" fill="currentColor" stroke="none"/>')));
+        longPress(el, (x,y,src)=>itemMenu(it, src||el)); return el; })));
+    else body.append(h("div",{class:"st-flist"}, items.map(it=>{
+      const meta=[fsKindName(it.kind), it.size? fmtSize(it.size) : "", it.from && it.from.chat? "from "+it.from.chat : "", fmtShort(it.at)].filter(Boolean).join(" · ");
+      const el=h("div",{class:"st-frow", role:"button", tabindex:"0", onclick:()=>fsOpen(it), onkeydown:e=>{ if (e.key==="Enter") fsOpen(it); }},
+        it.thumb? h("span",{class:"st-fthumb"}, h("img",{src:it.thumb, alt:""})) : h("span",{class:"st-fthumb ic", style:`--t:${fsTint(it.kind)}`}, svg(fsIcon(it))),
+        h("span",{class:"st-ftx"}, h("b",{}, it.title||fsKindName(it.kind)), it.text && it.kind!=="link" && it.text!==it.title? h("span",{class:"st-fsnip"}, it.text.replace(/\s+/g," ").slice(0,120)) : it.kind==="link"? h("span",{class:"st-fsnip link"}, it.text) : "", h("small",{}, meta, flat && it.folder? " · "+fsPathName(it.folder) : "")),
+        h("button",{class:"iconbtn st-fdots", "aria-label":"Options for "+(it.title||"item"), onclick:e=>{ e.stopPropagation(); itemMenu(it, e.currentTarget.closest(".st-frow")); }}, svg('<circle cx="12" cy="5.500" r="1.600" fill="currentColor"/><circle cx="12" cy="12" r="1.600" fill="currentColor"/><circle cx="12" cy="18.500" r="1.600" fill="currentColor"/>')));
+      longPress(el, (x,y,src)=>itemMenu(it, el)); return el; })));
+  } else if (flat || here) body.append(h("div",{class:"empty st-fempty"}, h("span",{class:"st-fempic"}, svg(q? IC.search : ICS.folder)), h("p",{}, q? "No results for “"+S.fq+"”" : here? "This folder is empty" : "Nothing here yet"),
+      !q? h("p",{class:"note"}, "Touch and hold any message in a chat and tap Save to Files, or tap + to add from your phone.") : ""));
+  else if (!m.items.length) body.append(h("div",{class:"st-fintro"}, h("span",{class:"st-fempic"}, svg(ICS.folderFill)), h("b",{}, "Your own storage"), h("p",{}, "Keep anything from your chats in folders: messages, photos, voice notes, documents and links. Touch and hold a message and tap Save to Files. Everything stays on this phone.")));
+  // storage line
+  const total=m.items.reduce((a,i)=>a+(i.size||0),0);
+  if (!here && !flat && m.items.length) body.append(h("p",{class:"note st-fstore"}, svg(ICF.lock), " "+m.items.length+" item"+(m.items.length===1?"":"s")+(total? " · "+fmtSize(total) : "")+" on this phone"));
+  w.append(body);
+  if (S.canWrite) w.append(h("button",{class:"fab vfab", "aria-label":"Add to Files", title:"Add", onclick:()=>fsAddMenu()}, svg(IC.plus)));
+  return w;
+}
 // Keyboard stays up: tapping the buttons around the message box (plus, mic, task, reply bar, the plus menu,
 // tapping off the plus menu) must not take focus away from the box, or the iPhone drops the keyboard.
 document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (!a || a.id!=="composer") return;
@@ -4660,7 +4945,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
