@@ -1,7 +1,8 @@
 // Task Message — "cleanup" Edge Function (runs every 15 minutes from the database scheduler)
 // WhatsApp-style storage: a message is removed from the server once every member of the chat has
 // saved it on their own device (s_<user> marker), or after 30 days. Voice notes go with their message;
-// uploaded photo/video files are removed after 30 days. Deploy with "Verify JWT" OFF.
+// uploaded photo/video files are removed after 30 days, except
+// profile photos in use and files attached to tasks. Deploy with "Verify JWT" OFF.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
@@ -44,12 +45,23 @@ Deno.serve(async (req) => {
     }
 
     // uploaded media files older than 30 days
+    // Files that must stay: profile photos in use, and photos/files attached to tasks (tasks are kept).
+    const keep = new Set<string>();
+    const PATHRX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[A-Za-z0-9._-]+/g;
+    for (const r of await allRows("tasks")) for (const m of JSON.stringify(r.data).match(PATHRX) ?? []) keep.add(m);
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await sb.from("docs").select("data").like("col", "profile/%").range(from, from + 999);
+      if (error || !data) break;
+      for (const r of data) for (const m of JSON.stringify(r.data).match(PATHRX) ?? []) keep.add(m);
+      if (data.length < 1000) break;
+    }
+
     const { data: folders } = await sb.storage.from("media").list("", { limit: 1000 });
     for (const f of folders ?? []) {
       if (f.id) continue; // a file at the top level, not a user folder
       for (let off = 0; ; off += 1000) {
         const { data: items } = await sb.storage.from("media").list(f.name, { limit: 1000, offset: off });
-        const old = (items ?? []).filter((x) => x.created_at && now - Date.parse(x.created_at) > MAX_AGE).map((x) => `${f.name}/${x.name}`);
+        const old = (items ?? []).filter((x) => x.created_at && now - Date.parse(x.created_at) > MAX_AGE).map((x) => `${f.name}/${x.name}`).filter((p) => !keep.has(p));
         if (old.length) { await sb.storage.from("media").remove(old); files += old.length; }
         if (!items || items.length < 1000) break;
       }
