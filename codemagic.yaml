@@ -6,11 +6,27 @@
 #   • App Store Connect API key name:   Task message
 #   • Email for finished builds:        set in the line "recipients" (2 places)
 
+# Claude can start builds by pushing a git tag (nothing to tap in Codemagic):
+#   testflight-<anything>  → iPhone (TestFlight, for testing)
+#   appstore-<anything>    → iPhone (App Store, sent to Apple for review)
+#   android-<anything>     → Android (Google Play)
+#   release-<anything>     → iPhone (App Store) and Android together
+# Manual builds from the Codemagic website still work the same.
+
 workflows:
 
   # ------------------------------------------------------------------ ANDROID
   android-release:
     name: Android (Google Play)
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'android-*'
+          include: true
+        - pattern: 'release-*'
+          include: true
+      cancel_previous_builds: false
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
@@ -51,6 +67,15 @@ workflows:
   # ------------------------------------------------------------------ iOS
   ios-release: &ios
     name: iPhone (App Store)
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'appstore-*'
+          include: true
+        - pattern: 'release-*'
+          include: true
+      cancel_previous_builds: false
     instance_type: mac_mini_m2
     max_build_duration: 90
     integrations:
@@ -118,6 +143,13 @@ workflows:
   ios-testflight:
     <<: *ios
     name: iPhone (TestFlight, for testing)
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'testflight-*'
+          include: true
+      cancel_previous_builds: false
     environment:
       node: 22
       xcode: latest
