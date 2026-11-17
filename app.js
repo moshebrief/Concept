@@ -192,6 +192,13 @@ async function boot(){
   if (!(CFG.supabaseUrl && CFG.supabaseKey && window.supabase && !/YOUR_/.test(CFG.supabaseUrl+CFG.supabaseKey))) { startDemo("Example data. Add your Supabase keys in config.js to go live."); hideSplash(); return; }
   SB=window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:false}});
   const cached=cachedSession();
+  // The website works only as a computer linked to your phone (like WhatsApp Web). A website sign-in that
+  // didn't come from scanning the QR code with the phone is ended here, on this browser only.
+  if (!NATIVE_APP() && !ls.get("linkId","") && (cached || ((await SB.auth.getSession()).data||{}).session)) {
+    try { await SB.auth.signOut({scope:"local"}); } catch {}
+    try { const ref=(CFG.supabaseUrl.match(/https:\/\/([^.]+)\./)||[])[1]; localStorage.removeItem("sb-"+ref+"-auth-token"); } catch {}
+    clearLocalCopy(); openLogin(); hideSplash(); return;
+  }
   if (cached) {
     startLive(cached.user);
     SB.auth.getSession().then(({data})=>{ if ((!data || !data.session) && !cachedSession()) { location.reload(); } }).catch(()=>{}); // signed out elsewhere: show the sign-in screen (an offline start keeps working)
@@ -205,7 +212,7 @@ function startDemo(msg){ S.mode="demo"; S.me="me"; demo.seed(); if (!S.active) S
 function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(h("span",{style:"width:9px;height:9px;background:var(--knot);transform:rotate(45deg);flex:none"}), h("span",{},t)); }
 
 function subscribeAll(){
-  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E(); startLinkedWatch(); loadSched();
+  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E(); startLinkedWatch(); loadSched(); receiveHistory();
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
   store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); profileSignal(rows); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
@@ -2016,8 +2023,35 @@ function blobUrl(id){ if (!id) return ""; if (id.includes("/") && CFG.supabaseUr
 const fmtPhone = p => { const d=String(p||"").replace(/[^\d]/g,""); return d? "+"+d : ""; };
 
 // ---------- sign in with phone (texted code) ----------
+function phoneBrowser(){ const u=navigator.userAgent||""; return /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(u) || (window.innerWidth<700 && matchMedia("(pointer:coarse)").matches); }
+function storeLinks(){
+  const a=CFG.appStoreUrl||"https://apps.apple.com/us/search?term=Task%20Message", g=CFG.playStoreUrl||"https://play.google.com/store/apps/details?id=com.moshebrief.taskmessage";
+  const u=navigator.userAgent||"", ios=/iPhone|iPad|iPod|Macintosh/.test(u), and=/Android/.test(u);
+  const apple=h("a",{class:"gabtn", href:a, target:"_blank", rel:"noopener"}, svg('<path d="M16.400 12.600c0-2.400 2-3.500 2-3.600-1.100-1.600-2.800-1.800-3.400-1.800-1.400-.2-2.800.8-3.500.8s-1.800-.8-3-.8C6.900 7.300 5.400 8.200 4.600 9.600c-1.700 2.900-.4 7.200 1.200 9.600.8 1.100 1.700 2.400 2.900 2.300 1.200 0 1.600-.7 3-.7s1.800.7 3 .7c1.300 0 2.100-1.100 2.800-2.300.9-1.300 1.300-2.600 1.300-2.700 0 0-2.400-.9-2.400-3.900zM14.200 5.500c.6-.8 1.100-1.800 1-2.900-.9 0-2.100.6-2.700 1.400-.6.700-1.100 1.800-1 2.800 1 .1 2.100-.5 2.700-1.300z" fill="currentColor" stroke="none"/>'), h("span",{}, h("small",{}, "Download on the"), h("b",{}, "App Store")));
+  const google=h("a",{class:"gabtn", href:g, target:"_blank", rel:"noopener"}, svg('<path d="M4.500 3.300l9.600 8.700-9.600 8.700c-.3-.2-.5-.6-.5-1V4.300c0-.4.200-.8.500-1zM15.300 13.100l2.600 2.400-11.100 6.300 8.500-8.700zm0-2.200L6.800 2.200l11.100 6.300-2.600 2.400zm1.300 1.100l2.900-2.600 1.700 1c.9.500.9 1.800 0 2.300l-1.700 1-2.900-2.700z" fill="currentColor" stroke="none"/>'), h("span",{}, h("small",{}, "Get it on"), h("b",{}, "Google Play")));
+  return h("div",{class:"gabtns"}, and&&!ios? [google, apple] : [apple, google]);
+}
+function getAppPage(){
+  return h("div",{class:"ob2 gapage"},
+    h("div",{class:"gacard"},
+      h("img",{class:"gaicon", src:"icon.svg", alt:""}),
+      h("h1",{class:"gatitle"}, "Task Message is an app"),
+      h("p",{class:"gasub"}, "Chat with anyone and turn any message into a task. Get the app on your phone to sign up and sign in."),
+      storeLinks(),
+      h("div",{class:"ganote"}, svg('<rect x="2.500" y="4" width="15" height="10.500" rx="1.600"/><path d="M6.500 18h7M10 14.500V18"/><rect x="15.500" y="9" width="6" height="11" rx="1.400"/>'),
+        h("p",{}, h("b",{}, "Want it on a computer?"), " Open this website on your computer, then scan the code there with the app on your phone."))),
+    h("p",{class:"lqfoot"}, svg(ICF.lock), " Your personal messages are end-to-end encrypted"));
+}
 function openLogin(){
   if (document.getElementById("onboard")) return;
+  if (!NATIVE_APP()) {   // the website: link to your phone with a QR code, like WhatsApp Web
+    const o=overlay("onboard","Link with your phone"); o.id="onboard";
+    if (phoneBrowser()) { o.replaceChildren(getAppPage()); return; }
+    const box=linkQRPanel(); o.replaceChildren(h("div",{class:"ob2 lqpage"}, h("div",{class:"lqbrand"}, h("img",{src:"icon.svg", alt:""}), h("b",{}, "Task Message")), box,
+      h("div",{class:"lqget"}, h("span",{}, "Don't have Task Message yet? Get it on your phone:"), storeLinks()),
+      h("p",{class:"lqfoot"}, svg(ICF.lock), " Your personal messages are end-to-end encrypted")));
+    return;
+  }
   const wide = () => !NATIVE_APP() && window.innerWidth>=700;
   let cc=ls.get("cc","+1"), num="", step=wide()? "qr" : "phone", phone="", busy=false, wait=0, timer=null, err="", qrBox=null;
   const o=overlay("onboard","Sign in"); o.id="onboard";
@@ -2217,7 +2251,12 @@ async function startLive(u){
   render();
   setTimeout(pushRegister, 1500);
 }
-async function signOut(){ try { await SB.auth.signOut(); } catch {} clearLocalCopy(); setTimeout(()=>location.reload(), 150); }
+async function signOut(){
+  if (!NATIVE_APP()) { const lid=ls.get("linkId",""); if (lid) { try { await linkFn({act:"logout", id:lid}); } catch {} } ls.set("linkId",""); ls.set("linkSeen",""); ls.set("linkPriv",null);
+    try { await SB.auth.signOut({scope:"local"}); } catch {} }
+  else { try { await SB.auth.signOut(); } catch {} }
+  clearLocalCopy(); setTimeout(()=>location.reload(), 150);
+}
 
 // ===================== smooth rendering =====================
 let RQ=0;
@@ -3019,7 +3058,7 @@ function devSince(){ if (S.mode!=="live" || !S.me) return 0; const k="devSince:"
   // a phone that was already in use keeps getting everything still waiting for it; the website and new devices start now
   if (!v) { v = NATIVE_APP() && Object.keys(ls.get("lastRead",{})||{}).length? 1 : now(); ls.set(k,v); } return v; }
 const readFloor = () => NATIVE_APP()? 0 : devSince();
-const hereOK = (m, localIds) => !m || S.mode!=="live" || (m.at||0)>=devSince()-60000 || (NATIVE_APP() && localIds && localIds.has(m.id));
+const hereOK = (m, localIds) => !m || S.mode!=="live" || m.hist || (m.at||0)>=devSince()-60000 || (NATIVE_APP() && localIds && localIds.has(m.id));
 function NATIVE_APP(){ try { return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); } catch { return false; } }
 function localMessages(cid){
   return LOCAL.load("m:"+cid).then(async rows=>{
@@ -4649,10 +4688,11 @@ function linkQRPanel(onPhone){
   const steps=h("ol",{class:"lqsteps"},
     h("li",{}, "Open ", h("b",{}, "Task Message"), " on your phone"),
     h("li",{}, "Tap ", h("b",{}, "Settings"), ", then ", h("b",{}, "Linked devices")),
-    h("li",{}, "Tap ", h("b",{}, "Link a device"), " and point your phone at this screen"));
+    h("li",{}, "Tap ", h("b",{}, "Link a device")),
+    h("li",{}, "Point your phone at this screen to scan the QR code"));
   const code=h("div",{class:"lqcode", "aria-label":"QR code to link this computer"}, h("span",{class:"spin"}));
   const wrap=h("div",{class:"lqwrap"}, h("div",{class:"lqtext"}, h("h1",{class:"lqtitle"}, "Use Task Message on your computer"), steps,
-      h("button",{class:"oblink lqalt", onclick:onPhone}, "Sign in with phone number instead")), code);
+      onPhone? h("button",{class:"oblink lqalt", onclick:onPhone}, "Sign in with phone number instead") : ""), code);
   box.append(wrap);
   async function round(){
     if (st.stop || !box.isConnected && st.rounds) return;
@@ -4688,6 +4728,7 @@ function linkQRPanel(onPhone){
       const msg=JSON.parse(TD.decode(await crypto.subtle.decrypt({name:"AES-GCM", iv:b64d(r.iv)}, key, b64d(r.ct))));
       const {data, error}=await SB.auth.verifyOtp({token_hash:msg.th, type:"magiclink"});
       if (error || !data || !data.session) throw error||new Error("no session");
+      try { ls.set("linkPriv", {id:st.cur.id, jwk:await crypto.subtle.exportKey("jwk", st.cur.priv), at:Date.now()}); } catch {}
       ls.set("linkId", st.cur.id); ls.set("linkSid", JSON.parse(atob(data.session.access_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).session_id||"");
       location.reload();
     } catch { st.stop=false; st.rounds=0; code.replaceChildren(h("p",{class:"oberr"}, "Linking didn't finish. Scan the new code to try again.")); setTimeout(round, 2500); }
@@ -4769,10 +4810,84 @@ async function openLinkScanner(onDone){
     if (!r.data.startsWith(LINK_PFX)) { if (Date.now()-bad>2500) { bad=Date.now(); msg.textContent="That's not a Task Message code. Scan the code on the Task Message website."; } return; }
     const [id,x,y]=r.data.slice(LINK_PFX.length).split(".");
     busy=true; haptic(); o.classList.add("got"); msg.classList.remove("err"); msg.textContent="Linking…";
-    try { await linkFn({act:"approve", id, pub:{x,y}, name:"Computer"}); msg.textContent="Linked"; setTimeout(()=>{ close(); toast("Computer linked"); onDone&&onDone(); }, 500); }
+    try { await linkFn({act:"approve", id, pub:{x,y}, name:"Computer"}); msg.textContent="Linked. Syncing your chats…";
+      let ok=true; try { await sendHistory(id, {x,y}, t=>{ msg.textContent="Syncing your chats… "+t; }); } catch { ok=false; }
+      msg.textContent=ok? "Done" : "Linked"; setTimeout(()=>{ close(); toast(ok? "Computer linked. Your chats are on it now." : "Computer linked. Older chats didn't sync; new messages will show there."); onDone&&onDone(); }, 450); }
     catch (e) { msg.textContent=e.message; msg.classList.add("err"); o.classList.remove("got"); setTimeout(()=>{ busy=false; }, 1500); }
   };
   raf=requestAnimationFrame(tick);
+}
+// ---- Chat history for a newly linked computer ----
+// Like WhatsApp: the phone sends the computer a copy of your recent chats. It's locked with a key only that
+// computer has (from the QR code), so the server can't read it, and the computer deletes it once it has it.
+const SYNC_DAYS=90, SYNC_PER_CHAT=300, SYNC_CHUNK=400000;
+const syncCol = () => "data/users/"+S.me+"/sync";
+async function gz(u8, on){ if (!window.CompressionStream) return {u8, z:false};
+  const s=new Blob([u8]).stream().pipeThrough(on? new CompressionStream("gzip") : new DecompressionStream("gzip")); return {u8:new Uint8Array(await new Response(s).arrayBuffer()), z:true}; }
+function histRow(m){
+  const r={...m, hist:true}; delete r.enc; delete r.penc; delete r.local; delete r.pending; delete r.prog;
+  const txt=plain(m); r.text=typeof txt==="string"? txt : "";
+  const P=m.penc||m.payload? plainP(m) : null;
+  const tag={voice:"🎤 Voice message", media:"📷 Media", file:"📄 Document", video:"🎬 Video", image:"📷 Photo"};
+  if (m.kind==="voice" || m.kind==="media" || m.kind==="file") {   // the files themselves stay on the phone
+    let t=tag[m.kind]; if (m.kind==="media" && P && P.items && P.items.length) { const k=(P.items[0]||{}).t||""; t=/video/.test(k)? tag.video : /image|photo/.test(k)? tag.image : tag.file; if (P.items.length>1) t+=" ("+P.items.length+")"; }
+    r.text=t+" · on your phone"+(r.text? "\n"+r.text : ""); delete r.kind; delete r.voice; delete r.payload;
+  } else if (P) { r.payload=P; }
+  return r;
+}
+async function sendHistory(id, pub, prog){
+  if (S.mode!=="live") return;
+  const since=now()-SYNC_DAYS*864e5, out={};
+  const chans=S.channels.filter(c=>(c.members||[]).includes(S.me));
+  for (const c of chans) {
+    let rows=(await LOCAL.load("m:"+c.id).catch(()=>null))||[]; if (S.msgCache[c.id]) rows=mergeById(rows, S.msgCache[c.id]);
+    rows=rows.filter(m=>m && m.id && (m.at||0)>=since && !HID[m.id]).sort((a,b)=>a.at-b.at).slice(-SYNC_PER_CHAT);
+    if (!rows.length) continue;
+    await decryptMany(rows.flatMap(m=>[m.enc, m.penc]));
+    out[c.id]=rows.map(histRow);
+  }
+  const theirs=await crypto.subtle.importKey("jwk",{kty:"EC",crv:"P-256",x:pub.x,y:pub.y,ext:true},{name:"ECDH",namedCurve:"P-256"},false,[]);
+  const mine=await crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey"]);
+  const key=await crypto.subtle.deriveKey({name:"ECDH", public:theirs}, mine.privateKey, {name:"AES-GCM", length:256}, false, ["encrypt"]);
+  const {u8, z}=await gz(TE.encode(JSON.stringify({v:1, at:now(), chats:out})), true);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const b64=b64e(new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, u8)));
+  const epk=await crypto.subtle.exportKey("jwk", mine.publicKey), n=Math.max(1, Math.ceil(b64.length/SYNC_CHUNK));
+  for (let i=0;i<n;i++) { prog&&prog(Math.round(i/n*100)+"%"); await store.set(syncCol()+"/"+id+"-"+i, {link:id, i, n, d:b64.slice(i*SYNC_CHUNK,(i+1)*SYNC_CHUNK), ...(i===0? {epk:{x:epk.x,y:epk.y}, iv:b64e(iv), z, at:now()} : {})}); }
+  prog&&prog("100%");
+}
+// On the computer, right after linking: pick up the chats the phone sent, save them here, delete the copy.
+async function receiveHistory(){
+  const lp=ls.get("linkPriv", null); if (!lp || !lp.id || NATIVE_APP() || S.mode!=="live") return;
+  if (Date.now()-(lp.at||0) > 15*60e3) { ls.set("linkPriv", null); return; }
+  const bar=h("div",{class:"syncbar"}, h("span",{class:"spin"}), h("span",{}, "Syncing your chats from your phone…")); document.body.append(bar);
+  const done=(t)=>{ bar.replaceChildren(h("span",{}, t)); bar.classList.add("ok"); setTimeout(()=>bar.remove(), 2600); };
+  try {
+    let parts=null;
+    for (let tries=0; tries<90; tries++) {   // the phone is still sending: wait up to about 3 minutes
+      const {data}=await SB.from("docs").select("path,data").eq("col", syncCol()).like("path", syncCol()+"/"+lp.id+"-%");
+      const rows=(data||[]).map(r=>r.data); const n=(rows.find(r=>r.i===0)||{}).n;
+      if (n && rows.length>=n) { parts=rows.sort((a,b)=>a.i-b.i); break; }
+      await new Promise(r=>setTimeout(r, 2000));
+    }
+    if (!parts) { bar.remove(); ls.set("linkPriv", null); return; }
+    const head=parts[0];
+    const priv=await crypto.subtle.importKey("jwk", lp.jwk, {name:"ECDH", namedCurve:"P-256"}, false, ["deriveKey"]);
+    const theirs=await crypto.subtle.importKey("jwk",{kty:"EC",crv:"P-256",x:head.epk.x,y:head.epk.y,ext:true},{name:"ECDH",namedCurve:"P-256"},false,[]);
+    const key=await crypto.subtle.deriveKey({name:"ECDH", public:theirs}, priv, {name:"AES-GCM", length:256}, false, ["decrypt"]);
+    let u8=new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM", iv:b64d(head.iv)}, key, b64d(parts.map(p=>p.d).join(""))));
+    if (head.z) u8=(await gz(u8, false)).u8;
+    const hist=JSON.parse(TD.decode(u8)); let count=0;
+    for (const [cid, rows] of Object.entries(hist.chats||{})) {
+      const have=(await LOCAL.load("m:"+cid).catch(()=>null))||[];
+      const merged=mergeById(rows, have).sort((a,b)=>a.at-b.at); count+=rows.length;
+      await kvSet(LOCAL.key("m:"+cid), merged.slice(-5000));
+    }
+    await Promise.all(parts.map(p=>store.del(syncCol()+"/"+lp.id+"-"+p.i).catch(()=>{})));
+    ls.set("linkPriv", null);
+    if (S.active) { S.msgsFor=null; openMsgs(); }
+    scheduleRender(); done(count? "Your chats are synced" : "Linked");
+  } catch (e) { console.warn(e); done("Couldn't sync older chats. New messages will show here."); ls.set("linkPriv", null); }
 }
 // ===================== Files: your own storage, kept on this phone =====================
 // Folders (inside folders too) holding anything: messages from any chat (text, photos, videos, voice
@@ -5159,7 +5274,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
