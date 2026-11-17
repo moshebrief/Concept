@@ -6,11 +6,11 @@
 #   • App Store Connect API key name:   Task message
 #   • Email for finished builds:        set in the line "recipients" (2 places)
 
-# Claude can start builds by pushing a git tag (nothing to tap in Codemagic):
-#   testflight-<anything>  → iPhone (TestFlight, for testing)
-#   appstore-<anything>    → iPhone (App Store, sent to Apple for review)
-#   android-<anything>     → Android (Google Play)
-#   release-<anything>     → iPhone (App Store) and Android together
+# Claude starts builds by pushing the code to one of these branches (nothing to tap in Codemagic):
+#   build/testflight  → iPhone (TestFlight, for testing)
+#   build/appstore    → iPhone (App Store, sent to Apple for review)
+#   build/android     → Android (Google Play)
+#   build/release     → iPhone (App Store) and Android together
 # Manual builds from the Codemagic website still work the same.
 
 workflows:
@@ -20,12 +20,14 @@ workflows:
     name: Android (Google Play)
     triggering:
       events:
-        - tag
-      tag_patterns:
-        - pattern: 'android-*'
+        - push
+      branch_patterns:
+        - pattern: 'build/android'
           include: true
-        - pattern: 'release-*'
+          source: true
+        - pattern: 'build/release'
           include: true
+          source: true
       cancel_previous_builds: false
     instance_type: mac_mini_m2
     max_build_duration: 60
@@ -69,12 +71,14 @@ workflows:
     name: iPhone (App Store)
     triggering:
       events:
-        - tag
-      tag_patterns:
-        - pattern: 'appstore-*'
+        - push
+      branch_patterns:
+        - pattern: 'build/appstore'
           include: true
-        - pattern: 'release-*'
+          source: true
+        - pattern: 'build/release'
           include: true
+          source: true
       cancel_previous_builds: false
     instance_type: mac_mini_m2
     max_build_duration: 90
@@ -145,10 +149,11 @@ workflows:
     name: iPhone (TestFlight, for testing)
     triggering:
       events:
-        - tag
-      tag_patterns:
-        - pattern: 'testflight-*'
+        - push
+      branch_patterns:
+        - pattern: 'build/testflight'
           include: true
+          source: true
       cancel_previous_builds: false
     environment:
       node: 22
