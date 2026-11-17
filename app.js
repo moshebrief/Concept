@@ -226,6 +226,8 @@ function openMsgs(){
   if (S.msgsFor===S.active) return;
   if (unsubMsgs) unsubMsgs(); S.msgs=S.msgCache[S.active]||[]; S.msgsFor=S.active; S.msgLimit=120;
   if (!S.active) return;
+  // messages older than this moment are history loading in, so they appear in place instead of animating in again
+  CHAT_OPENED[S.active]=now()-1500;
   const cid=S.active;
   S._lm=localMessages(cid);
   unsubMsgs = store.sub("channels/"+cid+"/messages", async rows => {
@@ -349,6 +351,10 @@ async function createChannel(name, members, kind="group", icon=""){
 }
 // Moving between screens on a phone: the new screen slides in from the right, going back slides it away
 // (like iPhone apps). Uses the browser's View Transitions when available, a simple slide otherwise.
+// While a chat is about to slide in, background updates wait. Before, an update in that split second could
+// draw the chat early, and then the slide played on top of it — so the chat seemed to come in twice.
+var NAV_HOLD=0, CHAT_OPENED={};
+function holdForNav(){ NAV_HOLD=now()+1500; if (RQ) { cancelAnimationFrame(RQ); RQ=0; } }
 function navGo(dir, fn){
   const phone=window.innerWidth<=860, calm=window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!phone || calm) { fn(); return; }
@@ -366,10 +372,11 @@ function navGo(dir, fn){
 function selectChannel(id){ noteUnreadFrom(id); S.cfKeep=id; const wasIn=S.inThread && S.view==="chats"; S.selecting=false; S.sel=[]; S.active=id; S.inThread=true; S.view="chats"; S.replyTo=null; S.editing=null; S.actFor=null; ls.set("active",id); ls.set("view","chats"); openMsgs(); markRead(); scrollDown=true;
   if (wasIn) { render(); return; }
   // Get this chat's saved messages ready first, so the chat appears once, already filled in.
-  const show=()=>navGo("fwd", ()=>render());
+  holdForNav();
+  const show=()=>navGo("fwd", ()=>{ NAV_HOLD=0; render(); });
   if (S.msgs.length || !S._lm) show(); else Promise.race([S._lm, new Promise(r=>setTimeout(r,160))]).then(show);
 }
-function goBackToList(){ UNREAD_MARK=null; S.cfKeep=null; navGo("back", ()=>{ S.inThread=false; render(); }); }
+function goBackToList(){ UNREAD_MARK=null; S.cfKeep=null; holdForNav(); navGo("back", ()=>{ NAV_HOLD=0; S.inThread=false; render(); }); }
 // Every button gives a small "press" — it dips when touched and springs back when released.
 (function pressFeedback(){
   const SEL="button, a, [role=button], label.td2chip, .lineitem, .card, .contact, .srow.pick, .srow.pick1, .apick";
@@ -1120,6 +1127,7 @@ function ctxMenu(src, items, opt={}){
   return {close:fn=>{ ready=true; close(fn); }, ready:()=>ready};
 }
 
+const SET_CACHE={fp:"", store:""};
 function renderSettings(){
   const w=h("section",{class:"teamwrap settings","aria-label":"Settings"});
   w.append(h("div",{class:"toprow"}, h("h1",{class:"h1"},"Settings"), h("span",{class:"grow"})));
@@ -1139,16 +1147,17 @@ function renderSettings(){
     visRow(ICF.info, "About", "about"),
     row(TICK2, "Read receipts", toggle("readReceipts", true), "If you turn this off, you won't send or see blue ticks"),
     row(ICX.eye, "Last seen and online", toggle("lastSeen", true), "If you turn this off, you won't see other people's either"),
-    row(ICF.lock, "End-to-end encryption", h("span",{class:"sval mono", id:"fp"}, E2E.ready? "On" : "Off"))));
-  fingerprint().then(f=>{ const el=$("#fp"); if (el && f) el.textContent=f; });
-  appUsage().then(b=>{ const el=$("#s-store"); if (el && b) el.textContent=fmtSize(b); });
+    row(ICF.lock, "End-to-end encryption", h("span",{class:"sval mono", id:"fp"}, SET_CACHE.fp || (E2E.ready? "On" : "Off")))));
+  // these two values arrive a moment later; they're remembered so the next redraw shows them straight away (no jumping)
+  fingerprint().then(f=>{ if (!f || f===SET_CACHE.fp) return; SET_CACHE.fp=f; const el=$("#fp"); if (el) el.textContent=f; }).catch(()=>{});
+  appUsage().then(b=>{ const t=b? fmtSize(b) : ""; if (!t || t===SET_CACHE.store) return; SET_CACHE.store=t; const el=$("#s-store"); if (el) el.textContent=t; }).catch(()=>{});
   w.append(...group("Appearance",
     row(ICF.moon, "Theme", h("div",{class:"segmini", role:"group", "aria-label":"Theme"}, [["system","Auto"],["light","Light"],["dark","Dark"]].map(([v,l])=>h("button",{"aria-pressed":String((p.theme||"system")===v), onclick:()=>setPref("theme",v)}, l)))),
     row(ICF.drop, "Accent color", h("div",{class:"swatches"}, ACCENTS.map(([n,c])=>h("button",{class:"sw"+((p.accent||"#0A6CFF")===c?" on":""), style:`--sw:${c}`, title:n, "aria-label":n+" accent", onclick:()=>setPref("accent", c==="#0A6CFF"? "" : c)}))))));
   w.append(...group("Chats",
     row(ICF.image, "Chat wallpaper", h("button",{class:"iconbtn", title:"Change wallpaper", "aria-label":"Change wallpaper", onclick:openWallpaper}, svg(IC.arrow)), wpMode()==="photo"? "Your photo" : wpMode()==="plain"? "Plain" : "Tools"),
     h("button",{class:"srow pick", onclick:openBackup}, h("span",{class:"sic"}, svg(ICF.lock)), h("span",{class:"stx"}, h("b",{},"Chat backup"), h("span",{}, NATIVE? (PLAT==="android"? "With your Google backup" : "With your iCloud Backup") : "Save your chats to a file")), h("span",{class:"sval"}, (S.prefs.backup||{}).last? fmtShort(S.prefs.backup.last) : "Never"), svg(IC.arrow)),
-    h("button",{class:"srow pick", onclick:openStorage}, h("span",{class:"sic", style:"background:#34C759"}, svg(STORAGE_IC)), h("span",{class:"stx"}, h("b",{},"Storage and data"), h("span",{}, "Manage what's saved on this phone")), h("span",{class:"sval", id:"s-store"}, ""), svg(IC.arrow)),
+    h("button",{class:"srow pick", onclick:openStorage}, h("span",{class:"sic", style:"background:#34C759"}, svg(STORAGE_IC)), h("span",{class:"stx"}, h("b",{},"Storage and data"), h("span",{}, "Manage what's saved on this phone")), h("span",{class:"sval", id:"s-store"}, SET_CACHE.store), svg(IC.arrow)),
     row(IC.send, "Enter key sends", toggle("enterSends", true)),
     row(IC.knot, "Swipe left to make task", h("div",{class:"segmini", role:"group", "aria-label":"Swipe left"}, [["open","Open task"],["silent","Just add"]].map(([v,l])=>h("button",{"aria-pressed":String((p.swipeTask||"open")===v), onclick:()=>setPref("swipeTask",v)}, l)))),
     h("button",{class:"srow pick", onclick:openLinkedDevices}, h("span",{class:"sic", style:"background:#34C759"}, svg('<rect x="3" y="4.500" width="18" height="12" rx="1.800"/><path d="M8 20h8M12 16.500V20"/>')), h("span",{class:"stx"}, h("b",{},"Linked devices")), svg(IC.arrow)),
@@ -2212,7 +2221,7 @@ async function signOut(){ try { await SB.auth.signOut(); } catch {} clearLocalCo
 
 // ===================== smooth rendering =====================
 let RQ=0;
-function scheduleRender(){ if (SW.drag) { SW.pending=true; return; } if (HOLD) { HOLD.pending=true; return; } if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
+function scheduleRender(){ if (NAV_HOLD && now()<NAV_HOLD) return; if (SW.drag) { SW.pending=true; return; } if (HOLD) { HOLD.pending=true; return; } if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
 // While you're typing in a search box, task or settings field, background updates wait until you're
 // done, so the keyboard never gets closed under your fingers.
 let TYPING_HOLD=false;
@@ -2222,8 +2231,15 @@ function softRender(){
   if (typingInField()) { if (S.newFlow && document.activeElement.closest("section.flow")) { flowRedraw(); return; } TYPING_HOLD=true; return; }
   const main=$(".chatmain");
   const canPatch = S.view==="chats" && !S.newFlow && main && main.dataset.cid===String(S.active||"") && !S.openTask;
-  if (!canPatch) { render(); return; }
+  if (!canPatch) { if (settingsUnchanged()) { updateBadges(); return; } render(); return; }
   patchThread(main); patchList(); updateBadges(); updateTypingUI();
+}
+// Background updates (someone comes online, a message arrives in another chat…) used to rebuild the whole
+// Settings screen, which made it jump. Now it's only redrawn when something you can see on it actually changed.
+function settingsUnchanged(){
+  if (S.view!=="settings" || S.openTask) return false;
+  const cur=document.querySelector("#app > section.settings"); if (!cur) return false;
+  try { return renderSettings().innerHTML===cur.innerHTML; } catch { return false; }
 }
 function patchThread(main){
   const c=S.channels.find(x=>x.id===S.active); const st=$("#stream"); if (!c || !st) { render(); return; }
@@ -3754,7 +3770,7 @@ function buildSpine(c){
     const ud=unreadDivider(all, i, c); if (ud) { spine.append(ud); lastBy=null; }
     const cont = lastBy===m.by && m.at-lastAt<5*60000 && !m.taskId; lastBy=m.by; lastAt=m.at;
     const el=renderMsg(m, cont, c);
-    if (sameChat && !SEEN_MSG.has(m.id)) el.classList.add("fresh");
+    if (sameChat && !SEEN_MSG.has(m.id) && (m.at||0)>=(CHAT_OPENED[c.id]||0)) el.classList.add("fresh");
     SEEN_MSG.add(m.id); spine.append(el);
   }
   spine.append(h("div",{class:"msg typingrow", id:"typingrow", hidden:true}, h("div",{class:"who tyname"}), h("div",{class:"brow"}, h("div",{class:"strip tybub"}, h("span",{class:"dots"}, h("i"), h("i"), h("i")), h("span",{class:"tymic"}, svg(IC.mic))))));
