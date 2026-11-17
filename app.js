@@ -4837,6 +4837,7 @@ function histRow(m){
 }
 async function sendHistory(id, pub, prog){
   if (S.mode!=="live") return;
+  await store.set(syncCol()+"/"+id+"-w", {link:id, wait:true, at:now()}).catch(()=>{});   // tells the computer chats are on the way
   const since=now()-SYNC_DAYS*864e5, out={};
   const chans=S.channels.filter(c=>(c.members||[]).includes(S.me));
   for (const c of chans) {
@@ -4863,14 +4864,17 @@ async function receiveHistory(){
   const bar=h("div",{class:"syncbar"}, h("span",{class:"spin"}), h("span",{}, "Syncing your chats from your phone…")); document.body.append(bar);
   const done=(t)=>{ bar.replaceChildren(h("span",{}, t)); bar.classList.add("ok"); setTimeout(()=>bar.remove(), 2600); };
   try {
-    let parts=null;
-    for (let tries=0; tries<90; tries++) {   // the phone is still sending: wait up to about 3 minutes
+    let parts=null, coming=false; const t0=Date.now();
+    for (;;) {   // the phone says right away that it's sending; it gets about 2 minutes to finish
       const {data}=await SB.from("docs").select("path,data").eq("col", syncCol()).like("path", syncCol()+"/"+lp.id+"-%");
-      const rows=(data||[]).map(r=>r.data); const n=(rows.find(r=>r.i===0)||{}).n;
+      const all=(data||[]).map(r=>r.data); if (all.some(r=>r.wait)) coming=true;
+      const rows=all.filter(r=>typeof r.i==="number"); const n=(rows.find(r=>r.i===0)||{}).n;
       if (n && rows.length>=n) { parts=rows.sort((a,b)=>a.i-b.i); break; }
-      await new Promise(r=>setTimeout(r, 2000));
+      const waited=Date.now()-t0; if ((!coming && waited>12000) || waited>120000) break;
+      await new Promise(r=>setTimeout(r, 1200));
     }
-    if (!parts) { bar.remove(); ls.set("linkPriv", null); return; }
+    store.del(syncCol()+"/"+lp.id+"-w").catch(()=>{});
+    if (!parts) { ls.set("linkPriv", null); done(coming? "Couldn't sync older chats. New messages will show here." : "Update Task Message on your phone to see older chats here. New messages will show here."); return; }
     const head=parts[0];
     const priv=await crypto.subtle.importKey("jwk", lp.jwk, {name:"ECDH", namedCurve:"P-256"}, false, ["deriveKey"]);
     const theirs=await crypto.subtle.importKey("jwk",{kty:"EC",crv:"P-256",x:head.epk.x,y:head.epk.y,ext:true},{name:"ECDH",namedCurve:"P-256"},false,[]);
