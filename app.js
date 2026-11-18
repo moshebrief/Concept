@@ -4384,12 +4384,17 @@ function openChatByNumber(){
   draw(); document.body.append(o);
   setTimeout(()=>{ const i=$("#nc-num"); if (i && !num) { const f=$("#nc-first"); if (f) f.focus(); } else if (i) i.focus(); }, 80);
 }
-function flowRedraw(){ const old=document.querySelector("section.flow"); if (!old) { render(); return; } const nw=renderFlow(); const l=old.querySelector(".list"), st=l? l.scrollTop : 0; old.className=nw.className.replace(" enter","")+(old.classList.contains("onlist")?" onlist":""); swapKids(old, [...nw.childNodes]); }
+function flowRedraw(){ const old=document.querySelector("section.flow"); if (!old) { render(); return; }
+  const nw=renderFlow(); if (old.innerHTML===nw.innerHTML) return;   // background update changed nothing you can see here
+  const sameQ=old.dataset.q===(S.newFlow.q||"")+"|"+S.newFlow.step; old.dataset.q=(S.newFlow.q||"")+"|"+S.newFlow.step;
+  const l=old.querySelector(".list"), st=l && sameQ? l.scrollTop : 0;
+  old.className=nw.className.replace(" enter","")+(old.classList.contains("onlist")?" onlist":""); swapKids(old, [...nw.childNodes]);
+  const l2=old.querySelector(".list"); if (l2 && st) { l2.scrollTop=st; requestAnimationFrame(()=>{ if (l2.scrollTop<st-2) l2.scrollTop=st; }); } }
 function renderFlow(){
   const F=S.newFlow; const others=S.team.filter(id=>id!==S.me).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
   const q=F.q.toLowerCase(); const match=others.filter(id=>!q || nameOf(id).toLowerCase().includes(q));
   const firstFlow=!F._shown; F._shown=true;
-  const pane=h("section",{class:"lines flow"+(firstFlow?" enter":""),"aria-label":"New chat", onkeydown:e=>{ if (e.key!=="Escape") return; if (F.step==="pick") closeFlow(); else { F.step = F.step==="members"? "pick" : "members"; render(); } }});
+  const pane=h("section",{class:"lines flow"+(firstFlow?" enter":""),"aria-label":"New chat", "data-q":(F.q||"")+"|"+F.step, onkeydown:e=>{ if (e.key!=="Escape") return; if (F.step==="pick") closeFlow(); else { F.step = F.step==="members"? "pick" : "members"; render(); } }});
   const head=(title, sub, back)=>h("div",{class:"flowhead"}, h("button",{class:"iconbtn","aria-label":"Back", onclick:back}, svg(IC.back)), h("div",{class:"fht"}, h("b",{},title), sub? h("span",{},sub):""));
   const searchBox=()=>h("label",{class:"search"}, svg(IC.search), h("input",{id:"nf-q", placeholder:"Search name", value:F.q, oninput:e=>{F.q=e.target.value; flowRedraw(); }}));
   const person=(id, opts={})=>h("div",{class:"contact", role:"button", tabindex:"0", "aria-pressed":opts.sel==null?null:String(opts.sel), onclick:opts.onclick, onkeydown:e=>{ if (e.key==="Enter") opts.onclick(); }},
