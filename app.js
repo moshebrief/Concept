@@ -248,6 +248,7 @@ function openMsgs(){
     S.msgCache[cid]=rows;
     S.msgs=(LOCAL.older[cid]||[]).length? mergeById(LOCAL.older[cid], rows) : rows;
     LOCAL.save("m:"+cid, S.msgs.slice(-5000), 800);
+    S.msgs=withFast(cid, S.msgs);
     const ids=new Set(rows.map(r=>r.id)); if (S.pend.some(p=>ids.has(p.id))) S.pend=S.pend.filter(p=>!ids.has(p.id));
     markRead(); scheduleRender();
   });
@@ -1739,9 +1740,11 @@ async function sendTextTo(cid, text, extra={}, givenId){
   let env=null; if (await canSeal(members)) { try { env=(await seal(text, members)).env; } catch { env=null; } }
   const id=givenId||newMsgId();
   const msg = env? {by:S.me, text:"", enc:env, at:now(), ...extra} : {by:S.me, text, at:now(), ...extra};
-  await guarded(store.set(`channels/${cid}/messages/${id}`, msg));
   const last = env? {enc:env, text:"", by:S.me, at:msg.at} : {text:text.slice(0,120), by:S.me, at:msg.at}; if (extra.mentions && extra.mentions.length) last.mentions=extra.mentions;
-  guarded(store.update(`channels/${cid}`, {last})).catch(()=>{});
+  if (env) fastSend(cid, id, msg, last);   // reaches the other phones right away; the saved copy follows
+  const saving=guarded(store.set(`channels/${cid}/messages/${id}`, msg));
+  guarded(store.update(`channels/${cid}`, {last})).catch(()=>{});   // chat list updates at the same time, not after
+  await saving;
   return {id, ...msg};
 }
 function forwardMenu(msgs){
@@ -2320,10 +2323,44 @@ function rtSync(){
   for (const cid of want) if (!RT.chans.has(cid)) {
     const ch=SB.channel("chat:"+cid, {config:{broadcast:{self:false}, presence:{key:S.me}}});
     ch.on("broadcast", {event:"act"}, ({payload})=>onAct(cid, payload))
+      .on("broadcast", {event:"msg"}, ({payload})=>onFastMsg(cid, payload))
       .on("presence", {event:"sync"}, ()=>{ try { RT.online[cid]=Object.keys(ch.presenceState()); } catch {} refreshPresenceUI(); })
       .subscribe(st=>{ if (st==="SUBSCRIBED") trackMe(cid, ch); });
     RT.chans.set(cid, ch);
   }
+}
+// ---- Instant delivery (like WhatsApp) ----
+// A new message goes straight to the other members over the live connection their phones already keep open,
+// so it shows up in well under a second. It's the same end-to-end encrypted envelope as the saved copy, and
+// only encrypted messages travel this way. The saved copy replaces it moments later; if no saved copy shows
+// up (e.g. it wasn't really sent), it disappears again.
+const FAST={};   // cid -> Map(id -> {m, t})
+function fastSend(cid, id, msg, last){
+  const ch=RT.chans.get(cid); if (!ch || S.mode!=="live") return;
+  try { ch.send({type:"broadcast", event:"msg", payload:{id, msg, last}}); } catch {}
+}
+async function onFastMsg(cid, p){
+  if (!p || !p.id || !p.msg || !p.msg.enc || !/^[A-Za-z0-9_-]{4,64}$/.test(p.id)) return;
+  const c=S.channels.find(x=>x.id===cid), by=p.msg.by;
+  if (!c || !by || by===S.me || !(c.members||[]).includes(by) || !(c.members||[]).includes(S.me) || isBlocked(by)) return;
+  if (Math.abs(now()-(p.msg.at||0))>120000) return;
+  try { await decryptMany([p.msg.enc, p.last&&p.last.enc]); } catch {}
+  const m={...p.msg, id:p.id, _fast:true};
+  const map=FAST[cid]||(FAST[cid]=new Map()); map.set(p.id, {m, t:Date.now()});
+  setTimeout(()=>{ if (map.has(p.id) && Date.now()-map.get(p.id).t>=19000) { map.delete(p.id); if (S.msgsFor===cid) { S.msgs=S.msgs.filter(x=>!(x.id===p.id && x._fast)); scheduleRender(); } } }, 20000);
+  if (p.last && p.last.enc && (!c.last || (c.last.at||0)<(p.msg.at||0))) {
+    c.last={...p.last, by, at:p.msg.at};
+    S.channels.sort((a,b)=>((b.last&&b.last.at)||b.at||0)-((a.last&&a.last.at)||a.at||0));
+    noticeIncoming(S.channels); countIncoming();
+  }
+  if (S.msgsFor===cid && !S.msgs.some(x=>x.id===p.id)) { S.msgs=[...S.msgs, m].sort((a,b)=>a.at-b.at); if (S.inThread && S.view==="chats" && cid===S.active) markRead(); }
+  scheduleRender();
+}
+// the saved copies arrived: drop the instant ones they replace, keep any still on their way
+function withFast(cid, rows){
+  const map=FAST[cid]; if (!map || !map.size) return rows;
+  const have=new Set(rows.map(r=>r.id)); for (const id of [...map.keys()]) if (have.has(id)) map.delete(id);
+  return map.size? [...rows, ...[...map.values()].map(v=>v.m)].sort((a,b)=>a.at-b.at) : rows;
 }
 function onAct(cid, p){
   if (!p || !p.u || p.u===S.me) return;
@@ -5283,7 +5320,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
