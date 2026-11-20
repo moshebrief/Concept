@@ -2667,7 +2667,53 @@ function openViewer(items, idx, caption, ctx){
   show(0); o.focus();
   requestAnimationFrame(openAnim);
 }
-function openFile(it){ toast("Opening…"); ensureMedia(it).then(url=>{ const a=h("a",{href:url, download:it.name||"file", target:"_blank", rel:"noopener"}); document.body.append(a); a.click(); a.remove(); }).catch(()=>toast("This file couldn't be loaded.")); }
+// A document someone sent: open it inside the app (PDF, pictures, text, audio, video), with a button to save
+// it to Files or open it in another app. Phones can't "download" a file from inside an app the way a computer
+// browser does, so the old download link did nothing on iPhone.
+const fileExt = it => ((it.name||"").split(".").pop()||"").toLowerCase();
+function fileKind(it){ const m=(it.mime||"").toLowerCase(), e=fileExt(it);
+  if (m==="application/pdf" || e==="pdf") return "pdf";
+  if (m.startsWith("image/") || /^(png|jpe?g|gif|webp|heic|bmp)$/.test(e)) return "image";
+  if (m.startsWith("video/") || /^(mp4|mov|m4v|webm)$/.test(e)) return "video";
+  if (m.startsWith("audio/") || /^(mp3|m4a|wav|aac|ogg|opus)$/.test(e)) return "audio";
+  if (m.startsWith("text/") || /^(txt|csv|md|json|log|rtf)$/.test(e)) return "text";
+  return "other"; }
+const MIME_BY_EXT={pdf:"application/pdf", png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif", webp:"image/webp", mp4:"video/mp4", mov:"video/quicktime", mp3:"audio/mpeg", m4a:"audio/mp4", wav:"audio/wav", txt:"text/plain", csv:"text/csv", json:"application/json",
+  doc:"application/msword", docx:"application/vnd.openxmlformats-officedocument.wordprocessingml.document", xls:"application/vnd.ms-excel", xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ppt:"application/vnd.ms-powerpoint", pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation", zip:"application/zip"};
+async function fileBlobOf(it){ const url=await ensureMedia(it); const b=await (await fetch(url)).blob(); const type=(it.mime && it.mime!=="application/octet-stream")? it.mime : (MIME_BY_EXT[fileExt(it)]||b.type||"application/octet-stream"); return b.type===type? b : new Blob([await b.arrayBuffer()], {type}); }
+const safeName = it => (it.name||"file").replace(/[\\/:*?"<>|]/g,"_").slice(0,120) || "file";
+async function saveFileOut(it, blob){
+  blob=blob||await fileBlobOf(it); const name=safeName(it);
+  const FS=NP("Filesystem"), SH=NP("Share");
+  if (FS && SH) { const w=await FS.writeFile({path:name, data:b64Of(await blob.arrayBuffer()), directory:"CACHE"}); await SH.share({files:[w.uri], title:name}); return; }
+  const f=new File([blob], name, {type:blob.type});
+  if (phoneBrowser() && navigator.canShare && navigator.canShare({files:[f]})) { await navigator.share({files:[f]}); return; }
+  const url=URL.createObjectURL(blob); const a=h("a",{href:url, download:name}); document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000);
+}
+function openFile(it){
+  const kind=fileKind(it), o=overlay("docv", it.name||"Document"); let url=null, blob=null, closed=false;
+  const close=()=>{ closed=true; o.classList.add("out"); setTimeout(()=>{ o.remove(); if (url) URL.revokeObjectURL(url); }, ms(220)); };
+  const shareBtn=h("button",{class:"docv-share", "aria-label":NATIVE_APP()? "Save or open in another app" : "Download"}, svg(NATIVE_APP()? '<path d="M12 3v12M7.500 7.500 12 3l4.500 4.500"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>' : '<path d="M12 4v11M7.500 10.500 12 15l4.500-4.500"/><path d="M5 19h14"/>'));
+  const body=h("div",{class:"docv-body"}, h("div",{class:"docv-wait"}, h("span",{class:"spin dark"}), h("span",{}, "Opening…")));
+  const ext=fileExt(it).slice(0,4).toUpperCase();
+  o.append(h("div",{class:"docv-bar"}, h("button",{class:"docv-x", "aria-label":"Close", onclick:close}, svg(IC.x)),
+      h("div",{class:"docv-t"}, h("b",{}, it.name||"Document"), h("small",{}, [ext, it.size? fmtSize(it.size) : ""].filter(Boolean).join(" · "))), shareBtn), body);
+  o.addEventListener("keydown", e=>{ if (e.key==="Escape") close(); }); o.tabIndex=-1; o.focus();
+  requestAnimationFrame(()=>o.classList.add("in"));
+  shareBtn.onclick=async()=>{ try { shareBtn.disabled=true; await saveFileOut(it, blob); } catch (e) { if (!/abort|cancel/i.test(String(e&&(e.name||e.message||e)))) toast("Couldn't save this file."); } finally { shareBtn.disabled=false; } };
+  fileBlobOf(it).then(b=>{ if (closed) return; blob=b; url=URL.createObjectURL(b);
+    const fallback=(why)=>h("div",{class:"docv-card"}, h("span",{class:"docv-ic"}, ext||svg(ICF.doc)), h("b",{}, it.name||"Document"), h("p",{}, why),
+      h("button",{class:"primary wide", onclick:()=>shareBtn.click()}, NATIVE_APP()? "Open in another app" : "Download"));
+    let view;
+    if (kind==="pdf") view=h("iframe",{class:"docv-frame", src:url, title:it.name||"PDF"});
+    else if (kind==="image") view=h("div",{class:"docv-img"}, h("img",{src:url, alt:it.name||""}));
+    else if (kind==="video") view=h("video",{class:"docv-media", src:url, controls:"", playsinline:""});
+    else if (kind==="audio") view=h("div",{class:"docv-audio"}, h("span",{class:"docv-ic"}, ext||"♪"), h("audio",{src:url, controls:""}));
+    else if (kind==="text") { view=h("pre",{class:"docv-text"}); b.text().then(t=>{ view.textContent=t.slice(0,400000); }); }
+    else view=fallback("This kind of file opens in another app, like Word, Excel or Files.");
+    body.replaceChildren(view);
+  }).catch(()=>{ if (closed) return; body.replaceChildren(h("div",{class:"docv-card"}, h("span",{class:"docv-ic"}, "!"), h("b",{}, "This file couldn't be loaded"), h("p",{}, "It may have been removed from the server before this device got it. Ask the sender to send it again."))); shareBtn.disabled=true; });
+}
 function renderMedia(m, p){
   const items=(p&&p.items)||[]; const box=h("div",{class:"mbox n"+Math.min(items.length,4)});
   if (!items.length) return box;
@@ -5331,7 +5377,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openFile, startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
