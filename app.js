@@ -1679,7 +1679,7 @@ function attachGestures(el, strip, m){
   const brow=strip.parentElement||el;
   const ico = canAct? h("span",{class:"swi swi-l","aria-hidden":"true"}, svg(IC.knot)) : null;
   if (ico) brow.append(ico);
-  let pz=null,x0=0,y0=0,t0=0,mx=0,dx=0,trail=[],active=false,decided=false,horiz=false,lp=null,endedAt=0,armL=false,armR=false;
+  let pz=null,x0=0,y0=0,t0=0,mx=0,dx=0,trail=[],active=false,decided=false,horiz=false,lp=null,endedAt=0,armL=false,armR=false,held=false;
   const band=(d,lim,cap)=>{ const a=Math.abs(d); const v=a<=lim? a : lim+(a-lim)*0.32; return Math.sign(d)*Math.min(cap, v); };
   const set=v=>{
     el.style.setProperty("--sx", v+"px");
@@ -1689,10 +1689,11 @@ function attachGestures(el, strip, m){
     if (r!==armR || l!==armL) { if ((r&&!armR) || (l&&!armL)) haptic(); armR=r; armL=l; }
     el.classList.toggle("swr", r); el.classList.toggle("swl", l);
   };
-  const start=(x,y,target)=>{ if (S.selecting || x<=24 || !target.closest(".strip") || target.closest("button,a,.vbars,input,textarea,.reacts,.chip")) return false;   // only the bubble itself swipes; the screen edge is for going back
+  const start=(x,y,target)=>{ const att=target.closest(".fcard, .mbox");   // documents, photos and videos: hold for the menu, tap still opens
+    if (S.selecting || x<=24 || !target.closest(".strip") || (!att && target.closest("button,a,.vbars,input,textarea,.reacts,.chip"))) return false; held=false;   // only the bubble itself swipes; the screen edge is for going back
     x0=x; y0=y; t0=performance.now(); mx=0; dx=0; trail=[[t0,0]]; active=true; decided=false; horiz=false; armL=armR=false;
     if (ico) ico.style.left=Math.max(0, strip.offsetLeft+strip.offsetWidth-36)+"px";
-    clearTimeout(lp); clearTimeout(pz); pz=setTimeout(()=>{ if (active && !decided) strip.classList.add("pressing"); }, 140); lp=setTimeout(()=>{ strip.classList.remove("pressing"); if (active && !decided){ active=false; holdMenu(m, strip); } }, 430); return true; };
+    clearTimeout(lp); clearTimeout(pz); pz=setTimeout(()=>{ if (active && !decided) strip.classList.add("pressing"); }, 140); lp=setTimeout(()=>{ strip.classList.remove("pressing"); if (active && !decided){ active=false; held=true; holdMenu(m, strip); } }, 430); return true; };
   const move=(x,y)=>{ if (!active) return false; mx=x-x0; const my=y-y0; const tn=performance.now(); trail.push([tn,mx]); while (trail.length>2 && tn-trail[0][0]>90) trail.shift();
     if (!decided && (Math.abs(mx)>6 || Math.abs(my)>6)) { decided=true; clearTimeout(lp); clearTimeout(pz); strip.classList.remove("pressing"); horiz=Math.abs(mx)>Math.abs(my); if (!horiz) { active=false; return false; } SW.drag=true; el.classList.add("swiping"); }
     if (!horiz) return false;
@@ -1720,7 +1721,7 @@ function attachGestures(el, strip, m){
   el.addEventListener("pointermove", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; const was=horiz; if (move(e.clientX, e.clientY) && !was && horiz) { try { el.setPointerCapture(e.pointerId); } catch {} } });
   el.addEventListener("pointerup", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; end(); });
   el.addEventListener("pointercancel", e=>{ if (e.pointerType==="touch" && "ontouchstart" in window) return; cancel(); });
-  el.addEventListener("click", e=>{ if (Date.now()-endedAt<400) { e.stopPropagation(); e.preventDefault(); } }, true);
+  el.addEventListener("click", e=>{ if (held || Date.now()-endedAt<400) { held=false; e.stopPropagation(); e.preventDefault(); } }, true);   // letting go after a hold doesn't also open the file
   strip.addEventListener("contextmenu", e=>{ e.preventDefault(); if (!horiz) holdMenu(m, strip); });
 }
 function replyBarEl(){
