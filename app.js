@@ -2011,7 +2011,8 @@ function makeDocStore(sb){
       const load=async()=>{ if (loading) { again=true; return loading; }
         loading=(async()=>{ do { again=false; const fresh=new Map(); let from=0, ok=true;
             for (;;) { const {data, error}=await sb.from("docs").select("path,data").eq("col", col).range(from, from+999); if (error || !data) { ok=false; break; } data.forEach(r=>fresh.set(r.path, r.data)); if (data.length<1000) break; from+=1000; }
-            if (ok && alive) { map.clear(); fresh.forEach((d,p)=>map.set(p,d)); ready=true; emit(); } } while (again && alive); })().finally(()=>{ loading=null; });
+            if (ok && alive) { let same=ready && fresh.size===map.size; if (same) for (const [p,d] of fresh) { const o=map.get(p); if (o===undefined || JSON.stringify(o)!==JSON.stringify(d)) { same=false; break; } }
+              if (!same) { map.clear(); fresh.forEach((d,p)=>map.set(p,d)); ready=true; emit(); } } } while (again && alive); })().finally(()=>{ loading=null; });
         return loading; };
       let first=true;
       const connect=()=>{ if (!alive) return; if (ch) { try { sb.removeChannel(ch); } catch {} }
@@ -2275,7 +2276,15 @@ async function signOut(){
 
 // ===================== smooth rendering =====================
 let RQ=0;
-function scheduleRender(){ if (NAV_HOLD && now()<NAV_HOLD) return; if (SW.drag) { SW.pending=true; return; } if (HOLD) { HOLD.pending=true; return; } if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
+// While a chat row is swiped open or a hold menu is up, background updates wait (redrawing under it made the
+// screen blink and swallowed taps); they're applied the moment it closes.
+let UI_HOLD_PENDING=false;
+// also while a finger is on the screen: redrawing under it cancels a hold or a tap halfway through
+let FINGER=0; addEventListener("pointerdown", e=>{ if (e.pointerType!=="mouse") FINGER=Date.now(); }, true);
+["pointerup","pointercancel"].forEach(ev=>addEventListener(ev, ()=>{ FINGER=0; }, true));
+const uiHeld = () => !!(SW.open || document.querySelector(".lpm") || (FINGER && Date.now()-FINGER<4000));
+setInterval(()=>{ if (UI_HOLD_PENDING && !uiHeld()) { UI_HOLD_PENDING=false; scheduleRender(); } }, 250);
+function scheduleRender(){ if (NAV_HOLD && now()<NAV_HOLD) return; if (SW.drag) { SW.pending=true; return; } if (HOLD) { HOLD.pending=true; return; } if (uiHeld()) { UI_HOLD_PENDING=true; return; } if (RQ) return; RQ=requestAnimationFrame(()=>{ RQ=0; softRender(); }); }
 // While you're typing in a search box, task or settings field, background updates wait until you're
 // done, so the keyboard never gets closed under your fingers.
 let TYPING_HOLD=false;
