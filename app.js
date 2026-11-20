@@ -1094,7 +1094,7 @@ function longPress(el, fn){
 // iOS-style menu for a held item: the screen blurs, the item lifts out of the list, and the menu grows from under it.
 // items: [{label, icon, fn, danger}] (null to skip). Tap outside to close.
 function ctxMenu(src, items, opt={}){
-  if (document.querySelector(".lpm")) return;
+  if (document.querySelector(".lpm") || !src || !src.isConnected) return;   // never lift something that's no longer on screen
   items=items.filter(Boolean);
   // measure the item at its real size (it may still be shrunk from the press)
   const rr=src.getBoundingClientRect(), ow=src.offsetWidth||rr.width, oh=src.offsetHeight||rr.height;
@@ -1620,6 +1620,8 @@ const MORE_EMOJI=["👍","❤️","😂","😮","😢","🙏","🔥","✅","👏
 function quickEmojis(){ const use=ls.get("emojiUse",{}); const top=Object.entries(use).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); return [...new Set([...top, ...EMOJI])].slice(0,6); }
 function holdMenu(m, src){
   if (m.deleted || S.selecting || !S.canWrite) return;
+  // a background update may have redrawn the chat while the finger was down: use the message as it is on screen now
+  if (src && !src.isConnected) { const cur=document.getElementById("msg-"+m.id); src=cur && cur.querySelector(".strip"); if (!src) return; }
   if (!src) { S.actFor=m.id; S.emojiMore=false; haptic(); render(true); return; }
   haptic(); S.emojiMore=false;
   const mine=m.by===S.me, task=m.taskId && S.tasks.find(t=>t.id===m.taskId && canSeeTask(t)), r=m.reactions||{};
