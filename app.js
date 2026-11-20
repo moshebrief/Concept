@@ -3136,7 +3136,9 @@ async function syncAll(){
       await kvSet(LOCAL.key("m:"+c.id), merged);
       for (const r of rows) { try { await saveAttachments(r); } catch {} }
       meta[c.id]=top; await kvSet(LOCAL.key("syncmeta"), meta);
-      if ((c["s_"+S.me]||0) < top) queueAck(c.id, {["s_"+S.me]: top});
+      // Only your phone says "saved": the server keeps a message until your PHONE has it. A linked computer
+      // saving it must not let the server delete it before the phone picked it up.
+      if (NATIVE_APP() && (c["s_"+S.me]||0) < top) queueAck(c.id, {["s_"+S.me]: top});
       LOCAL.older[c.id]=merged;
     }
   } catch {} finally { SYNCING=false; if (SYNC_AGAIN) { SYNC_AGAIN=false; syncSoon(); } }
