@@ -8,7 +8,19 @@ const ROOT = __dirname;
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, "capacitor.config.json"), "utf8"));
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const APP_ID = cfg.appId;
-const VERSION = process.env.TESTFLIGHT_NEXT_VERSION ? pkg.version.replace(/(\d+)$/, n => String(+n + 1)) : pkg.version;                       // shown in the stores, e.g. 1.0.0
+// Version shown in the stores. Apple refuses a version number it has already approved, so the last part counts
+// the project's changes (1.0.<number of commits>) — every new release is automatically higher than the last one.
+// It never goes below what package.json says.
+const VERSION = (() => {
+  const base = pkg.version.split(".").map(n => parseInt(n, 10) || 0);
+  let count = 0;
+  try {
+    const { execSync } = require("child_process"), run = c => execSync(c, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    if (run("git rev-parse --is-shallow-repository") === "true") { try { run("git fetch --unshallow --quiet"); } catch {} }
+    count = parseInt(run("git rev-list --count HEAD"), 10) || 0;
+  } catch {}
+  return `${base[0]}.${base[1]}.${Math.max(base[2] || 0, count)}`;
+})();
 const BUILD = String(parseInt(process.env.BUILD_NUMBER || process.env.PROJECT_BUILD_NUMBER || "1", 10) + 0);
 // iPhone build number: Codemagic's BUILD_NUMBER counts each workflow separately, so the App Store and the
 // TestFlight workflows would reuse numbers Apple has already seen (and Apple rejects the upload).
