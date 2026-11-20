@@ -445,24 +445,33 @@ async function startRec(cb, opts={}){
   if (REC.hold) holdUI(true); else render(true);
   REC.timer = setInterval(()=>{ const el=$("#recTime"); if (el && REC) el.textContent=fmtDur(recSecs()); }, 250);
   let stream=null;
-  try { if (!navigator.mediaDevices || !window.MediaRecorder) throw 0; stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}); }
+  // iPhone: if the app's sound player (message tones, voice-note playback) is holding the audio hardware when
+  // the mic starts, iOS can hand the recorder pure silence. Quiet everything and let go of it first.
+  try { if (!PLAYER.paused) PLAYER.pause(); } catch {}
+  try { if (AC && AC.state==="running") await AC.suspend(); } catch {}
+  try { if (!navigator.mediaDevices || !window.MediaRecorder) throw 0; stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}); }
   catch { clearInterval(REC&&REC.timer); REC=null; S.rec=false; holdUI(false); render(true); openVoiceFallback(cb); return; }
   const early=REC;
   if (!early || early.abort) { stream.getTracks().forEach(t=>t.stop()); return; }
   clearInterval(early.timer);
   const mime = pickMime(); let mr;
-  try { mr = new MediaRecorder(stream, mime? {mimeType:mime, audioBitsPerSecond:32000} : {audioBitsPerSecond:32000}); } catch { mr = new MediaRecorder(stream); }
-  const ac = audioCtx() || new (window.AudioContext||window.webkitAudioContext)(); try { if (ac.state!=="running") ac.resume(); } catch {} const an = ac.createAnalyser(); an.fftSize=256; const srcNode=ac.createMediaStreamSource(stream); srcNode.connect(an);
+  // the sound meter gets its own audio engine, made after the mic is on, so it never competes with the recorder
+  let ac=null, an=null, srcNode=null;
+  try { ac=new (window.AudioContext||window.webkitAudioContext)(); if (ac.state!=="running") ac.resume().catch(()=>{}); an=ac.createAnalyser(); an.fftSize=256; srcNode=ac.createMediaStreamSource(stream); srcNode.connect(an); } catch { an=null; }
+  try { mr = new MediaRecorder(stream, mime? {mimeType:mime, audioBitsPerSecond:64000} : {}); } catch { mr = new MediaRecorder(stream); }
+  { const tr=stream.getAudioTracks()[0]; if (tr) tr.onmute=()=>{ if (REC && REC.stream===stream) toast("The microphone was taken by another app or a call"); }; }
   REC = Object.assign(early, {pending:false, mr, stream, ac, an, srcNode});
   mr.ondataavailable = e => { if (e.data && e.data.size) REC.chunks.push(e.data); };
   mr.onstop = async () => {
-    const r=REC; REC=null; S.rec=false; holdUI(false); r.stream.getTracks().forEach(t=>t.stop()); try{ r.srcNode.disconnect(); if (r.ac!==AC) r.ac.close(); }catch{}
+    const r=REC; REC=null; S.rec=false; holdUI(false); r.stream.getTracks().forEach(t=>t.stop()); try{ r.srcNode && r.srcNode.disconnect(); if (r.ac && r.ac!==AC) r.ac.close(); }catch{}
     clearInterval(r.timer); clearInterval(r.act); cancelAnimationFrame(r.raf); if (!r.cb) sendAct("stop", r.cid);
     if (r.cancel) { render(true); return; }
     prevStop(); const dur=recSecs(r); if (dur<0.6) { render(true); toast("Hold on a little longer to record"); return; }
     const blob = new Blob(r.chunks, {type:(r.mr.mimeType||mime||"audio/webm").split(";")[0]});
     const live=peaksFromLevels(r.levels);
     const flat=Math.max(...live)-Math.min(...live)<.15;
+    const silent=!!r.an && r.levels.length>20 && Math.max(...r.levels)<0.002;   // the mic delivered nothing at all
+    if (silent && !r.cb) { S.vdraft={cid:r.cid, blob, dur, peaks:live, url:URL.createObjectURL(blob)}; render(true); toast("No sound was picked up. Play it back before sending, or record again."); return; }
     const peaks=flat? ((await peaksFromBlob(blob)).peaks||live) : live;
     if (r.draft && !r.cb) { S.vdraft={cid:r.cid, blob, dur, peaks, url:URL.createObjectURL(blob)}; render(true); setTimeout(()=>{ const c=$("#composer"); if (c) c.focus(); }); return; }
     render(true);
@@ -472,8 +481,8 @@ async function startRec(cb, opts={}){
   if (!cb) { sendAct("recording"); REC.act=setInterval(()=>sendAct("recording", REC&&REC.cid), 2500); }
   if (REC.stopAfter) { setTimeout(()=>{ if (REC===early) { try { early.mr.stop(); } catch {} } }, 50); }
   REC.timer = setInterval(()=>{ const el=$("#recTime"); const sec=recSecs(); if (el && !REC.paused) el.textContent=fmtDur(sec); if (sec>=180) stopRec(false); }, 250);
-  const buf=new Uint8Array(an.frequencyBinCount);
-  const loop=()=>{ if (!REC) return; an.getByteTimeDomainData(buf); let sq=0; for (const v of buf) { const x=(v-128)/128; sq+=x*x; } const lv=Math.sqrt(sq/buf.length); if (REC.paused) { REC.raf=requestAnimationFrame(loop); return; } REC.levels.push(lv); drawRecWave();
+  const buf=new Uint8Array(an? an.frequencyBinCount : 128).fill(128);
+  const loop=()=>{ if (!REC) return; if (an) an.getByteTimeDomainData(buf); let sq=0; for (const v of buf) { const x=(v-128)/128; sq+=x*x; } const lv=Math.sqrt(sq/buf.length); if (REC.paused) { REC.raf=requestAnimationFrame(loop); return; } REC.levels.push(lv); drawRecWave();
     if (!REC.bars || !REC.bars.length || !REC.bars[0].isConnected) REC.bars=document.querySelectorAll("#recBars i"); const bars=REC.bars; if (bars.length){ const tail=REC.levels.slice(-bars.length); bars.forEach((b,i)=>b.style.transform=`scaleY(${Math.max(.1,Math.min(1,Math.sqrt(tail[i]||0)*2.2))})`); }
     REC.raf=requestAnimationFrame(loop); };
   loop();
@@ -5322,7 +5331,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
