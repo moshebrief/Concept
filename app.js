@@ -5061,7 +5061,7 @@ async function openLinkScanner(onDone){
 // computer has (from the QR code), so the server can't read it, and the computer deletes it once it has it.
 const SYNC_DAYS=90, SYNC_PER_CHAT=300, SYNC_CHUNK=400000;
 const syncCol = () => "data/users/"+S.me+"/sync";
-async function gz(u8, on){ if (!window.CompressionStream) return {u8, z:false};
+async function gzSync(u8, on){ if (!window.CompressionStream) return {u8, z:false};
   const s=new Blob([u8]).stream().pipeThrough(on? new CompressionStream("gzip") : new DecompressionStream("gzip")); return {u8:new Uint8Array(await new Response(s).arrayBuffer()), z:true}; }
 function histRow(m){
   const r={...m, hist:true}; delete r.enc; delete r.penc; delete r.local; delete r.pending; delete r.prog;
@@ -5089,7 +5089,7 @@ async function sendHistory(id, pub, prog){
   const theirs=await crypto.subtle.importKey("jwk",{kty:"EC",crv:"P-256",x:pub.x,y:pub.y,ext:true},{name:"ECDH",namedCurve:"P-256"},false,[]);
   const mine=await crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-256"}, true, ["deriveKey"]);
   const key=await crypto.subtle.deriveKey({name:"ECDH", public:theirs}, mine.privateKey, {name:"AES-GCM", length:256}, false, ["encrypt"]);
-  const {u8, z}=await gz(TE.encode(JSON.stringify({v:1, at:now(), chats:out})), true);
+  const {u8, z}=await gzSync(TE.encode(JSON.stringify({v:1, at:now(), chats:out})), true);
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const b64=b64e(new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, u8)));
   const epk=await crypto.subtle.exportKey("jwk", mine.publicKey), n=Math.max(1, Math.ceil(b64.length/SYNC_CHUNK));
@@ -5119,7 +5119,7 @@ async function receiveHistory(){
     const theirs=await crypto.subtle.importKey("jwk",{kty:"EC",crv:"P-256",x:head.epk.x,y:head.epk.y,ext:true},{name:"ECDH",namedCurve:"P-256"},false,[]);
     const key=await crypto.subtle.deriveKey({name:"ECDH", public:theirs}, priv, {name:"AES-GCM", length:256}, false, ["decrypt"]);
     let u8=new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM", iv:b64d(head.iv)}, key, b64d(parts.map(p=>p.d).join(""))));
-    if (head.z) u8=(await gz(u8, false)).u8;
+    if (head.z) u8=(await gzSync(u8, false)).u8;
     const hist=JSON.parse(TD.decode(u8)); let count=0;
     for (const [cid, rows] of Object.entries(hist.chats||{})) {
       const have=(await LOCAL.load("m:"+cid).catch(()=>null))||[];
@@ -5517,7 +5517,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={answerRestores, watchRestores, requestRestore, setDB:v=>{DB=v}, openTour, openFile, startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={buildBackup, readBackup, restoreBackup, answerRestores, watchRestores, requestRestore, setDB:v=>{DB=v}, openTour, openFile, startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
