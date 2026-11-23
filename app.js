@@ -212,13 +212,14 @@ function startDemo(msg){ S.mode="demo"; S.me="me"; demo.seed(); if (!S.active) S
 function showBanner(t){ const b=$("#banner"); b.hidden=false; b.replaceChildren(h("span",{style:"width:9px;height:9px;background:var(--knot);transform:rotate(45deg);flex:none"}), h("span",{},t)); }
 
 function subscribeAll(){
-  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E(); startLinkedWatch(); loadSched(); receiveHistory();
+  loadPins(); loadNotes(); watchBadge(); loadAddr(); startE2E(); startLinkedWatch(); loadSched(); receiveHistory(); watchRestores(); setTimeout(()=>requestRestore(false), 9000);
   store.sub("keys", rows => { S.keys=Object.fromEntries(rows.map(r=>[r.id, r.devices||{}])); if (E2E.ready) S.keys[S.me]={...(S.keys[S.me]||{}), [E2E.dev]:E2E.pub}; });
   store.sub("team", async rows => { LOCAL.save("team", rows); S.team=rows.map(r=>r.id); S.teamDocs=Object.fromEntries(rows.map(r=>[r.id,r])); if (!Object.keys(PROF).length || rows.some(r=>!PROF[r.id])) loadProfileData(); profileSignal(rows); if (S.mode==="live") for (const r of rows) S.people[r.id]={id:r.id, name:r.name||r.phone||"Someone", avatarUrl:r.photo||"", color:colorFor(r.id)}; applyProfiles(); matchAddr(); await resolvePeople(S.team); scheduleRender(); });
   store.sub("teams", rows => { S.teams=rows; scheduleRender(); });
   store.sub("invites", rows => { S.invites=rows; scheduleRender(); });
   store.sub("contacts", async rows => { S.allContacts=Object.fromEntries(rows.map(r=>[r.id, r.ids||[]])); S.contacts=S.allContacts[S.me]||[]; await resolvePeople(Object.keys(S.allContacts)); scheduleRender(); });
   store.sub("channels", async rows => {
+    try { answerRestores(rows); } catch {}
     S.channels = rows.filter(c => c.kind!=="dm" || (c.members||[]).includes(S.me)).sort((a,b)=>((b.last&&b.last.at)||b.at||0)-((a.last&&a.last.at)||a.at||0));
     await resolvePeople(rows.flatMap(c=>[...(c.members||[]), c.last&&c.last.by]).filter(Boolean));
     if (!S.active || !S.channels.find(c=>c.id===S.active)) S.active = S.channels[0] ? S.channels[0].id : null;
@@ -2332,7 +2333,9 @@ async function signOut(){
   if (!NATIVE_APP()) { const lid=ls.get("linkId",""); if (lid) { try { await linkFn({act:"logout", id:lid}); } catch {} } ls.set("linkId",""); ls.set("linkSeen",""); ls.set("linkPriv",null);
     try { await SB.auth.signOut({scope:"local"}); } catch {} }
   else { try { await SB.auth.signOut(); } catch {} }
-  clearLocalCopy(); setTimeout(()=>location.reload(), 150);
+  // Your chats stay on this device (saved per account), so signing back in brings everything back.
+  // Only "Delete my account" erases them.
+  setTimeout(()=>location.reload(), 150);
 }
 
 // ===================== smooth rendering =====================
@@ -3431,7 +3434,11 @@ async function restoreBackup(data){
 }
 const BK_DIR = () => PLAT==="ios"? "DOCUMENTS" : "DATA";
 // Keep the backup on the phone, in the folder the phone's own iCloud / Google backup includes.
-async function keepBackupOnPhone(bytes){ const FS=NP("Filesystem"); if (!FS) return false; await FS.writeFile({path:BK_FILE, data:b64Of(bytes), directory:BK_DIR(), recursive:true}); return true; }
+async function keepBackupOnPhone(bytes){ const FS=NP("Filesystem"); if (!FS) return false;
+  // keep the previous backup next to it, so one bad backup can never wipe out a good one
+  try { await FS.copy({from:BK_FILE, to:BK_FILE+".prev", directory:BK_DIR(), toDirectory:BK_DIR()}); } catch {}
+  await FS.writeFile({path:BK_FILE, data:b64Of(bytes), directory:BK_DIR(), recursive:true}); return true; }
+async function localMsgCount(){ let n=0; for (const c of S.channels) { const l=await LOCAL.load("m:"+c.id).catch(()=>null); n+=(l&&l.length)||0; } return n; }
 async function phoneBackup(){ const FS=NP("Filesystem"); if (!FS) return null; try { const r=await FS.readFile({path:BK_FILE, directory:BK_DIR()}); return typeof r.data==="string"? fromB64(r.data) : new Uint8Array(await r.data.arrayBuffer()); } catch { return null; } }
 let BK_RUNNING=false;
 async function runBackup(onp, quiet){
@@ -3450,18 +3457,76 @@ async function autoBackup(){
   const bk=S.prefs.backup||{}; const f=bk.freq||"week"; if (f==="off") return;
   const span={day:864e5, week:7*864e5, month:30*864e5}[f]; if (bk.last && now()-bk.last<span) return;
   if (!S.channels.some(c=>c.last)) return;
-  try { await runBackup(null, true); } catch {}
+  // Never back up a phone that has lost its chats (e.g. just signed in again) over a good backup.
+  const count=await localMsgCount(); if (!count) return;
+  if (bk.count && count < bk.count*0.7) return;
+  if (!bk.count && await phoneBackup()) return;   // a backup is here but we don't know how big: restore first, don't overwrite
+  try { await runBackup(null, true); setPref("backup", {...(S.prefs.backup||{}), count}); } catch {}
 }
 // New phone: if the phone's backup brought a Task Message backup along, offer to restore it once.
 async function offerRestore(){
-  if (!NATIVE || S.mode!=="live" || ls.get("bkOffered:"+S.me)) return;
+  if (!NATIVE || S.mode!=="live" || Date.now()-(ls.get("bkSkip:"+S.me,0)||0) < 3*864e5) return;
   const bytes=await phoneBackup(); if (!bytes) return;
   const have=(await Promise.all(S.channels.slice(0,20).map(c=>LOCAL.load("m:"+c.id)))).some(l=>l && l.length);
-  if (have) { ls.set("bkOffered:"+S.me, 1); return; }
-  ls.set("bkOffered:"+S.me, 1);
+  if (have) return;
   sheet("Restore your chats?", (draw, close)=>[h("p",{class:"note", style:"margin:0 4px"}, "A backup of your chats was found on this phone. Restore your messages, photos and voice notes?"),
     h("button",{class:"primary wide", onclick:async()=>{ close(); toast("Restoring…"); try { const n=await restoreBackup(await readBackup(bytes)); toast(n+" messages restored"); } catch { toast("Couldn't restore the backup."); } }}, "Restore"),
-    h("button",{class:"ghost wide", onclick:close}, "Skip")]);
+    h("button",{class:"ghost wide", onclick:()=>{ ls.set("bkSkip:"+S.me, Date.now()); close(); }}, "Skip")]);
+}
+// ---- Getting your chats back from the other people in them (and from your linked computer) ----
+// When this phone signs in and has no copy of a chat, it asks. The other people's phones — and your own
+// linked computer — send back their copies of that chat, still end-to-end encrypted exactly as they were
+// sent, so only you can read them. The copies wait on the server for up to 7 days and are deleted the
+// moment this phone has saved them.
+const RESTORE_DAYS=7;
+async function requestRestore(force){
+  if (S.mode!=="live" || !NATIVE_APP() || !S.me) return 0;
+  let asked=0;
+  for (const c of S.channels) {
+    if (!c.last || !(c.members||[]).includes(S.me)) continue;
+    const last=c["rq_"+S.me]||0; if (!force && now()-last < 3*864e5) continue;
+    if (!force) { const have=await LOCAL.load("m:"+c.id).catch(()=>null); if (have && have.length) continue; }
+    store.update("channels/"+c.id, {["rq_"+S.me]: now()}).catch(()=>{}); asked++;
+  }
+  return asked;
+}
+const RQ_BUSY=new Set();
+function answerRestores(chans){
+  if (S.mode!=="live" || !S.me) return;
+  for (const c of chans) for (const k of Object.keys(c)) {
+    if (!k.startsWith("rq_")) continue;
+    const uid=k.slice(3), at=c[k]||0;
+    if (now()-at > RESTORE_DAYS*864e5 || !(c.members||[]).includes(uid)) continue;
+    if (uid===S.me && NATIVE_APP()) continue;   // the phone asking doesn't answer itself; your computer does
+    const doneKey="rqdone:"+c.id+":"+uid; if ((ls.get(doneKey,0)||0) >= at || RQ_BUSY.has(doneKey)) continue;
+    RQ_BUSY.add(doneKey);
+    sendRestore(c, uid).then(()=>ls.set(doneKey, at)).catch(()=>{}).finally(()=>RQ_BUSY.delete(doneKey));
+  }
+}
+async function sendRestore(c, uid){
+  let rows=(await LOCAL.load("m:"+c.id).catch(()=>null))||[]; if (S.msgCache[c.id]) rows=mergeById(rows, S.msgCache[c.id]);
+  rows=rows.filter(m=>m && m.id && !m.hist && !m.pending && !m._fast && (!m.enc || (m.enc.keys||[]).some(x=>x.u===uid)))
+    .map(m=>{ const r={...m}; delete r.local; delete r.prog; delete r.pending; delete r._fast; return r; }).slice(-3000);
+  if (!rows.length) return;
+  const per=200, n=Math.ceil(rows.length/per);
+  for (let i=0;i<n;i++) await store.set(`restore/${uid}/${c.id}.${S.me}.${i}`, {from:S.me, cid:c.id, i, n, rows:rows.slice(i*per,(i+1)*per), at:now()});
+}
+let RESTORED=0, RESTORED_T=0;
+function watchRestores(){
+  if (S.mode!=="live" || !DB || !NATIVE_APP()) return;
+  store.sub("restore/"+S.me, async docs=>{
+    for (const d of docs) {
+      if (!d || !d.cid || !Array.isArray(d.rows)) continue;
+      const have=(await LOCAL.load("m:"+d.cid).catch(()=>null))||[];
+      const known=new Set(have.map(m=>m.id)); const fresh=d.rows.filter(m=>m && m.id && !known.has(m.id)).map(m=>({...m}));
+      if (fresh.length) {
+        const merged=mergeById(fresh, have).slice(-5000); await kvSet(LOCAL.key("m:"+d.cid), merged); LOCAL.older[d.cid]=merged; RESTORED+=fresh.length;
+        if (S.msgsFor===d.cid) { S.msgsFor=null; openMsgs(); }
+      }
+      store.del(`restore/${S.me}/${d.id}`).catch(()=>{});
+    }
+    if (RESTORED) { clearTimeout(RESTORED_T); RESTORED_T=setTimeout(()=>{ toast(RESTORED+" messages restored from your chats"); RESTORED=0; scheduleRender(); }, 1500); }
+  });
 }
 function openBackup(){
   let busy="";
@@ -3487,7 +3552,9 @@ function openBackup(){
             const m=err && err.message; if (m==="needpw") { askPassword(false, go); return; }
             toast(m==="password"? "Wrong password." : m==="notbackup"? "That isn't a Task Message backup file." : m==="otheraccount"? "That backup belongs to a different account." : "Couldn't restore that backup."); } };
           go(); }});
-        document.body.append(inp); inp.click(); }}, svg(IC.arrow), "Restore chats")
+        document.body.append(inp); inp.click(); }}, svg(IC.arrow), "Restore chats"),
+      NATIVE? h("div",{class:"ulist sgroup"}, h("button",{class:"srow pick", onclick:async()=>{ const n=await requestRestore(true); toast(n? "Asked your contacts and your computer for "+n+(n===1?" chat":" chats")+". They arrive as their apps open." : "No chats to restore"); }},
+        h("span",{class:"sic"}, svg(IC.chat)), h("span",{class:"stx"}, h("b",{}, "Get chats back from my contacts"), h("span",{}, "The people you chat with, and your linked computer, send you their copies, end-to-end encrypted")), svg(IC.arrow))) : ""
     ];
   });
 }
@@ -5450,7 +5517,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openTour, openFile, startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={answerRestores, watchRestores, requestRestore, setDB:v=>{DB=v}, openTour, openFile, startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 
