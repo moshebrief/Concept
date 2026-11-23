@@ -1201,6 +1201,7 @@ function renderSettings(){
     tm && tm.owner===S.me? row(ICF.gear, "Team settings", h("button",{class:"iconbtn", title:"Team settings", "aria-label":"Team settings", onclick:openTeamSettings}, svg(IC.arrow))) : "",
     row(ICF.stage, "Task stages", h("span",{class:"sval"}, STATUSES.length))));
   w.append(...group("Help",
+    h("button",{class:"srow pick", onclick:()=>openTour(null, true)}, h("span",{class:"sic"}, svg(IC.knot)), h("span",{class:"stx"}, h("b",{},"How Task Message works")), svg(IC.arrow)),
     row(ICF.block, "Blocked contacts", h("span",{class:"sval"}, String((S.blocked||[]).length)), (S.blocked||[]).map(id=>nameOf(id).replace(/^Example:\s*/,"")).join(", ")),
     h("a",{class:"srow", href:siteLink("privacy.html"), target:"_blank", rel:"noopener"}, h("span",{class:"sic"}, svg(ICF.lock)), h("span",{class:"stx"}, h("b",{},"Privacy Policy")), svg(IC.arrow)),
     h("a",{class:"srow", href:siteLink("terms.html"), target:"_blank", rel:"noopener"}, h("span",{class:"sic"}, svg(ICF.doc)), h("span",{class:"stx"}, h("b",{},"Terms of Service")), svg(IC.arrow))));
@@ -2148,7 +2149,7 @@ function openProfileSetup(u, existing){
   const o=overlay("onboard","Your name"); o.id="profsetup";
   const save=async()=>{ if (!name.trim()) { toast("Enter your name."); return; }
     try { await guarded(store.set("team/"+S.me, {...(existing||{}), name:name.trim().slice(0,40), phone:fmtPhone(u.phone)||((existing||{}).phone||""), joinedAt:(existing&&existing.joinedAt)||now()})); } catch { return; }
-    o.remove(); openFindContacts(); };
+    o.remove(); openTour(()=>openFindContacts()); };
   o.replaceChildren(obScreen({
     title:"Create your profile", sub:"Add your name and an optional photo. This is how people will see you in chats and tasks.",
     body:[h("button",{class:"obphoto", "aria-label":"Add a profile photo", onclick:()=>pickProfilePhoto(()=>{ const b=o.querySelector(".obphoto"); if (b) b.replaceChildren(avatar(S.me,"xl"), h("span",{class:"epcam"}, svg(ICF.image))); })}, myProf().photo? avatar(S.me,"xl") : svg(ICF.image), h("span",{class:"epcam"}, svg(IC.plus))),
@@ -2166,6 +2167,66 @@ function openFindContacts(){
       h("div",{}, h("span",{class:"obpk"}, svg(ICF.lock)), h("span",{}, h("b",{}, "Private by design"), h("span",{}, "Messages are end-to-end encrypted"))))],
     label:"Find my contacts", go:()=>{ o.remove(); importContacts(); },
     foot:h("button",{class:"oblink center", onclick:()=>o.remove()}, "Not now")}));
+}
+// ===================== "How Task Message works" — the first-time walkthrough =====================
+// Shown once, right after a new person creates their profile (and any time from Settings → Help).
+// Each page has a small live demo of the real thing, built from the app's own look, so it's clear at a glance.
+function tourPages(){
+  const me="You", them="Dana";
+  const bub=(t, mine, extra="")=>h("div",{class:"tb "+(mine?"tb-me":"tb-them")+" "+extra}, t);
+  return [
+    {key:"chat", title:"Chat like you always do", sub:"Private chats and groups, with voice notes, photos and files. It works just like the messenger you know.",
+      art:h("div",{class:"ta ta-chat"},
+        bub("Can you send the final quote to Levi today?", false, "d1"),
+        bub("Sure, will do 👍", true, "d2"),
+        h("div",{class:"tb tb-them tb-voice d3"}, h("i",{class:"tplay"}), h("span",{class:"twave"}, ...Array.from({length:18},(_,i)=>h("i",{style:`height:${[6,10,14,8,16,12,7,15,11,9,13,6,10,14,8,12,9,6][i]}px`}))), h("small",{}, "0:12")),
+        bub("Thanks!", false, "d4"))},
+    {key:"task", title:"Turn any message into a task", sub:"Swipe a message to the left, or hold it and tap Make task. Nothing gets lost in the chat.",
+      art:h("div",{class:"ta ta-task"},
+        h("div",{class:"tswipe"}, h("div",{class:"tslot"}, svg(IC.knot), h("span",{}, "Task")), bub("Can you send the final quote to Levi today?", false, "tsb")),
+        h("div",{class:"tcard tpop"}, h("span",{class:"tck"}), h("div",{}, h("b",{}, "Send the final quote to Levi"), h("small",{}, "Dana · Due today")), h("span",{class:"tav"}, "D")))},
+    {key:"board", title:"Assign it and track it", sub:"Give a task to someone, set a due date and watch it move from To do to Done. Everyone sees where it stands.",
+      art:h("div",{class:"ta ta-board"},
+        ...[["To do","#8E8E93"],["Doing","#007AFF"],["Done","#34C759"]].map(([n,c],i)=>h("div",{class:"tcol"}, h("div",{class:"tcolh"}, h("i",{style:`background:${c}`}), n),
+          i===0? h("div",{class:"tmini"}, "Order new signs") : "", i===1? h("div",{class:"tmini"}, "Call the plumber") : "", i===2? h("div",{class:"tmini"}, "Book the hall") : "")),
+        h("div",{class:"tmini tmove"}, "Send the quote"))},
+    {key:"hold", title:"Hold for more", sub:"Hold a message to react, reply, forward, star it, save it to Files or delete it. Hold the send button to schedule a message for later.",
+      art:h("div",{class:"ta ta-hold"},
+        h("div",{class:"treact"}, ...["👍","❤️","😂","🙏","✅"].map(e=>h("span",{}, e))),
+        bub("See you at 9 tomorrow", false, "thb"),
+        h("div",{class:"tmenu"}, ...["Reply","Make task","Star","Save to Files"].map(t=>h("div",{}, t))))},
+    {key:"pc", title:"Use it on your computer too", sub:"Open the Task Message website on any computer, then go to Settings → Linked devices here and scan the code.",
+      art:h("div",{class:"ta ta-pc"},
+        h("div",{class:"tlaptop"}, h("div",{class:"tscreen"}, h("div",{class:"tqr"}, ...Array.from({length:49},(_,k)=>h("i",{class:[0,1,2,7,9,14,15,16,4,5,6,11,13,18,19,20,28,29,30,35,37,42,43,44,24,10,22,26,32,39,46,17,33].includes(k)?"on":""})))), h("div",{class:"tbase"})),
+        h("div",{class:"tphone"}, h("div",{class:"tbeam"})))},
+    {key:"private", title:"Private by design", sub:"Messages are end-to-end encrypted and kept on your phone, not stored on our servers. Only you and the people in the chat can read them.",
+      art:h("div",{class:"ta ta-lock"}, h("div",{class:"tlock"}, svg(ICF.lock)), bub("Only you two can read this", true, "tlb"))},
+  ];
+}
+function openTour(done, again=false){
+  if (document.getElementById("tour")) return;
+  const pages=tourPages(); let i=0, x0=null, y0=0, dx=0;
+  const o=overlay("onboard tour","How Task Message works"); o.id="tour";
+  const finish=()=>{ ls.set("tourDone", now()); o.classList.add("out"); setTimeout(()=>{ o.remove(); done&&done(); }, ms(260)); };
+  const track=h("div",{class:"ttrack"}, ...pages.map((pg,k)=>h("section",{class:"tpage tp-"+pg.key, "aria-hidden":k?"true":"false"},
+    h("div",{class:"tart"}, pg.art), h("h1",{class:"ttitle"}, pg.title), h("p",{class:"tsub"}, pg.sub))));
+  const dots=h("div",{class:"tdots"}, ...pages.map((_,k)=>h("button",{"aria-label":"Page "+(k+1), onclick:()=>go(k)})));
+  const next=h("button",{class:"primary tnext"});
+  const skip=h("button",{class:"oblink tskip", onclick:finish}, again? "Close" : "Skip");
+  const go=k=>{ i=Math.max(0, Math.min(pages.length-1, k)); track.style.transform=`translateX(${-i*100}%)`;
+    [...track.children].forEach((p,n)=>{ p.setAttribute("aria-hidden", n===i?"false":"true"); p.classList.toggle("on", n===i); });
+    [...dots.children].forEach((d,n)=>d.classList.toggle("on", n===i));
+    next.textContent= i===pages.length-1? (again? "Done" : "Get started") : "Next"; skip.style.visibility= i===pages.length-1? "hidden":"visible"; haptic&&haptic(); };
+  next.onclick=()=>{ if (i===pages.length-1) finish(); else go(i+1); };
+  // swipe between pages
+  const vp=h("div",{class:"tview"}, track);
+  vp.addEventListener("touchstart", e=>{ x0=e.touches[0].clientX; y0=e.touches[0].clientY; dx=0; track.style.transition="none"; }, {passive:true});
+  vp.addEventListener("touchmove", e=>{ if (x0===null) return; dx=e.touches[0].clientX-x0; const dy=e.touches[0].clientY-y0; if (Math.abs(dy)>Math.abs(dx)) return; const edge=(i===0&&dx>0)||(i===pages.length-1&&dx<0);
+    track.style.transform=`translateX(calc(${-i*100}% + ${edge? dx/3 : dx}px))`; }, {passive:true});
+  vp.addEventListener("touchend", ()=>{ if (x0===null) return; track.style.transition=""; const w=vp.clientWidth||1; if (dx<-w*0.18) go(i+1); else if (dx>w*0.18) go(i-1); else go(i); x0=null; });
+  o.addEventListener("keydown", e=>{ if (e.key==="ArrowRight") go(i+1); else if (e.key==="ArrowLeft") go(i-1); else if (e.key==="Escape") finish(); });
+  o.replaceChildren(h("div",{class:"tourwrap"}, h("div",{class:"ttop"}, skip), vp, h("div",{class:"tfoot"}, dots, next)));
+  o.tabIndex=-1; requestAnimationFrame(()=>{ o.focus(); go(0); });
 }
 // ===================== profiles: photo + about, each with its own "who can see" =====================
 // Stored as profile/<person>/photo and profile/<person>/about. The server only hands each one to
@@ -5389,7 +5450,7 @@ document.addEventListener("mousedown", e=>{ const a=document.activeElement; if (
     const t = page || $("#stream") || $("#list") || document.querySelector(".noteswrap .nscroll, .noteswrap, .td2body, .settings, .teamwrap");
     if (t) t.scrollTo({top:0, behavior:"smooth"}); });
 })();
-if (/[?&]test=1/.test(location.search)) window.__concept={openFile, startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
+if (/[?&]test=1/.test(location.search)) window.__concept={openTour, openFile, startRec, stopRec, getREC:()=>REC, onFastMsg, withFast, FAST, sendHistory, receiveHistory, histRow, LOCAL, setSB:v=>{SB=v}, setStore:v=>Object.assign(store,v), openLogin, openProfileSetup, openFindContacts, demoTyping, S, msgBanner, playTone, noticeIncoming, LOCAL, loadLocalCopy, localMessages, kvGet, buildBackup, readBackup, restoreBackup, mergeById, peaksFromBlob, peaksFromLevels, quickTask, openTask, openSettings, openChatInfo, openNewChat, openChatByNumber, openStorage, openEditProfile, openCallPicker, openAttach, openTeamSettings, openWallpaper, openBackup, render, scheduleRender, openSchedule, openSchedList, sendMenu, taskLists, editTaskList, setCurList, saveMsgToFiles, fsLoad, FS_, newFolder, fsOpen, openSelfChat, isSelfChat, openLinkedDevices, openLinkScanner, linkQRPanel, openLogin, hereOK, devSince, lastPreview, unread, PROF, applyProfiles, openMediaPreview, setKb, revealFocused, KB, X:{openWallpaper, openNote, openReport, openTeamCreate, openLocationPicker, openContactPicker, forwardMenu, openStatusComposer, openAddMembers, editLabels, openDeleteAccount, askPassword, openStarred, addGroupMembers, renameLabel, openMute, inviteByPhone}, smartDue, smartFields, nextDue, openStarred, openMsgInfo, toggleStar, toggleArchive, confirmDeleteMsg, moveTask, store, UC, selectChannel, goBackToList, lastSeenText, newBlankTask:typeof newBlankTask==="function"?newBlankTask:null, holdMenu};
 boot();
 })();
 

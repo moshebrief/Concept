@@ -3124,3 +3124,81 @@ html body .overlay.docv.in{opacity:1;transform:none}html body .overlay.docv.out{
 .docv-ic{width:72px;height:88px;border-radius:12px;background:var(--fill);display:grid;place-items:center;font:700 15px/1 var(--f-body);color:var(--cobalt)}
 .docv-audio audio{width:100%}
 .docv-text{flex:1;margin:0;padding:16px;white-space:pre-wrap;word-break:break-word;font:14px/1.5 ui-monospace,Menlo,monospace;color:var(--ink)}
+/* ===== First-time walkthrough ("How Task Message works") ===== */
+html body .overlay.tour{position:fixed!important;inset:0!important;z-index:140;display:block!important;padding:0!important;background:var(--paper)!important;color:var(--ink);backdrop-filter:none!important;opacity:1;transition:opacity .26s}
+html body .overlay.tour.out{opacity:0}
+.tourwrap{position:absolute;inset:0;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.ttop{display:flex;justify-content:flex-end;padding:10px 16px 0;min-height:44px;box-sizing:border-box}
+.tskip{font-size:16px!important;padding:8px 6px!important}
+.tview{flex:1;min-height:0;overflow:hidden;touch-action:pan-y}
+.ttrack{display:flex;height:100%;transition:transform .42s cubic-bezier(.22,.8,.2,1);will-change:transform}
+.tpage{flex:0 0 100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 28px;box-sizing:border-box;text-align:center}
+.tart{width:100%;max-width:340px;height:min(46vh,330px);display:flex;align-items:center;justify-content:center;margin-bottom:26px}
+.ttitle{font:700 27px/1.18 var(--f-display,var(--f-body));letter-spacing:-.02em;margin:0 0 12px;max-width:340px}
+.tsub{margin:0;max-width:340px;color:var(--muted);font-size:16.5px;line-height:1.45}
+.tfoot{display:flex;flex-direction:column;align-items:center;gap:20px;padding:14px 24px 22px}
+.tdots{display:flex;gap:8px}
+.tdots button{width:8px;height:8px;padding:0;border:0;border-radius:4px;background:var(--rule);transition:width .3s,background .3s}
+.tdots button.on{width:22px;background:var(--cobalt)}
+.tnext{width:100%;max-width:360px;height:52px;border-radius:26px!important;font-size:17px!important}
+/* demo pieces */
+.ta{position:relative;width:100%;height:100%;border-radius:28px;background:var(--surface);box-shadow:0 12px 40px rgba(0,0,0,.08),0 0 0 .5px var(--rule);overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:9px;padding:20px 16px;box-sizing:border-box}
+.tb{max-width:78%;padding:9px 13px;border-radius:18px;font-size:14.5px;line-height:1.35;text-align:left;box-sizing:border-box}
+.tb-them{align-self:flex-start;background:var(--fill);color:var(--ink);border-bottom-left-radius:6px}
+.tb-me{align-self:flex-end;background:var(--cobalt);color:#fff;border-bottom-right-radius:6px}
+.tpage .d1,.tpage .d2,.tpage .d3,.tpage .d4{opacity:0;transform:translateY(10px) scale(.97)}
+.tpage.on .d1,.tpage.on .d2,.tpage.on .d3,.tpage.on .d4{animation:tIn .45s cubic-bezier(.2,.8,.2,1) forwards}
+.tpage.on .d2{animation-delay:.55s}.tpage.on .d3{animation-delay:1.1s}.tpage.on .d4{animation-delay:1.65s}
+@keyframes tIn{to{opacity:1;transform:none}}
+.tb-voice{display:flex;align-items:center;gap:9px}
+.tplay{width:0;height:0;border-left:10px solid var(--cobalt);border-top:7px solid transparent;border-bottom:7px solid transparent}
+.twave{display:flex;align-items:center;gap:2px}.twave i{width:3px;border-radius:2px;background:var(--muted);opacity:.7}
+.tb-voice small{color:var(--muted);font-size:12px}
+.tswipe{position:relative;display:flex;align-items:center}
+.tslot{position:absolute;right:6px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--cobalt);font-size:12px;font-weight:600;opacity:0}
+.tslot svg.i{width:26px;height:26px}
+.tpage.on .tsb{animation:tSwipe 3.6s ease-in-out infinite}.tpage.on .tslot{animation:tSlot 3.6s ease-in-out infinite}
+@keyframes tSwipe{0%,12%{transform:none}32%,44%{transform:translateX(-62px)}58%,100%{transform:none}}
+@keyframes tSlot{0%,14%{opacity:0;transform:scale(.6)}32%,44%{opacity:1;transform:scale(1)}56%,100%{opacity:0}}
+.tcard{display:flex;align-items:center;gap:11px;padding:12px 13px;border-radius:16px;background:var(--paper);box-shadow:0 4px 16px rgba(0,0,0,.07),0 0 0 .5px var(--rule);text-align:left;margin-top:14px}
+.tcard b{display:block;font-size:14.5px}.tcard small{color:var(--muted);font-size:12.5px}.tcard>div{flex:1}
+.tck{width:20px;height:20px;border-radius:50%;border:2px solid var(--cobalt);flex:none}
+.tav{width:28px;height:28px;border-radius:50%;background:#FF9500;color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.tpage.on .tpop{animation:tPop 3.6s ease-in-out infinite}
+@keyframes tPop{0%,46%{opacity:0;transform:translateY(-14px) scale(.92)}58%,92%{opacity:1;transform:none}100%{opacity:0}}
+.ta-board{flex-direction:row;align-items:stretch;gap:8px;padding:16px 10px}
+.tcol{flex:1;background:var(--fill);border-radius:14px;padding:8px 6px;display:flex;flex-direction:column;gap:7px}
+.tcolh{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:2px 4px 4px;text-align:left}
+.tcolh i{width:8px;height:8px;border-radius:50%}
+.tmini{background:var(--surface);border-radius:10px;padding:8px 7px;font-size:12px;line-height:1.25;text-align:left;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.tmove{position:absolute;width:calc((100% - 36px)/3 - 12px);left:16px;top:96px;background:var(--surface);box-shadow:0 6px 18px rgba(0,0,0,.14);border:1.5px solid var(--cobalt)}
+.tpage.on .tmove{animation:tMove 4.2s cubic-bezier(.5,0,.3,1) infinite}
+@keyframes tMove{0%,12%{transform:none}38%,50%{transform:translateX(calc(100% + 20px))}76%,92%{transform:translateX(calc(200% + 40px))}100%{transform:translateX(calc(200% + 40px));opacity:0}}
+.ta-hold{align-items:flex-start}
+.treact{display:flex;gap:6px;padding:6px 10px;border-radius:22px;background:var(--surface);box-shadow:0 6px 20px rgba(0,0,0,.12),0 0 0 .5px var(--rule);font-size:20px}
+.tmenu{width:62%;border-radius:14px;background:var(--surface);box-shadow:0 10px 28px rgba(0,0,0,.14),0 0 0 .5px var(--rule);overflow:hidden;text-align:left;font-size:14px}
+.tmenu div{padding:9px 13px;border-top:.5px solid var(--rule)}.tmenu div:first-child{border-top:0}
+.ta-hold .treact,.ta-hold .tmenu{opacity:0;transform:scale(.9);transform-origin:top left}
+.tpage.on .ta-hold .treact{animation:tIn .35s .9s forwards}.tpage.on .ta-hold .tmenu{animation:tIn .35s 1.05s forwards}
+.tpage.on .thb{animation:tPress 1s .2s ease forwards}
+@keyframes tPress{40%{transform:scale(.95)}100%{transform:scale(1.03)}}
+.ta-pc{align-items:center;justify-content:center;flex-direction:row;gap:0}
+.tlaptop{display:flex;flex-direction:column;align-items:center}
+.tscreen{width:170px;height:112px;border-radius:10px 10px 4px 4px;background:var(--ink);padding:8px;box-sizing:border-box;display:grid;place-items:center}
+.tqr{display:grid;grid-template-columns:repeat(7,9px);gap:1.5px;padding:7px;background:#fff;border-radius:6px}
+.tqr i{width:9px;height:9px;background:#fff}.tqr i.on{background:#111}
+.tbase{width:200px;height:9px;border-radius:0 0 8px 8px;background:var(--rule)}
+.tphone{width:56px;height:104px;border-radius:14px;border:3px solid var(--ink);background:var(--surface);margin-left:-14px;transform:translateY(26px) rotate(-8deg);position:relative;overflow:hidden}
+.tbeam{position:absolute;left:4px;right:4px;height:2px;background:var(--cobalt);box-shadow:0 0 8px var(--cobalt);top:20%}
+.tpage.on .tbeam{animation:tScan 1.8s ease-in-out infinite alternate}
+@keyframes tScan{to{top:76%}}
+.ta-lock{align-items:center;justify-content:center;gap:22px}
+.tlock{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--cobalt) 12%,transparent);color:var(--cobalt)}
+.tlock svg.i{width:42px;height:42px}
+.tpage.on .tlock{animation:tBeat 2.4s ease-in-out infinite}
+@keyframes tBeat{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+.tlb{align-self:center}
+@media (prefers-reduced-motion:reduce){.tpage.on *{animation-duration:.01s!important;animation-iteration-count:1!important}.ttrack{transition:none}}
+@media (max-height:700px){.tart{height:38vh;margin-bottom:16px}.ttitle{font-size:24px}.tsub{font-size:15px}}
+.tnext{display:flex!important;align-items:center;justify-content:center;text-align:center}
+.ta-hold{gap:7px}.tmenu div{padding:8px 13px}
